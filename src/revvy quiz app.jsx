@@ -1,4 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { getTranslations, LANGS } from "./i18n.js";
+import { useAuth } from "./context/AuthContext.jsx";
+import { useNavigate } from "react-router-dom";
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
@@ -7,12 +10,14 @@ const PRO_MAX_Q    = 100;
 const FREE_FILE_MB = 5;
 const AD_FILE_MB   = 20;
 const PRO_FILE_MB  = 999;
-const AD_HOURS     = 5;
+const AD_HOURS     = 1;
 const FREE_DAILY   = 3;
 const Q_FREE       = [5, 10, 15, 20];
 const Q_EXTRA      = [25, 30, 40, 50];
 const QUIZ_TYPES   = ["mcq","cards","fill","match"];
 const LETTERS      = ["A","B","C","D"];
+const STRIPE_MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
+const STRIPE_YEARLY_PRICE  = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
 
 function getTodayStr() { return new Date().toLocaleDateString("en-US"); }
 function fmtMB(bytes)  { return (bytes/1024/1024).toFixed(1)+"MB"; }
@@ -23,84 +28,9 @@ function msUntil(ts)   {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-// ── Translations (English only) ────────────────────────────────────────
-const t = {
-  appName:"Revvy", tagline:"Turn any material into a quiz",
-  sub:"Upload a PDF, paste notes, take a photo — Revvy builds your quiz in seconds.", start:"Get started →",
-  whatUpload:"WHAT YOU CAN UPLOAD",
-  features:[
-    ["📄","PDFs","Upload lecture slides, textbooks, or any PDF document"],
-    ["🖼️","Images","Photos of handwritten notes, whiteboards, or diagrams"],
-    ["✏️","Text","Copy-paste content from websites, docs, or anywhere"],
-    ["🔗","URL / Link","Enter a webpage link and we study it for you"],
-    ["🎯","4 Quiz Types","Multiple choice, flashcards, fill-in-blank, matching"],
-    ["💡","Explanations","Every answer comes with a clear reason why it's correct"],
-  ],
-  uploadTitle:"Upload your study material",
-  tabs:["📁 File","✏️ Text","🔗 URL","📷 Photo"],
-  dropTitle:"Drop your file here or tap to browse",
-  dropSub:"PDF · Images (JPG, PNG) · Text files (.txt, .md)",
-  tapChange:"Tap to change file",
-  quizType:"Quiz type", questions:"Questions", difficulty:"Difficulty",
-  diffOpts:["Easy","Medium","Hard"], generate:"✦ Generate quiz",
-  freeLabel:"Free", freeDesc:"3 quizzes/day · MCQ only · Up to 20 questions · Files up to 5MB",
-  proLabel:"Pro", proPrice:"€6.99/mo",
-  proDesc:"Unlimited quizzes · All 4 quiz types · Up to 100 questions · Unlimited files · No ads",
-  proFeatures:["Unlimited quizzes per day","All quiz types: Flashcards, Fill-in-Blank, Match Terms","Up to 50 questions + custom input up to 100","Unlimited file uploads (PDFs, images, any size)","No ads — clean studying experience","Save & revisit your quizzes","Generate quizzes in multiple languages","🎓 Full Exam Mode — MCQ, Written & Custom (AI-graded)"],
-  dropHint:"Drop your file here or tap to browse",
-  urlHint:"💡 Tip: paste the page text in the Text tab for best results.",
-  pasteHint:"Paste your notes, textbook content, lecture transcript…",
-  photoHint:"Opens your camera or photo library.",
-  generating:"Building your quiz…",
-  genSteps:["Reading your material","Identifying key concepts","Writing questions","Verifying answers"],
-  exit:"✕ Exit", exitConfirm:"Exit quiz? Your progress will be lost.",
-  next:"Next →", finish:"See results →", flip:"Tap card to reveal answer", flipBack:"Tap to flip back",
-  typeIn:"Type your answer…", check:"Check answer", correct:"Correct!", incorrect:"Incorrect",
-  matchTitle:"Tap a term on the left, then tap its matching definition on the right",
-  matchDone:"All matched! ", checkAll:"Check all answers",
-  results:"Results", excellent:"Excellent!", great:"Great job!", good:"Good effort", keep:"Keep studying",
-  outOf:"out of", correct2:"Correct", wrong:"Incorrect", level:"Level",
-  retry:"Retry quiz", newMat:"New material", review:"FULL REVIEW",
-  yourAns:"Your answer:", correctAns:"✓ Correct answer:",
-  custom:"Custom", customHint:"Enter 1–100",
-  proFeature:"Pro Feature", upgradePro:"⭐ Upgrade to Pro — €6.99/mo",
-  activatePro:"Activate Pro (Demo)", activateNote:"In production: connect Stripe or Lemon Squeezy for real billing.",
-  watchAdBtn:"📺 Watch an ad — unlock this for 5 hours",
-  adUsedToday:"Daily ad already used",
-  adUsedDesc:"You can watch 1 ad per day to unlock one feature. Resets tomorrow.",
-  adCurrently:"Currently unlocked via ad:", adExpires:"Expires in",
-  notNow:"Not now",
-  fileTooLarge:"File too large",
-  freeFileLimitNote:"Free plan allows files up to",
-  adFileLimitNote:"Your ad unlock allows up to",
-  quizTypes:{ mcq:"Multiple Choice", cards:"Flashcards", fill:"Fill in Blank", match:"Match Terms" },
-  lockedTitles:{ questions:"More Questions (up to 100 + custom)", cards:"Flashcards", fill:"Fill in Blank", match:"Match Terms", files:"Larger File Uploads" },
-  lockedAdLabels:{ questions:"up to 50 questions + custom input", cards:"Flashcards quiz type", fill:"Fill in Blank quiz type", match:"Match Terms quiz type", files:"larger file uploads" },
-  dailyLeft:(n)=>`${n} free quiz${n!==1?"zes":""} left today`,
-  examMode:"Exam Mode", examModeLabel:"🎓 Exam Mode",
-  examModeSub:"Simulate real exam conditions. Upload up to 5 files, answer without hints, get AI-graded results.",
-  examProOnly:"Pro only — not unlockable with ads",
-  fullMCQ:"Full MCQ Exam", fullMCQDesc:"Multiple choice, auto-graded at the end",
-  fullWritten:"Full Written Exam", fullWrittenDesc:"Open-ended questions with AI evaluation",
-  customMix:"Custom Mix", customMixDesc:"Choose your MCQ and written question counts",
-  examFiles:"Study materials", examFilesHint:"Upload up to 5 files to cover your full curriculum",
-  addFile:"+ Add file", tapToRemove:"Tap to remove",
-  mcqCount:"MCQ questions", writtenCount:"Written questions", totalQ:"Total questions",
-  startExam:"Start Exam", examProgress:"Question",
-  typeAnswer:"Write your answer here…", submitExam:"Submit & Grade Exam",
-  evaluating:"Grading your exam…",
-  evalSteps:["Reading your answers","Analysing each response","Calculating your score","Preparing feedback"],
-  failTitle:"Not quite there yet",
-  failMsg:"Don't be discouraged — every attempt builds knowledge. Review what you missed and try again.",
-  passTitle:"Good work!",
-  passMsg:"You passed! Keep reviewing the weaker areas and you'll be fully prepared.",
-  excellentTitle:"You're ready! 🎓",
-  excellentMsg:"Outstanding result. You've mastered this material — go ace that real exam!",
-  examScore:"Exam Score", passMark:"Pass mark: 50%",
-  retakeExam:"Retake Exam", newExam:"New Exam",
-  reviewed:"REVIEW ALL ANSWERS", aiGraded:"AI Graded",
-  soundOn:"Sound on", soundOff:"Sound off",
-};
+// ── Translations ───────────────────────────────────────────────────────
+// Strings live in ./i18n.js. `t` is resolved per-render from the `lang`
+// state inside StudyQuiz via getTranslations(lang).
 
 // ── Sound engine (Web Audio API) ─────────────────────────────────────
 const SoundEngine = (() => {
@@ -206,7 +136,8 @@ function Logo({ size=28 }) {
           <stop offset="1" stopColor="#4338ca"/>
         </linearGradient>
       </defs>
-      <path d="M15.5 5L8 15.5h6.5L11 23l9.5-11H14L15.5 5z" fill="white" fillOpacity="0.95"/>
+      <path d="M9.7 7.4 V20.6 M9.7 7.4 H14.6 A3.95 3.95 0 0 1 14.6 15.3 H9.7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M11 15.3 L14.9 20.6 L20.7 11" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
@@ -235,16 +166,15 @@ function Chip({ label, active, onClick, locked, small }) {
 }
 
 // ── Pro Upgrade Modal ─────────────────────────────────────────────────
-function ProModal({ onClose, onActivate }) {
+function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={onClose}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>!busy&&onClose()}>
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"28px 20px 36px",width:"100%",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box"}}>
-        <div style={{textAlign:"center",marginBottom:22}}>
+        <div style={{textAlign:"center",marginBottom:20}}>
           <div style={{fontSize:44,marginBottom:8}}>⭐</div>
-          <h3 style={{margin:"0 0 4px",fontSize:22,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{t.proLabel}</h3>
-          <div style={{fontSize:26,fontWeight:800,color:"#4f46e5",letterSpacing:-0.5}}>{t.proPrice}</div>
+          <h3 style={{margin:"0 0 4px",fontSize:22,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>Upgrade to Revyy Pro</h3>
         </div>
-        <div style={{background:"linear-gradient(135deg,#ede9fe,#f5f3ff)",borderRadius:14,padding:"16px 18px",marginBottom:20}}>
+        <div style={{background:"linear-gradient(135deg,#ede9fe,#f5f3ff)",borderRadius:14,padding:"16px 18px",marginBottom:18}}>
           {t.proFeatures.map((f,i)=>(
             <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:i<t.proFeatures.length-1?10:0}}>
               <span style={{color:"#4f46e5",fontWeight:700,flexShrink:0,fontSize:14}}>✓</span>
@@ -252,18 +182,22 @@ function ProModal({ onClose, onActivate }) {
             </div>
           ))}
         </div>
-        <button onClick={onActivate} style={{...Sb.btnPrimary,width:"100%",marginBottom:10,background:"#4f46e5",fontFamily:"inherit",fontSize:15}}>
-          {t.activatePro}
+        {error && <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,marginBottom:12}}>{error}</div>}
+        <button onClick={onYearly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginBottom:10,background:"#f59e0b",fontFamily:"inherit",fontSize:15,opacity:busy?0.7:1}}>
+          {busy==="yearly" ? "Starting…" : "Yearly — €39.99/yr ⭐ Best Value"}
         </button>
-        <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"0 0 14px",lineHeight:1.6}}>{t.activateNote}</p>
-        <button onClick={onClose} style={{...Sb.btnGhost,width:"100%",fontSize:13}}>{t.notNow}</button>
+        <button onClick={onMonthly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginBottom:12,background:"#4f46e5",fontFamily:"inherit",fontSize:15,opacity:busy?0.7:1}}>
+          {busy==="monthly" ? "Starting…" : "Monthly — €4.99/mo"}
+        </button>
+        <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"0 0 14px",lineHeight:1.6}}>7 day free trial · Cancel anytime · No hidden fees</p>
+        <button onClick={onClose} disabled={!!busy} style={{...Sb.btnGhost,width:"100%",fontSize:13}}>{t.notNow}</button>
       </div>
     </div>
   );
 }
 
 // ── Locked Feature Modal ──────────────────────────────────────────────
-function LockedModal({ info, adWatchedToday, adUnlocked, onClose, onUpgrade, onWatchAd }) {
+function LockedModal({ info, adWatchedToday, adUnlocked, onClose, onUpgrade, onWatchAd, t }) {
   if (!info) return null;
   const adLabelKey = info.featureKey.startsWith("quizType:")
     ? info.featureKey.replace("quizType:", "")
@@ -308,7 +242,7 @@ function LockedModal({ info, adWatchedToday, adUnlocked, onClose, onUpgrade, onW
 }
 
 // ── Flashcard ─────────────────────────────────────────────────────────
-function Flashcard({ q, onNext, isLast }) {
+function Flashcard({ q, onNext, isLast, t }) {
   const [flipped,setFlipped] = useState(false);
   const ans = q.answer || (q.options&&q.options[q.correct]) || "";
   return (
@@ -331,7 +265,7 @@ function Flashcard({ q, onNext, isLast }) {
 }
 
 // ── Fill in Blank ─────────────────────────────────────────────────────
-function FillBlank({ q, onNext, isLast }) {
+function FillBlank({ q, onNext, isLast, t }) {
   const [val,setVal]         = useState("");
   const [checked,setChecked] = useState(false);
   const correct = (q.answer||"").toLowerCase().trim();
@@ -361,7 +295,7 @@ function FillBlank({ q, onNext, isLast }) {
 }
 
 // ── Match Quiz ────────────────────────────────────────────────────────
-function MatchQuiz({ questions, onDone }) {
+function MatchQuiz({ questions, onDone, t }) {
   const terms = questions.map(q=>q.question);
   const defs  = useRef(questions.map(q=>q.answer||"").sort(()=>Math.random()-0.5)).current;
   const [sel,setSel]         = useState(null);
@@ -462,7 +396,24 @@ function SectionLabel({ label }) {
   );
 }
 
-function SettingsPanel({ draft, update, onApply, onCancel }) {
+function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription }) {
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [delBusy,    setDelBusy]    = useState(false);
+  const [delErr,     setDelErr]     = useState("");
+  const [delPwd,     setDelPwd]     = useState("");
+  const closeConfirm = () => { if (!delBusy) { setConfirmDel(false); setDelErr(""); setDelPwd(""); } };
+  const runDelete = async () => {
+    if (requiresPassword && !delPwd) { setDelErr("Please enter your password to confirm."); return; }
+    setDelBusy(true); setDelErr("");
+    // Re-authenticate first so deletion requires a valid password.
+    if (requiresPassword) {
+      const { error } = await onReauthenticate(delPwd);
+      if (error) { setDelBusy(false); setDelErr("Incorrect password. Please try again."); return; }
+    }
+    const res = await onDeleteAccount?.();
+    // On success the app navigates away and this panel unmounts; on failure show why.
+    if (res?.error) { setDelBusy(false); setDelErr(res.error); }
+  };
   if (!draft) return null;
   const DEFAULTS = {theme:'system',fontSize:'medium',animations:true,sound:true,
     volume:70,haptics:false,feedback:'immediate',autoAdvance:false,defaultDiff:1,defaultQCount:10};
@@ -540,11 +491,45 @@ function SettingsPanel({ draft, update, onApply, onCancel }) {
           </div>
 
           <button onClick={()=>Object.entries(DEFAULTS).forEach(([k,v])=>update(k,v))}
-            style={{margin:"8px 18px 20px",width:"calc(100% - 36px)",background:"none",
+            style={{margin:"8px 18px 8px",width:"calc(100% - 36px)",background:"none",
               border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"9px",
               fontSize:12,color:"var(--color-text-tertiary)",cursor:"pointer",fontFamily:"inherit",display:"block"}}>
             Reset all to defaults
           </button>
+
+          <SectionLabel label="ACCOUNT"/>
+          {isPro && (
+            <div style={{padding:"4px 18px 6px"}}>
+              <button onClick={onManageSubscription}
+                style={{width:"100%",background:"var(--color-background-secondary)",
+                  border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
+                  fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
+                💳 Manage Subscription
+              </button>
+            </div>
+          )}
+          <div style={{padding:"4px 18px 6px"}}>
+            <button onClick={onSignOut}
+              style={{width:"100%",background:"var(--color-background-secondary)",
+                border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
+                fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
+              ↩ Sign out
+            </button>
+          </div>
+
+          {/* Danger Zone */}
+          <div style={{margin:"14px 18px 22px",padding:"16px",borderRadius:12,
+            border:"1.5px solid #ef4444",background:"rgba(239,68,68,0.07)"}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#ef4444",marginBottom:8}}>⚠️ Account deletion</div>
+            <div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.55,marginBottom:13}}>
+              Deleting your account is permanent and cannot be undone. All your data will be lost.
+            </div>
+            <button onClick={()=>{setDelErr("");setConfirmDel(true);}}
+              style={{width:"100%",background:"#dc2626",border:"none",borderRadius:10,padding:"11px",
+                fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>
+              Delete My Account
+            </button>
+          </div>
         </div>
 
         <div style={{padding:"12px 18px 18px",borderTop:"0.5px solid var(--color-border-tertiary)",
@@ -559,6 +544,38 @@ function SettingsPanel({ draft, update, onApply, onCancel }) {
             boxShadow:"0 2px 12px #4f46e544"}}>✓ Apply & Save</button>
         </div>
       </div>
+
+      {confirmDel && (
+        <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}} onClick={closeConfirm}>
+          <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:16,padding:"26px 22px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.28)"}}>
+            <div style={{fontSize:38,marginBottom:10}}>⚠️</div>
+            <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>Are you sure?</h3>
+            <p style={{margin:"0 0 16px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.55}}>This cannot be undone. Your account and all your data will be permanently deleted.</p>
+            {requiresPassword ? (
+              <div style={{textAlign:"left",marginBottom:14}}>
+                <label style={{display:"block",fontSize:12.5,fontWeight:600,color:"var(--color-text-primary)",marginBottom:6}}>Enter your password to confirm</label>
+                <input
+                  type="password" autoFocus value={delPwd} disabled={delBusy}
+                  onChange={e=>setDelPwd(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==="Enter" && delPwd && !delBusy) runDelete(); }}
+                  placeholder="Your password"
+                  autoComplete="current-password"
+                  style={{width:"100%",boxSizing:"border-box",padding:"11px 13px",fontSize:14,fontFamily:"inherit",borderRadius:11,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",outline:"none"}}
+                />
+              </div>
+            ) : (
+              <div style={{textAlign:"left",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:10,padding:"10px 12px",fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,marginBottom:14}}>
+                You're signed in with a social provider, so no password is required — confirm below to permanently delete your account.
+              </div>
+            )}
+            {delErr && <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,lineHeight:1.4,marginBottom:14,textAlign:"left"}}>{delErr}</div>}
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={closeConfirm} disabled={delBusy} style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:delBusy?"default":"pointer",fontFamily:"inherit",opacity:delBusy?0.6:1}}>Cancel</button>
+              <button onClick={runDelete} disabled={delBusy || (requiresPassword && !delPwd)} style={{flex:1,background:"#dc2626",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:(delBusy||(requiresPassword&&!delPwd))?"default":"pointer",fontFamily:"inherit",opacity:(delBusy||(requiresPassword&&!delPwd))?0.6:1}}>{delBusy?"Deleting…":"Delete"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -596,8 +613,37 @@ function Confetti() {
   );
 }
 
+// ── Ad placeholders (free users only) ─────────────────────────────────
+// Side 160x600 banners on desktop (where there's empty margin), a 320x50
+// bottom banner on mobile. Visibility is controlled by CSS media queries.
+function AdBanners({ isPro }) {
+  if (isPro) return null;
+  return (
+    <>
+      <div className="rv-ad rv-ad-side rv-ad-left"><span className="rv-ad-label">Advertisement</span></div>
+      <div className="rv-ad rv-ad-side rv-ad-right"><span className="rv-ad-label">Advertisement</span></div>
+      <div className="rv-ad rv-ad-bottom"><span className="rv-ad-label">Advertisement</span></div>
+    </>
+  );
+}
+
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
+  const [lang,         setLang]         = useState("en");
+  const t = getTranslations(lang);
+  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile } = useAuth();
+  const navigate = useNavigate();
+  const [coBusy, setCoBusy] = useState("");   // "monthly" | "yearly" while redirecting to Stripe
+  const [coErr,  setCoErr]  = useState("");
+  const [upgraded, setUpgraded] = useState(false); // "Welcome to Pro!" banner after checkout
+  const doCheckout = async (priceId, which) => {
+    setCoErr(""); setCoBusy(which);
+    const { error } = await startCheckout(priceId);
+    if (error) { setCoBusy(""); setCoErr(error); }
+  };
+  // Email/password accounts must re-enter their password to delete; OAuth-only
+  // (e.g. Google) accounts have no password to verify.
+  const requiresPassword = !!user?.identities?.some(i => i.provider === "email");
   const [tab,          setTab]          = useState("file");
   const [file,         setFile]         = useState(null);
   const [textVal,      setTextVal]      = useState("");
@@ -613,7 +659,6 @@ export default function StudyQuiz() {
   const [selected,     setSelected]     = useState(null);
   const [error,        setError]        = useState("");
   const [drag,         setDrag]         = useState(false);
-  const [isPro,        setIsPro]        = useState(false);
   const [dailyUsed,    setDailyUsed]    = useState(0);
   const [adWatchedDate,setAdWatchedDate]= useState(null);
   const [adUnlocked,   setAdUnlocked]   = useState(null);
@@ -872,11 +917,31 @@ export default function StudyQuiz() {
   const nextExam=()=>{if(examIdx+1>=examQs.length)submitExam();else setExamIdx(i=>i+1);};
   const prevExam=()=>{if(examIdx>0)setExamIdx(i=>i-1);};
 
-  const activatePro = () => {
-    setIsPro(true);
-    setShowProModal(false);
-    setLockedModal(null);
-    if (pendingFile) { processFile(pendingFile, PRO_FILE_MB); setPendingFile(null); }
+  // After returning from Stripe checkout (?upgraded=true): show a welcome
+  // banner and refresh Pro status from Supabase (the webhook sets it).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upgraded") !== "true") return;
+    setUpgraded(true);
+    refreshProfile();
+    const url = new URL(window.location.href);
+    url.searchParams.delete("upgraded");
+    window.history.replaceState({}, "", url.pathname + url.search);
+    const tmr = setTimeout(() => setUpgraded(false), 6000);
+    return () => clearTimeout(tmr);
+  }, [refreshProfile]);
+
+  // Delete account: remove all data + auth user via the serverless function,
+  // then go to the public home page and clear the local session.
+  // Returns { error } so the settings modal can show a message on failure.
+  const confirmDeleteAccount = async () => {
+    const { error } = await deleteAccount();
+    if (error) return { error };
+    // Wipe locally-stored per-user data too.
+    try { localStorage.removeItem("revvy_settings"); localStorage.removeItem("sq_v3"); } catch { /* ignore */ }
+    navigate("/", { replace: true });
+    await signOut();
+    return {};
   };
 
   const openSettings  = ()  => { setSettingsDraft({...settings}); setShowSettings(true); };
@@ -972,11 +1037,19 @@ export default function StudyQuiz() {
   // ── HOME ─────────────────────────────────────────────────────────
   if (screen==="home") return (
     <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}}>
           <span style={Sb.brand}><Logo/>{t.appName}</span>
-          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <div style={{display:"flex",gap:10,alignItems:"center",marginLeft:"auto"}}>
+            <select value={lang} onChange={e=>setLang(e.target.value)} title="Language"
+              style={{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,fontSize:12,padding:"3px 6px",cursor:"pointer",fontFamily:"inherit",outline:"none"}}>
+              {Object.entries(LANGS).map(([code,l])=>(
+                <option key={code} value={code} style={{color:"#1e293b"}}>{l.flag} {l.name}</option>
+              ))}
+            </select>
             <button onClick={()=>openSettings()} title="Settings" style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:"2px 4px",color:"rgba(255,255,255,0.7)"}}>⚙️</button>
           </div>
         </div>
@@ -1002,25 +1075,27 @@ export default function StudyQuiz() {
           <div style={Sb.planCard}>
             <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{t.freeLabel}</div>
             <div style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.7}}>{t.freeDesc}</div>
-            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13}} onClick={()=>setScreen("upload")}>Start free</button>
+            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13}} onClick={()=>setScreen("upload")}>{t.startFree}</button>
           </div>
           <div style={{...Sb.planCard,border:"2px solid #f59e0b",background:"#fffbeb",position:"relative",overflow:"hidden"}}>
             <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,#f59e0b,#fbbf24)"}}/>
             <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:"#92400e"}}>✦ {t.proLabel}</div>
             <div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:4}}>{t.proPrice}</div>
             <div style={{fontSize:11,color:"#78350f",lineHeight:1.7}}>{t.proDesc}</div>
-            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>setShowProModal(true)}>Upgrade →</button>
+            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>setShowProModal(true)}>{t.upgrade}</button>
           </div>
         </div>
       </div>
-      {showProModal && <ProModal onClose={()=>setShowProModal(false)} onActivate={activatePro}/>}
-      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings}/>}
+      {showProModal && <ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
+      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal}/>}
     </div>
   );
 
   // ── UPLOAD ───────────────────────────────────────────────────────
   if (screen==="upload") return (
     <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← Home</button>
         <span style={Sb.brand}>{t.appName}</span>
@@ -1130,10 +1205,10 @@ export default function StudyQuiz() {
         <button style={{...Sb.btnPrimary,width:"100%"}} onClick={generate}>{t.generate}</button>
         </div>
       </div>
-      <LockedModal info={lockedModal} adWatchedToday={adWatchedToday} adUnlocked={adUnlocked}
+      <LockedModal info={lockedModal} adWatchedToday={adWatchedToday} adUnlocked={adUnlocked} t={t}
         onClose={()=>{setLockedModal(null);setPendingFile(null);}} onUpgrade={openUpgrade} onWatchAd={watchAd}/>
-      {showProModal&&<ProModal onClose={()=>setShowProModal(false)} onActivate={activatePro}/>}
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings}/>}
+      {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal}/>}
     </div>
   );
 
@@ -1158,13 +1233,17 @@ export default function StudyQuiz() {
     const q=quiz.questions[qIdx], isLast=qIdx+1===quiz.questions.length;
     if (quiz.type==="match") return (
       <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
         <div style={Sb.topbar} className="rv-topbar"><button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button><span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{quiz.title}</span><span/></div>
-        <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}><MatchQuiz questions={quiz.questions} onDone={(s,total)=>{setAnswers(Array(total).fill(0).map((_,i)=>({isCorrect:i<s})));setScreen("results");}}/></div>
+        <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}><MatchQuiz questions={quiz.questions} t={t} onDone={(s,total)=>{setAnswers(Array(total).fill(0).map((_,i)=>({isCorrect:i<s})));setScreen("results");}}/></div>
         <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);newMat();}}/>
       </div>
     );
     return (
       <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
         <div style={Sb.topbar} className="rv-topbar">
           <button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button>
           <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{quiz.title}</span>
@@ -1176,8 +1255,8 @@ export default function StudyQuiz() {
             <span style={{background:"#ede9fe",color:"#4f46e5",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.diffOpts[diff]}</span>
             <span style={{background:"#ede9fe",color:"#4f46e5",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.quizTypes[quiz.type]}</span>
           </div>
-          {quiz.type==="cards"&&<Flashcard key={qIdx} q={q} isLast={isLast} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
-          {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
+          {quiz.type==="cards"&&<Flashcard key={qIdx} q={q} isLast={isLast} t={t} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
+          {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="mcq"  &&(
             <>
               <h3 style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}</h3>
@@ -1207,6 +1286,8 @@ export default function StudyQuiz() {
   // ── RESULTS ──────────────────────────────────────────────────────
   if (screen==="results" && quiz) return (
     <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
       <div style={{background:"linear-gradient(145deg,#1e1b4b,#4f46e5)",padding:"36px 20px 28px",textAlign:"center"}}>
         <div style={{fontSize:50,marginBottom:8}}>{badge.emoji}</div>
         <h2 style={{margin:"0 0 4px",fontSize:22,fontWeight:700,color:"#fff"}}>{badge.text}</h2>
@@ -1247,6 +1328,8 @@ export default function StudyQuiz() {
   // ── EXAM SETUP ────────────────────────────────────────────────────
   if(screen==="exam_setup") return (
     <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← Back</button>
         <span style={{...Sb.brand,color:"#4f46e5"}}>{t.examModeLabel}</span>
@@ -1352,7 +1435,7 @@ export default function StudyQuiz() {
         {error&&<div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {error}</div>}
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#312e81,#4f46e5)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal}/>}
     </div>
   );
 
@@ -1361,6 +1444,8 @@ export default function StudyQuiz() {
     const q=examQs[examIdx],isLast=examIdx+1===examQs.length,answered=Object.keys(examAns).length;
     return (
       <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
         <div style={Sb.topbar} className="rv-topbar">
           <button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>Exit</button>
           <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.examProgress} {examIdx+1}/{examQs.length}</span>
@@ -1428,6 +1513,8 @@ export default function StudyQuiz() {
     const theme=excellent?{bg:"linear-gradient(145deg,#052e16,#16a34a)",emoji:"🏆",title:t.excellentTitle,msg:t.excellentMsg}:passed?{bg:"linear-gradient(145deg,#451a03,#b45309)",emoji:"🎯",title:t.passTitle,msg:t.passMsg}:{bg:"linear-gradient(145deg,#1c0f0f,#b91c1c)",emoji:"📚",title:t.failTitle,msg:t.failMsg};
     return (
       <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
         {showConfetti&&<Confetti/>}
         <div style={{background:theme.bg,padding:"40px 20px 32px",textAlign:"center"}}>
           <div style={{fontSize:56,marginBottom:8}}>{theme.emoji}</div>
@@ -1511,7 +1598,7 @@ export default function StudyQuiz() {
     );
   }
 
-  return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings}/>;
+  return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal}/>;
 }
 
 const Sb = {

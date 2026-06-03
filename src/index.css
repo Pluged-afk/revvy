@@ -1,3 +1,37 @@
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; }
 #root { width: 100%; }
+
+/* ── Ad placeholders (quiz app, free users) ──────────────────────────── */
+.rv-ad {
+  position: fixed;
+  z-index: 40;
+  display: none; /* shown per breakpoint below */
+  align-items: center;
+  justify-content: center;
+  background: var(--color-background-secondary, #f1f5f9);
+  border: 1px dashed var(--color-border-primary, #cbd5e1);
+  border-radius: 8px;
+  color: var(--color-text-tertiary, #94a3b8);
+  overflow: hidden;
+}
+.rv-ad-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.rv-ad-side { top: 50%; transform: translateY(-50%); width: 160px; height: 600px; }
+.rv-ad-left { left: 20px; }
+.rv-ad-right { right: 20px; }
+.rv-ad-bottom { bottom: 0; left: 50%; transform: translateX(-50%); width: 320px; height: 50px; border-radius: 8px 8px 0 0; }
+
+/* Side banners only where there's empty margin beside the centred app. */
+@media (min-width: 1100px) {
+  .rv-ad-side { display: flex; }
+}
+/* Mobile: no side banners, show the bottom banner instead. */
+@media (max-width: 767px) {
+  .rv-ad-side { display: none !important; }
+  .rv-ad-bottom { display: flex; }
+}

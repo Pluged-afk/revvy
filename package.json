@@ -10,8 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
+    "@stripe/stripe-js": "^9.7.0",
+    "@supabase/supabase-js": "^2.107.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.16.0",
+    "stripe": "^22.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
