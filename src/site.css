@@ -1,5 +1,5 @@
 /* ───────────────────────────────────────────────────────────────
-   Revvy marketing site — design system
+   Revyy marketing site — design system
    Headings: Playfair Display · Body: DM Sans · Accent: #4f46e5
    ─────────────────────────────────────────────────────────────── */
 
@@ -228,6 +228,8 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
   .footer-top { grid-template-columns: 1fr 1fr; }
   .footer-brand { grid-column: 1 / -1; }
   .contact-grid { grid-template-columns: 1fr; }
+  /* 3 pricing columns don't fit on tablet — stack them. */
+  .pricing-grid-3 { grid-template-columns: 1fr; max-width: 460px; }
 }
 @media (max-width: 720px) {
   .nav-links { display: none; }

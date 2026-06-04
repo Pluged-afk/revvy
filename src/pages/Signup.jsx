@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import RevvyMark from "../components/Logo.jsx";
+import RevyyMark from "../components/Logo.jsx";
 
 function GoogleIcon() {
   return (
@@ -61,7 +61,7 @@ export default function Signup() {
     <div className="site">
       <div className="auth-shell">
         <div className="auth-card">
-          <div className="auth-brand"><RevvyMark /> Revyy</div>
+          <div className="auth-brand"><RevyyMark /> Revyy</div>
           <h1>Create your account</h1>
           <p className="auth-sub">Start turning your material into quizzes — free.</p>
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useLang } from "../context/LanguageContext.jsx";
 
 const MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const YEARLY_PRICE = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
@@ -39,14 +40,17 @@ const FAQ = [
 ];
 
 export default function Pricing() {
-  const { user, startCheckout } = useAuth();
+  const { user, startCheckout, loading } = useAuth();
+  const { t } = useLang();
   const navigate = useNavigate();
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
 
   const upgrade = async (priceId, which) => {
     setErr("");
-    if (!user) { navigate("/signup"); return; }
+    if (loading) return;                       // auth still resolving — wait, don't bounce
+    if (!user) { navigate("/signup"); return; } // only send genuinely-logged-out users to signup
+    // Logged-in: go straight to Stripe checkout with their existing session.
     setBusy(which);
     const { error } = await startCheckout(priceId);
     if (error) { setBusy(""); setErr(error); }
@@ -84,11 +88,11 @@ export default function Pricing() {
               <ul className="price-list">
                 {PRO_MONTHLY.map((f) => <li key={f}>{f}</li>)}
               </ul>
-              <button className="btn btn-amber btn-block" disabled={busy === "monthly"}
+              <button className="btn btn-amber btn-block" disabled={busy === "monthly" || loading}
                 onClick={() => upgrade(MONTHLY_PRICE, "monthly")}>
-                {busy === "monthly" ? "Starting…" : "Try Free for 7 Days"}
+                {busy === "monthly" ? "Starting…" : t.tryFree7Days}
               </button>
-              <p className="price-trial">7 day free trial · Cancel anytime</p>
+              <p className="price-trial">{t.trialNote}</p>
             </div>
 
             {/* Pro Yearly */}
@@ -99,11 +103,11 @@ export default function Pricing() {
               <ul className="price-list">
                 {PRO_YEARLY.map((f) => <li key={f}>{f}</li>)}
               </ul>
-              <button className="btn btn-amber btn-block" disabled={busy === "yearly"}
+              <button className="btn btn-amber btn-block" disabled={busy === "yearly" || loading}
                 onClick={() => upgrade(YEARLY_PRICE, "yearly")}>
-                {busy === "yearly" ? "Starting…" : "Try Free for 7 Days"}
+                {busy === "yearly" ? "Starting…" : t.tryFree7Days}
               </button>
-              <p className="price-trial">7 day free trial · Cancel anytime</p>
+              <p className="price-trial">{t.trialNote}</p>
             </div>
           </div>
         </div>

@@ -37,7 +37,6 @@ export default function Contact() {
       setStatus("sent");
       setForm({ name: "", email: "", message: "" }); // clear after sending
     } catch (err) {
-      console.error("EmailJS send failed:", err);
       setStatus("error");
       setErrMsg(err?.text || "Something went wrong. Please try again or email us directly.");
     }

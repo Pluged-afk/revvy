@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
-import RevvyMark from "./Logo.jsx";
+import RevyyMark from "./Logo.jsx";
 
 const LINKS = [
   { to: "/", label: "Home", end: true },
@@ -16,7 +16,7 @@ export default function Navbar() {
     <nav className="nav">
       <div className="container nav-inner">
         <Link to="/" className="nav-logo" onClick={() => setOpen(false)}>
-          <RevvyMark /> Revyy
+          <RevyyMark /> Revyy
         </Link>
 
         <div className={`nav-links ${open ? "open" : ""}`}>

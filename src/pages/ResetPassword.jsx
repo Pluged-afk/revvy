@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase.js";
 import { useAuth } from "../context/AuthContext.jsx";
-import RevvyMark from "../components/Logo.jsx";
+import RevyyMark from "../components/Logo.jsx";
 
 // Landing page for the password-reset email link. Supabase establishes a
 // short-lived recovery session from the URL; the user then sets a new password.
@@ -42,7 +42,7 @@ export default function ResetPassword() {
     <div className="site">
       <div className="auth-shell">
         <div className="auth-card">
-          <div className="auth-brand"><RevvyMark /> Revyy</div>
+          <div className="auth-brand"><RevyyMark /> Revyy</div>
           <h1>Set a new password</h1>
           <p className="auth-sub">Choose a new password for your account.</p>
 

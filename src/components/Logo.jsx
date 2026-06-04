@@ -1,8 +1,8 @@
-// Revvy logo mark: a bold "R" whose leg sweeps up into a checkmark —
+// Revyy logo mark: a bold "R" whose leg sweeps up into a checkmark —
 // a nod to landing on the right answer. Minimal, single purple accent (#4f46e5),
 // rendered as a white glyph on the gradient tile.
 
-export function RevvyGlyph({ stroke = "#fff", strokeWidth = 2.5 }) {
+export function RevyyGlyph({ stroke = "#fff", strokeWidth = 2.5 }) {
   return (
     <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
       {/* R — stem + bowl */}
@@ -22,10 +22,10 @@ export function RevvyGlyph({ stroke = "#fff", strokeWidth = 2.5 }) {
 }
 
 // Full mark: purple gradient tile (via .logo-mark CSS) + white glyph.
-export default function RevvyMark() {
+export default function RevyyMark() {
   return (
     <span className="logo-mark">
-      <RevvyGlyph />
+      <RevyyGlyph />
     </span>
   );
 }

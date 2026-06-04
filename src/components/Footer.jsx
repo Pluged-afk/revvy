@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import RevvyMark from "./Logo.jsx";
+import RevyyMark from "./Logo.jsx";
 
 export default function Footer() {
   return (
@@ -7,7 +7,7 @@ export default function Footer() {
       <div className="container">
         <div className="footer-top">
           <div className="footer-brand">
-            <span className="nav-logo"><RevvyMark /> Revyy</span>
+            <span className="nav-logo"><RevyyMark /> Revyy</span>
             <p>Turn any material into a quiz, instantly. Study smarter with AI-powered quizzes built from your own notes.</p>
             <div className="footer-tagline">Built with ❤️ for students everywhere</div>
           </div>

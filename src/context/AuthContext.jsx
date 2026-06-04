@@ -23,14 +23,11 @@ export function AuthProvider({ children }) {
       .eq("id", uid)
       .maybeSingle();
 
-    if (error) { console.warn("Could not load profile:", error.message); return; }
+    if (error) { return; }
 
     if (!data) {
       // First sign-in for this user — create their profile row.
-      const { error: insErr } = await supabase
-        .from("profiles")
-        .insert({ id: uid, is_pro: false });
-      if (insErr) console.warn("Could not create profile:", insErr.message);
+      await supabase.from("profiles").insert({ id: uid, is_pro: false });
       setIsPro(false); setTrialEnd(null); setSubStatus(null);
     } else {
       setIsPro(!!data.is_pro);
@@ -109,11 +106,9 @@ export function AuthProvider({ children }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       const body = await res.json().catch(() => ({}));
-      console.log("[delete-account] response:", res.status, body);
       if (!res.ok) return { error: body.error || `Delete failed (${res.status}).` };
       return {};
     } catch (e) {
-      console.error("[delete-account] request failed:", e);
       return { error: e.message || "Network error — could not reach the server." };
     }
   }, []);
@@ -122,10 +117,7 @@ export function AuthProvider({ children }) {
   const setProStatus = useCallback(async (value) => {
     setIsPro(value);
     if (!user) return;
-    const { error } = await supabase
-      .from("profiles")
-      .upsert({ id: user.id, is_pro: value });
-    if (error) console.warn("Could not update Pro status:", error.message);
+    await supabase.from("profiles").upsert({ id: user.id, is_pro: value });
   }, [user]);
 
   // Re-read the profile from Supabase (e.g. after returning from checkout).

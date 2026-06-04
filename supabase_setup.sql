@@ -1,5 +1,5 @@
 -- ───────────────────────────────────────────────────────────────
--- Revvy — run this once in the Supabase SQL Editor
+-- Revyy — run this once in the Supabase SQL Editor
 -- (Dashboard → SQL Editor → New query → paste → Run)
 -- Creates the per-user profile table that stores Pro status.
 -- ───────────────────────────────────────────────────────────────

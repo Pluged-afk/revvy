@@ -1,16 +1,52 @@
-# React + Vite
+# Revyy
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Turn any material into a quiz — instantly. Upload a PDF, paste notes, or take a
+photo and Revyy builds a study quiz in seconds using AI.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **React 19 + Vite** — SPA, React Router
+- **Supabase** — auth (email/password + Google) and the `profiles` table
+- **Stripe** — subscriptions (monthly/yearly, 7-day trial), webhook, customer portal
+- **EmailJS** — contact form
+- Vercel serverless functions under `/api`
 
-## React Compiler
+## Local development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev        # http://localhost:5173
+```
 
-## Expanding the ESLint configuration
+`npm run dev` serves the `/api/*` functions via a Vite middleware, so checkout,
+the webhook, the portal, and account deletion all work locally.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Environment variables (`.env`, not committed)
+
+```
+VITE_SUPABASE_URL=            # frontend
+VITE_SUPABASE_ANON_KEY=       # frontend (publishable key)
+SUPABASE_SERVICE_ROLE_KEY=    # server only — secret
+STRIPE_SECRET_KEY=            # server only — secret
+STRIPE_WEBHOOK_SECRET=        # server only — secret
+VITE_STRIPE_PUBLISHABLE_KEY=
+VITE_STRIPE_MONTHLY_PRICE=
+VITE_STRIPE_YEARLY_PRICE=
+```
+
+On Vercel, set the same variables in **Project → Settings → Environment Variables**.
+
+## Database
+
+Run [`supabase_setup.sql`](./supabase_setup.sql) once in the Supabase SQL editor
+to create the `profiles` table (Pro status, Stripe IDs, trial) and its policies.
+
+## Routes
+
+`/` home · `/features` · `/pricing` · `/about` · `/contact` · `/privacy` ·
+`/terms` · `/login` · `/signup` · `/reset-password` · `/auth/callback` ·
+`/app` (the quiz app — requires sign-in)
+
+## Testing payments
+
+Stripe test card `4242 4242 4242 4242`, any future expiry, any CVC.

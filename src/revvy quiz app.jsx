@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { getTranslations, LANGS } from "./i18n.js";
+import { LANGS } from "./i18n.js";
 import { useAuth } from "./context/AuthContext.jsx";
+import { useLang } from "./context/LanguageContext.jsx";
 import { useNavigate } from "react-router-dom";
 
 // ── Limits ────────────────────────────────────────────────────────────
@@ -170,31 +171,32 @@ function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>!busy&&onClose()}>
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"28px 20px 36px",width:"100%",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box"}}>
-        <div style={{textAlign:"center",marginBottom:18}}>
+        <div style={{textAlign:"center",marginBottom:14}}>
           <div style={{fontSize:42,marginBottom:6}}>⭐</div>
-          <h3 style={{margin:"0 0 4px",fontSize:21,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>Upgrade to Revyy Pro</h3>
+          <h3 style={{margin:"0 0 4px",fontSize:21,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{t.upgradeToPro}</h3>
         </div>
+        <div style={{background:"linear-gradient(135deg,#ede9fe,#f5f3ff)",borderRadius:12,padding:"12px 14px",marginBottom:14,fontSize:12.5,color:"#3730a3",lineHeight:1.6,textAlign:"center"}}>{t.proDesc}</div>
         {error && <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,marginBottom:14}}>{error}</div>}
         <div style={{display:"flex",gap:12,marginBottom:14}}>
-          {/* Monthly */}
-          <div style={{flex:1,border:"1.5px solid var(--color-border-secondary)",borderRadius:14,padding:"16px 12px",textAlign:"center"}}>
-            <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:"var(--color-text-secondary)",marginBottom:6}}>MONTHLY</div>
-            <div style={{fontSize:22,fontWeight:800,color:"var(--color-text-primary)"}}>€4.99<span style={{fontSize:12,fontWeight:500,color:"var(--color-text-tertiary)"}}>/month</span></div>
+          {/* Monthly — subtle gold ring (less prominent than yearly) */}
+          <div style={{flex:1,border:"1.5px solid #fcd34d",borderRadius:14,padding:"16px 12px",textAlign:"center"}}>
+            <div style={{fontSize:12,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:"var(--color-text-secondary)",marginBottom:6}}>{t.planMonthly}</div>
+            <div style={{fontSize:22,fontWeight:800,color:"var(--color-text-primary)"}}>€4.99</div>
             <button onClick={onMonthly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginTop:14,background:"#4f46e5",fontFamily:"inherit",fontSize:13,opacity:busy?0.7:1}}>
-              {busy==="monthly" ? "Starting…" : "Try Free for 7 Days"}
+              {busy==="monthly" ? "Starting…" : t.tryFree7Days}
             </button>
           </div>
-          {/* Yearly */}
-          <div style={{flex:1,border:"1.5px solid #f59e0b",background:"#fffbeb",borderRadius:14,padding:"16px 12px",textAlign:"center"}}>
-            <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:"#92400e",marginBottom:6}}>YEARLY</div>
-            <div style={{fontSize:22,fontWeight:800,color:"#92400e"}}>€39.99<span style={{fontSize:12,fontWeight:500,color:"#b45309"}}>/year</span></div>
-            <div style={{fontSize:10,fontWeight:700,color:"#b45309",marginTop:4}}>Save 33% ⭐ Best Value</div>
+          {/* Yearly — the standout: stronger gold ring + glow */}
+          <div style={{flex:1,border:"2px solid #f59e0b",background:"#fffbeb",borderRadius:14,padding:"16px 12px",textAlign:"center",boxShadow:"0 4px 16px rgba(245,158,11,0.25)"}}>
+            <div style={{fontSize:12,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:"#92400e",marginBottom:6}}>{t.planYearly}</div>
+            <div style={{fontSize:22,fontWeight:800,color:"#92400e"}}>€39.99</div>
+            <div style={{fontSize:10,fontWeight:700,color:"#b45309",marginTop:4}}>Save 33% ⭐ {t.bestValue}</div>
             <button onClick={onYearly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginTop:8,background:"#f59e0b",fontFamily:"inherit",fontSize:13,opacity:busy?0.7:1}}>
-              {busy==="yearly" ? "Starting…" : "Try Free for 7 Days"}
+              {busy==="yearly" ? "Starting…" : t.tryFree7Days}
             </button>
           </div>
         </div>
-        <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"0 0 14px",lineHeight:1.6}}>Card required · Cancel before trial ends and pay nothing</p>
+        <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"0 0 14px",lineHeight:1.6}}>{t.cardRequiredNote}</p>
         <button onClick={onClose} disabled={!!busy} style={{...Sb.btnGhost,width:"100%",fontSize:13}}>{t.notNow}</button>
       </div>
     </div>
@@ -227,7 +229,7 @@ function LockedModal({ info, adWatchedToday, adUnlocked, onClose, onUpgrade, onW
           </div>
         )}
         <button onClick={onUpgrade} style={{...Sb.btnPrimary,width:"100%",marginBottom:10,fontFamily:"inherit",fontSize:14,background:"#4f46e5"}}>
-          ✦ Upgrade to Pro
+          ✦ {t.upgradeToPro}
         </button>
         {adLabel && !adWatchedToday && (
           <button onClick={()=>onWatchAd(info.featureKey)} style={{width:"100%",marginBottom:10,background:"#fefce8",border:"1.5px solid #f59e0b",color:"#92400e",borderRadius:12,padding:"12px 14px",fontSize:13,cursor:"pointer",fontFamily:"inherit",lineHeight:1.6,textAlign:"center"}}>
@@ -401,11 +403,18 @@ function SectionLabel({ label }) {
   );
 }
 
-function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription }) {
+function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, t }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const [delBusy,    setDelBusy]    = useState(false);
   const [delErr,     setDelErr]     = useState("");
   const [delPwd,     setDelPwd]     = useState("");
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [portalErr,  setPortalErr]  = useState("");
+  const doManage = async () => {
+    setPortalErr(""); setPortalBusy(true);
+    const res = await onManageSubscription?.();   // redirects on success
+    if (res?.error) { setPortalBusy(false); setPortalErr(res.error); }
+  };
   const closeConfirm = () => { if (!delBusy) { setConfirmDel(false); setDelErr(""); setDelPwd(""); } };
   const runDelete = async () => {
     if (requiresPassword && !delPwd) { setDelErr("Please enter your password to confirm."); return; }
@@ -427,7 +436,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
       <div onClick={onCancel} style={{flex:1,background:"rgba(0,0,0,0.45)",backdropFilter:"blur(1px)"}}/>
       <div className="settings-panel" style={{
         width:"min(340px,88vw)",height:"100%",
-        background:"var(--color-background-primary)",
+        background:"var(--color-background-primary, #ffffff)",
         display:"flex",flexDirection:"column",
         boxShadow:"-6px 0 28px rgba(0,0,0,0.22)",
         borderLeft:"0.5px solid var(--color-border-secondary)",
@@ -505,12 +514,13 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           <SectionLabel label="ACCOUNT"/>
           {isPro && (
             <div style={{padding:"4px 18px 6px"}}>
-              <button onClick={onManageSubscription}
+              <button onClick={doManage} disabled={portalBusy}
                 style={{width:"100%",background:"var(--color-background-secondary)",
                   border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
-                  fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
-                💳 Manage Subscription
+                  fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:portalBusy?"default":"pointer",fontFamily:"inherit",opacity:portalBusy?0.6:1}}>
+                {portalBusy ? "Opening…" : `💳 ${t.manageSubscription}`}
               </button>
+              {portalErr && <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"8px 11px",fontSize:12,lineHeight:1.4}}>{portalErr}</div>}
             </div>
           )}
           <div style={{padding:"4px 18px 6px"}}>
@@ -634,8 +644,7 @@ function AdBanners({ isPro }) {
 
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
-  const [lang,         setLang]         = useState("en");
-  const t = getTranslations(lang);
+  const { lang, setLang, t } = useLang();
   const { isPro, trialEnd, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile } = useAuth();
   const navigate = useNavigate();
   // Days left in the free trial (null if no trial, 0 if already ended).
@@ -724,14 +733,32 @@ export default function StudyQuiz() {
     })();
   },[]);
 
+  // Sync settings changed in another tab (localStorage `storage` event).
+  useEffect(()=>{
+    const onStorage = (e) => {
+      if (e.key === "revvy_settings" && e.newValue) {
+        try { const d = JSON.parse(e.newValue); setSettings(prev=>({...prev,...d})); } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  },[]);
+
   useEffect(()=>{ SoundEngine.setVolume(settings.volume); },[settings.volume]);
   useEffect(()=>{ setSoundOn(settings.sound); },[settings.sound]);
 
   // ── Theme injection into document.head ──
+  // "system" resolves to light/dark via prefers-color-scheme so the CSS
+  // colour variables are ALWAYS defined (otherwise the settings panel and
+  // other surfaces using var(--color-*) would render transparent).
   useEffect(()=>{
     let el=document.getElementById("revvy-theme");
     if(!el){el=document.createElement("style");el.id="revvy-theme";document.head.appendChild(el);}
-    el.textContent=settings.theme==="light"?THEME_LIGHT:settings.theme==="dark"?THEME_DARK:"";
+    const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const resolved = settings.theme==="dark" ? "dark"
+      : settings.theme==="light" ? "light"
+      : (prefersDark ? "dark" : "light");
+    el.textContent = resolved==="dark" ? THEME_DARK : THEME_LIGHT;
   },[settings.theme]);
 
   // ── Font size injection ──
@@ -1092,12 +1119,12 @@ export default function StudyQuiz() {
             <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:"#92400e"}}>✦ {t.proLabel}</div>
             <div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:4}}>{t.proPrice}</div>
             <div style={{fontSize:11,color:"#78350f",lineHeight:1.7}}>{t.proDesc}</div>
-            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>navigate("/pricing")}>{t.upgrade}</button>
+            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>{setCoErr("");setShowProModal(true);}}>{t.upgrade}</button>
           </div>
         </div>
       </div>
       {showProModal && <ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
-      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal}/>}
+      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
     </div>
   );
 
@@ -1219,7 +1246,7 @@ export default function StudyQuiz() {
       <LockedModal info={lockedModal} adWatchedToday={adWatchedToday} adUnlocked={adUnlocked} t={t}
         onClose={()=>{setLockedModal(null);setPendingFile(null);}} onUpgrade={openUpgrade} onWatchAd={watchAd}/>
       {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
     </div>
   );
 
@@ -1450,7 +1477,7 @@ export default function StudyQuiz() {
         {error&&<div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {error}</div>}
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#312e81,#4f46e5)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
     </div>
   );
 
@@ -1615,7 +1642,7 @@ export default function StudyQuiz() {
     );
   }
 
-  return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal}/>;
+  return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>;
 }
 
 const Sb = {
