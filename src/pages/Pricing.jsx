@@ -10,15 +10,25 @@ const FREE = [
   "Multiple choice only",
   "Up to 20 questions",
   "Files up to 5MB",
+  "Ads displayed",
 ];
 
-const PRO = [
+const PRO_MONTHLY = [
+  "7-day free trial",
   "Unlimited quizzes",
   "All 4 quiz types",
   "Up to 100 questions",
-  "Unlimited file size",
-  "Exam Mode with AI grading",
   "No ads",
+  "Unlimited files",
+  "Exam Mode with AI grading",
+  "Cancel anytime",
+];
+
+const PRO_YEARLY = [
+  "Everything in Monthly",
+  "Save 33% vs monthly",
+  "€3.33/month billed yearly",
+  "Best value ⭐",
 ];
 
 const FAQ = [
@@ -59,7 +69,7 @@ export default function Pricing() {
             {/* Free */}
             <div className="price-card">
               <div className="price-name">Free</div>
-              <div className="price-amount">€0<span> /month</span></div>
+              <div className="price-amount">€0<span> /forever</span></div>
               <ul className="price-list">
                 {FREE.map((f) => <li key={f}>{f}</li>)}
               </ul>
@@ -72,7 +82,7 @@ export default function Pricing() {
               <div className="price-name">Pro Monthly</div>
               <div className="price-amount">€4.99<span> /month</span></div>
               <ul className="price-list">
-                {PRO.map((f) => <li key={f}>{f}</li>)}
+                {PRO_MONTHLY.map((f) => <li key={f}>{f}</li>)}
               </ul>
               <button className="btn btn-amber btn-block" disabled={busy === "monthly"}
                 onClick={() => upgrade(MONTHLY_PRICE, "monthly")}>
@@ -87,7 +97,7 @@ export default function Pricing() {
               <div className="price-name">Pro Yearly</div>
               <div className="price-amount">€39.99<span> /year</span></div>
               <ul className="price-list">
-                {PRO.map((f) => <li key={f}>{f}</li>)}
+                {PRO_YEARLY.map((f) => <li key={f}>{f}</li>)}
               </ul>
               <button className="btn btn-amber btn-block" disabled={busy === "yearly"}
                 onClick={() => upgrade(YEARLY_PRICE, "yearly")}>

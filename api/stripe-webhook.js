@@ -1,11 +1,17 @@
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
-// Stripe webhook: keeps Supabase `profiles.is_pro` in sync with subscription state.
-// Requires raw body for signature verification, so body parsing is disabled.
+// Stripe webhook: keeps Supabase `profiles` in sync with subscription state.
+// Requires the raw body for signature verification, so body parsing is off.
+//
+// ── Testing (Stripe TEST mode) ───────────────────────────────────────
+//   Forward events locally with the Stripe CLI:
+//     stripe listen --forward-to localhost:5173/api/stripe-webhook
+//   Test card 4242 4242 4242 4242 · any future expiry · any CVC.
 export const config = { api: { bodyParser: false } };
 
 const ACTIVE = ["active", "trialing"];
+const INACTIVE = ["canceled", "cancelled", "past_due", "unpaid", "incomplete_expired"];
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -26,7 +32,7 @@ export default async function handler(req, res) {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // Verify signature against the raw body.
+  // Verify the signature against the raw body.
   const sig = req.headers["stripe-signature"];
   let event;
   try {
@@ -37,42 +43,62 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Webhook Error: ${err.message}` });
   }
 
-  // Update is_pro by Supabase user id (preferred) or by Stripe customer id.
-  const setPro = async ({ userId, customerId, isPro }) => {
-    const patch = { is_pro: isPro };
-    if (customerId) patch.stripe_customer_id = customerId;
-    if (userId) {
-      await admin.from("profiles").update(patch).eq("id", userId);
-    } else if (customerId) {
-      await admin.from("profiles").update({ is_pro: isPro }).eq("stripe_customer_id", customerId);
-    }
-    console.log(`[stripe-webhook] ${event.type}: is_pro=${isPro} user=${userId || "?"} cust=${customerId || "?"}`);
+  // Update a profile by Supabase user id (preferred) or Stripe customer id.
+  const updateProfile = async ({ userId, customerId, patch }) => {
+    if (userId) await admin.from("profiles").update(patch).eq("id", userId);
+    else if (customerId) await admin.from("profiles").update(patch).eq("stripe_customer_id", customerId);
+    console.log(`[stripe-webhook] ${event.type}:`, JSON.stringify(patch), "user=", userId || "?", "cust=", customerId || "?");
   };
+
+  const trialIso = (sub) => (sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null);
 
   try {
     switch (event.type) {
-      case "customer.subscription.created":
+      case "customer.subscription.created": {
+        const sub = event.data.object;
+        await updateProfile({
+          userId: sub.metadata?.supabase_user_id,
+          customerId: sub.customer,
+          patch: {
+            is_pro: ACTIVE.includes(sub.status),
+            stripe_customer_id: sub.customer,
+            subscription_id: sub.id,
+            subscription_status: sub.status,
+            trial_end: trialIso(sub),
+          },
+        });
+        break;
+      }
       case "customer.subscription.updated": {
         const sub = event.data.object;
-        await setPro({
-          userId: sub.metadata?.userId,
-          customerId: sub.customer,
-          isPro: ACTIVE.includes(sub.status),
-        });
+        const isPro = ACTIVE.includes(sub.status) ? true
+          : INACTIVE.includes(sub.status) ? false : undefined;
+        const patch = { subscription_status: sub.status, subscription_id: sub.id, trial_end: trialIso(sub) };
+        if (isPro !== undefined) patch.is_pro = isPro;
+        await updateProfile({ userId: sub.metadata?.supabase_user_id, customerId: sub.customer, patch });
         break;
       }
       case "customer.subscription.deleted": {
         const sub = event.data.object;
-        await setPro({ userId: sub.metadata?.userId, customerId: sub.customer, isPro: false });
+        await updateProfile({
+          userId: sub.metadata?.supabase_user_id,
+          customerId: sub.customer,
+          patch: { is_pro: false, subscription_id: null, subscription_status: "canceled", trial_end: null },
+        });
+        break;
+      }
+      case "invoice.payment_succeeded": {
+        const inv = event.data.object;
+        await updateProfile({ customerId: inv.customer, patch: { is_pro: true } });
         break;
       }
       case "invoice.payment_failed": {
+        // Handles failed charges after the trial ends.
         const inv = event.data.object;
-        await setPro({ customerId: inv.customer, isPro: false });
+        await updateProfile({ customerId: inv.customer, patch: { is_pro: false } });
         break;
       }
       default:
-        // ignore other events
         break;
     }
   } catch (err) {

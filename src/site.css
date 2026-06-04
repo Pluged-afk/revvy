@@ -257,3 +257,6 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 .btn-google svg { width: 18px; height: 18px; }
 .auth-switch { text-align: center; font-size: 14px; color: var(--muted); margin-top: 22px; }
 .auth-switch a { color: var(--indigo); font-weight: 600; }
+.auth-link-btn { display: block; margin: -6px 0 16px auto; background: none; border: none; padding: 0; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--indigo); cursor: pointer; }
+.auth-link-btn:hover { text-decoration: underline; }
+.auth-link-btn:disabled { opacity: 0.5; cursor: default; }

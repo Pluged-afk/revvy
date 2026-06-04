@@ -10,14 +10,16 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [isPro, setIsPro] = useState(false);
+  const [trialEnd, setTrialEnd] = useState(null);            // ISO string | null
+  const [subStatus, setSubStatus] = useState(null);          // stripe subscription status
   const [loading, setLoading] = useState(true);
 
-  // Read the user's profile row (creating it if missing) and sync isPro.
+  // Read the user's profile row (creating it if missing) and sync state.
   const loadProfile = useCallback(async (uid) => {
-    if (!uid) { setIsPro(false); return; }
+    if (!uid) { setIsPro(false); setTrialEnd(null); setSubStatus(null); return; }
     const { data, error } = await supabase
       .from("profiles")
-      .select("is_pro")
+      .select("is_pro, trial_end, subscription_status")
       .eq("id", uid)
       .maybeSingle();
 
@@ -29,9 +31,11 @@ export function AuthProvider({ children }) {
         .from("profiles")
         .insert({ id: uid, is_pro: false });
       if (insErr) console.warn("Could not create profile:", insErr.message);
-      setIsPro(false);
+      setIsPro(false); setTrialEnd(null); setSubStatus(null);
     } else {
       setIsPro(!!data.is_pro);
+      setTrialEnd(data.trial_end || null);
+      setSubStatus(data.subscription_status || null);
     }
   }, []);
 
@@ -74,6 +78,16 @@ export function AuthProvider({ children }) {
     });
 
   const signOut = () => supabase.auth.signOut();
+
+  // Send a password-reset email; the link lands on /reset-password.
+  const resetPassword = (email) =>
+    supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+  // Set a new password (used on /reset-password with the recovery session).
+  const updatePassword = (password) =>
+    supabase.auth.updateUser({ password });
 
   // Re-authenticate the user by their password (used to confirm sensitive
   // actions like account deletion). Returns { error } — null on success.
@@ -126,7 +140,7 @@ export function AuthProvider({ children }) {
       const res = await fetch("/api/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId, userId: user.id }),
+        body: JSON.stringify({ priceId, userId: user.id, userEmail: user.email }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) return { error: data.error || "Could not start checkout." };
@@ -156,9 +170,9 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   const value = {
-    session, user, isPro, loading,
+    session, user, isPro, trialEnd, subStatus, loading,
     signUp, signInWithPassword, signInWithGoogle, signOut, setProStatus, deleteAccount, reauthenticate,
-    refreshProfile, startCheckout, openPortal,
+    resetPassword, updatePassword, refreshProfile, startCheckout, openPortal,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

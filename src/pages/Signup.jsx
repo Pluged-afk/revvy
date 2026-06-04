@@ -32,7 +32,21 @@ export default function Signup() {
     setBusy(true);
     const { data, error } = await signUp(email, password);
     setBusy(false);
-    if (error) { setErr(error.message); return; }
+    if (error) {
+      // When email confirmation is off, Supabase errors directly for dupes.
+      if (/already (registered|exists)/i.test(error.message)) {
+        setErr("An account with this email already exists — try signing in instead.");
+      } else {
+        setErr(error.message);
+      }
+      return;
+    }
+    // When confirmation is on, Supabase hides duplicates by returning a user
+    // with an empty `identities` array (email-enumeration protection).
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      setErr("An account with this email already exists — try signing in instead.");
+      return;
+    }
     if (data.session) navigate("/app", { replace: true });
     else setInfo("Almost there! Check your email to confirm your account, then sign in.");
   };

@@ -11,8 +11,12 @@ create table if not exists public.profiles (
   created_at         timestamptz not null default now()
 );
 
--- If the table already existed, make sure the Stripe column is present:
-alter table public.profiles add column if not exists stripe_customer_id text;
+-- If the table already existed, make sure all payment columns are present:
+alter table public.profiles add column if not exists is_pro              boolean default false;
+alter table public.profiles add column if not exists stripe_customer_id  text;
+alter table public.profiles add column if not exists subscription_id     text;
+alter table public.profiles add column if not exists subscription_status text;
+alter table public.profiles add column if not exists trial_end           timestamp;
 
 alter table public.profiles enable row level security;
 

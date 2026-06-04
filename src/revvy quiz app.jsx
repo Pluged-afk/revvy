@@ -170,26 +170,31 @@ function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>!busy&&onClose()}>
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"28px 20px 36px",width:"100%",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box"}}>
-        <div style={{textAlign:"center",marginBottom:20}}>
-          <div style={{fontSize:44,marginBottom:8}}>⭐</div>
-          <h3 style={{margin:"0 0 4px",fontSize:22,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>Upgrade to Revyy Pro</h3>
+        <div style={{textAlign:"center",marginBottom:18}}>
+          <div style={{fontSize:42,marginBottom:6}}>⭐</div>
+          <h3 style={{margin:"0 0 4px",fontSize:21,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>Upgrade to Revyy Pro</h3>
         </div>
-        <div style={{background:"linear-gradient(135deg,#ede9fe,#f5f3ff)",borderRadius:14,padding:"16px 18px",marginBottom:18}}>
-          {t.proFeatures.map((f,i)=>(
-            <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:i<t.proFeatures.length-1?10:0}}>
-              <span style={{color:"#4f46e5",fontWeight:700,flexShrink:0,fontSize:14}}>✓</span>
-              <span style={{fontSize:13,color:"#3730a3",lineHeight:1.4}}>{f}</span>
-            </div>
-          ))}
+        {error && <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,marginBottom:14}}>{error}</div>}
+        <div style={{display:"flex",gap:12,marginBottom:14}}>
+          {/* Monthly */}
+          <div style={{flex:1,border:"1.5px solid var(--color-border-secondary)",borderRadius:14,padding:"16px 12px",textAlign:"center"}}>
+            <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:"var(--color-text-secondary)",marginBottom:6}}>MONTHLY</div>
+            <div style={{fontSize:22,fontWeight:800,color:"var(--color-text-primary)"}}>€4.99<span style={{fontSize:12,fontWeight:500,color:"var(--color-text-tertiary)"}}>/month</span></div>
+            <button onClick={onMonthly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginTop:14,background:"#4f46e5",fontFamily:"inherit",fontSize:13,opacity:busy?0.7:1}}>
+              {busy==="monthly" ? "Starting…" : "Try Free for 7 Days"}
+            </button>
+          </div>
+          {/* Yearly */}
+          <div style={{flex:1,border:"1.5px solid #f59e0b",background:"#fffbeb",borderRadius:14,padding:"16px 12px",textAlign:"center"}}>
+            <div style={{fontSize:12,fontWeight:700,letterSpacing:1,color:"#92400e",marginBottom:6}}>YEARLY</div>
+            <div style={{fontSize:22,fontWeight:800,color:"#92400e"}}>€39.99<span style={{fontSize:12,fontWeight:500,color:"#b45309"}}>/year</span></div>
+            <div style={{fontSize:10,fontWeight:700,color:"#b45309",marginTop:4}}>Save 33% ⭐ Best Value</div>
+            <button onClick={onYearly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginTop:8,background:"#f59e0b",fontFamily:"inherit",fontSize:13,opacity:busy?0.7:1}}>
+              {busy==="yearly" ? "Starting…" : "Try Free for 7 Days"}
+            </button>
+          </div>
         </div>
-        {error && <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,marginBottom:12}}>{error}</div>}
-        <button onClick={onYearly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginBottom:10,background:"#f59e0b",fontFamily:"inherit",fontSize:15,opacity:busy?0.7:1}}>
-          {busy==="yearly" ? "Starting…" : "Yearly — €39.99/yr ⭐ Best Value"}
-        </button>
-        <button onClick={onMonthly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginBottom:12,background:"#4f46e5",fontFamily:"inherit",fontSize:15,opacity:busy?0.7:1}}>
-          {busy==="monthly" ? "Starting…" : "Monthly — €4.99/mo"}
-        </button>
-        <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"0 0 14px",lineHeight:1.6}}>7 day free trial · Cancel anytime · No hidden fees</p>
+        <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"0 0 14px",lineHeight:1.6}}>Card required · Cancel before trial ends and pay nothing</p>
         <button onClick={onClose} disabled={!!busy} style={{...Sb.btnGhost,width:"100%",fontSize:13}}>{t.notNow}</button>
       </div>
     </div>
@@ -222,12 +227,12 @@ function LockedModal({ info, adWatchedToday, adUnlocked, onClose, onUpgrade, onW
           </div>
         )}
         <button onClick={onUpgrade} style={{...Sb.btnPrimary,width:"100%",marginBottom:10,fontFamily:"inherit",fontSize:14,background:"#4f46e5"}}>
-          {t.upgradePro}
+          ✦ Upgrade to Pro
         </button>
         {adLabel && !adWatchedToday && (
           <button onClick={()=>onWatchAd(info.featureKey)} style={{width:"100%",marginBottom:10,background:"#fefce8",border:"1.5px solid #f59e0b",color:"#92400e",borderRadius:12,padding:"12px 14px",fontSize:13,cursor:"pointer",fontFamily:"inherit",lineHeight:1.6,textAlign:"center"}}>
             {t.watchAdBtn}<br/>
-            <span style={{fontSize:11,opacity:0.8}}>Unlocks: {adLabel} for 5 hours</span>
+            <span style={{fontSize:11,opacity:0.8}}>Unlocks: {adLabel} for {AD_HOURS} hour{AD_HOURS!==1?"s":""}</span>
           </button>
         )}
         {adLabel && adWatchedToday && (
@@ -620,9 +625,9 @@ function AdBanners({ isPro }) {
   if (isPro) return null;
   return (
     <>
-      <div className="rv-ad rv-ad-side rv-ad-left"><span className="rv-ad-label">Advertisement</span></div>
-      <div className="rv-ad rv-ad-side rv-ad-right"><span className="rv-ad-label">Advertisement</span></div>
-      <div className="rv-ad rv-ad-bottom"><span className="rv-ad-label">Advertisement</span></div>
+      <div className="ad-placeholder rv-ad rv-ad-side rv-ad-left"><span className="rv-ad-label">Advertisement</span></div>
+      <div className="ad-placeholder rv-ad rv-ad-side rv-ad-right"><span className="rv-ad-label">Advertisement</span></div>
+      <div className="ad-placeholder rv-ad rv-ad-bottom"><span className="rv-ad-label">Advertisement</span></div>
     </>
   );
 }
@@ -631,8 +636,12 @@ export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const [lang,         setLang]         = useState("en");
   const t = getTranslations(lang);
-  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile } = useAuth();
+  const { isPro, trialEnd, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile } = useAuth();
   const navigate = useNavigate();
+  // Days left in the free trial (null if no trial, 0 if already ended).
+  const trialDaysLeft = trialEnd
+    ? Math.max(0, Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000))
+    : null;
   const [coBusy, setCoBusy] = useState("");   // "monthly" | "yearly" while redirecting to Stripe
   const [coErr,  setCoErr]  = useState("");
   const [upgraded, setUpgraded] = useState(false); // "Welcome to Pro!" banner after checkout
@@ -1038,7 +1047,8 @@ export default function StudyQuiz() {
   if (screen==="home") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! Your 7-day free trial has started.</div>}
+      {!upgraded && trialDaysLeft>0 && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#4f46e5",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>⏳ Your free trial ends in {trialDaysLeft} day{trialDaysLeft!==1?"s":""} — you will be charged after</div>}
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}}>
@@ -1082,7 +1092,7 @@ export default function StudyQuiz() {
             <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:"#92400e"}}>✦ {t.proLabel}</div>
             <div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:4}}>{t.proPrice}</div>
             <div style={{fontSize:11,color:"#78350f",lineHeight:1.7}}>{t.proDesc}</div>
-            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>setShowProModal(true)}>{t.upgrade}</button>
+            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>navigate("/pricing")}>{t.upgrade}</button>
           </div>
         </div>
       </div>
@@ -1095,7 +1105,8 @@ export default function StudyQuiz() {
   if (screen==="upload") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! Your 7-day free trial has started.</div>}
+      {!upgraded && trialDaysLeft>0 && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#4f46e5",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>⏳ Your free trial ends in {trialDaysLeft} day{trialDaysLeft!==1?"s":""} — you will be charged after</div>}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← Home</button>
         <span style={Sb.brand}>{t.appName}</span>
@@ -1234,7 +1245,8 @@ export default function StudyQuiz() {
     if (quiz.type==="match") return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! Your 7-day free trial has started.</div>}
+      {!upgraded && trialDaysLeft>0 && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#4f46e5",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>⏳ Your free trial ends in {trialDaysLeft} day{trialDaysLeft!==1?"s":""} — you will be charged after</div>}
         <div style={Sb.topbar} className="rv-topbar"><button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button><span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{quiz.title}</span><span/></div>
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}><MatchQuiz questions={quiz.questions} t={t} onDone={(s,total)=>{setAnswers(Array(total).fill(0).map((_,i)=>({isCorrect:i<s})));setScreen("results");}}/></div>
         <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);newMat();}}/>
@@ -1243,7 +1255,8 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! Your 7-day free trial has started.</div>}
+      {!upgraded && trialDaysLeft>0 && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#4f46e5",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>⏳ Your free trial ends in {trialDaysLeft} day{trialDaysLeft!==1?"s":""} — you will be charged after</div>}
         <div style={Sb.topbar} className="rv-topbar">
           <button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button>
           <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{quiz.title}</span>
@@ -1287,7 +1300,8 @@ export default function StudyQuiz() {
   if (screen==="results" && quiz) return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! Your 7-day free trial has started.</div>}
+      {!upgraded && trialDaysLeft>0 && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#4f46e5",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>⏳ Your free trial ends in {trialDaysLeft} day{trialDaysLeft!==1?"s":""} — you will be charged after</div>}
       <div style={{background:"linear-gradient(145deg,#1e1b4b,#4f46e5)",padding:"36px 20px 28px",textAlign:"center"}}>
         <div style={{fontSize:50,marginBottom:8}}>{badge.emoji}</div>
         <h2 style={{margin:"0 0 4px",fontSize:22,fontWeight:700,color:"#fff"}}>{badge.text}</h2>
@@ -1329,7 +1343,8 @@ export default function StudyQuiz() {
   if(screen==="exam_setup") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! Your 7-day free trial has started.</div>}
+      {!upgraded && trialDaysLeft>0 && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#4f46e5",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>⏳ Your free trial ends in {trialDaysLeft} day{trialDaysLeft!==1?"s":""} — you will be charged after</div>}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← Back</button>
         <span style={{...Sb.brand,color:"#4f46e5"}}>{t.examModeLabel}</span>
@@ -1445,7 +1460,8 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! Your 7-day free trial has started.</div>}
+      {!upgraded && trialDaysLeft>0 && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#4f46e5",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>⏳ Your free trial ends in {trialDaysLeft} day{trialDaysLeft!==1?"s":""} — you will be charged after</div>}
         <div style={Sb.topbar} className="rv-topbar">
           <button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>Exit</button>
           <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.examProgress} {examIdx+1}/{examQs.length}</span>
@@ -1514,7 +1530,8 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Pro! Your account has been upgraded.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! Your 7-day free trial has started.</div>}
+      {!upgraded && trialDaysLeft>0 && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#4f46e5",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>⏳ Your free trial ends in {trialDaysLeft} day{trialDaysLeft!==1?"s":""} — you will be charged after</div>}
         {showConfetti&&<Confetti/>}
         <div style={{background:theme.bg,padding:"40px 20px 32px",textAlign:"center"}}>
           <div style={{fontSize:56,marginBottom:8}}>{theme.emoji}</div>

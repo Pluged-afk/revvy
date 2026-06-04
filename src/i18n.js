@@ -63,7 +63,7 @@ const T_EN = {
   custom:"Custom", customHint:"Enter 1–100",
   proFeature:"Pro Feature", upgradePro:"⭐ Upgrade to Pro — €4.99/mo",
   activatePro:"Activate Pro", activateNote:"Secure billing powered by Stripe.",
-  watchAdBtn:"📺 Watch an ad — unlock this for 5 hours",
+  watchAdBtn:"📺 Watch an ad — unlock this for 1 hour",
   adUsedToday:"Daily ad already used",
   adUsedDesc:"You can watch 1 ad per day to unlock one feature. Resets tomorrow.",
   adCurrently:"Currently unlocked via ad:", adExpires:"Expires in",

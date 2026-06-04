@@ -15,22 +15,33 @@ function GoogleIcon() {
 }
 
 export default function Login() {
-  const { signInWithPassword, signInWithGoogle, user } = useAuth();
+  const { signInWithPassword, signInWithGoogle, resetPassword, user } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState("");
 
   useEffect(() => { if (user) navigate("/app", { replace: true }); }, [user, navigate]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    setErr(""); setBusy(true);
+    setErr(""); setInfo(""); setBusy(true);
     const { error } = await signInWithPassword(email, password);
     setBusy(false);
     if (error) setErr(error.message);
     else navigate("/app", { replace: true });
+  };
+
+  const onForgot = async () => {
+    setErr(""); setInfo("");
+    if (!email) { setErr("Enter your email above first, then click “Forgot password?”."); return; }
+    setBusy(true);
+    const { error } = await resetPassword(email);
+    setBusy(false);
+    if (error) setErr(error.message);
+    else setInfo("If an account exists for that email, we've sent a password reset link. Check your inbox (and spam).");
   };
 
   const onGoogle = async () => {
@@ -48,6 +59,7 @@ export default function Login() {
           <p className="auth-sub">Sign in to start building quizzes.</p>
 
           {err && <div className="auth-error">{err}</div>}
+          {info && <div className="auth-info">{info}</div>}
 
           <form onSubmit={onSubmit}>
             <div className="form-field">
@@ -60,8 +72,11 @@ export default function Login() {
               <input id="password" type="password" required autoComplete="current-password"
                 value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
             </div>
+            <button type="button" onClick={onForgot} disabled={busy} className="auth-link-btn">
+              Forgot password?
+            </button>
             <button type="submit" className="btn btn-primary btn-block btn-lg" disabled={busy}>
-              {busy ? "Signing in…" : "Sign In"}
+              {busy ? "Working…" : "Sign In"}
             </button>
           </form>
 

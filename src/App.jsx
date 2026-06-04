@@ -12,6 +12,7 @@ import TermsOfService from './pages/TermsOfService.jsx'
 import Login from './pages/Login.jsx'
 import Signup from './pages/Signup.jsx'
 import AuthCallback from './pages/AuthCallback.jsx'
+import ResetPassword from './pages/ResetPassword.jsx'
 import StudyQuiz from './revvy quiz app.jsx'
 import './site.css'
 
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* The quiz app — requires authentication */}
           <Route
