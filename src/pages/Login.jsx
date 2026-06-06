@@ -41,7 +41,7 @@ export default function Login() {
     const { error } = await resetPassword(email);
     setBusy(false);
     if (error) setErr(error.message);
-    else setInfo("If an account exists for that email, we've sent a password reset link. Check your inbox (and spam).");
+    else setInfo("If you have a Revyy account, you'll receive a password reset email shortly. Please check your email — including your spam folder if you can't find it.");
   };
 
   const onGoogle = async () => {

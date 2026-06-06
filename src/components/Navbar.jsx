@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import RevyyMark from "./Logo.jsx";
+import { DevBadge } from "../context/DevContext.jsx";
 
 const LINKS = [
   { to: "/", label: "Home", end: true },
@@ -18,6 +19,8 @@ export default function Navbar() {
         <Link to="/" className="nav-logo" onClick={() => setOpen(false)}>
           <RevyyMark /> Revyy
         </Link>
+        <DevBadge />
+
 
         <div className={`nav-links ${open ? "open" : ""}`}>
           {LINKS.map((l) => (

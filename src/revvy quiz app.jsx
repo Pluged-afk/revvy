@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { LANGS } from "./i18n.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { useLang } from "./context/LanguageContext.jsx";
+import { useDev, DevBadge } from "./context/DevContext.jsx";
 import { useNavigate } from "react-router-dom";
 
 // ── Limits ────────────────────────────────────────────────────────────
@@ -595,17 +596,65 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
   );
 }
 
-function ExitModal({ show, onStay, onLeave, message }) {
+function ExitModal({ show, onStay, onLeave, message, title, stayLabel, leaveLabel, stayGreen }) {
   if (!show) return null;
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
-      <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"28px 22px",maxWidth:300,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:550,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"28px 22px",maxWidth:320,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
         <div style={{fontSize:36,marginBottom:10}}>⚠️</div>
-        <h3 style={{margin:"0 0 8px",fontSize:17,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>Leave this page?</h3>
+        <h3 style={{margin:"0 0 8px",fontSize:17,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{title||"Leave this page?"}</h3>
         <p style={{margin:"0 0 22px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{message||"Your progress will be lost and cannot be recovered."}</p>
         <div style={{display:"flex",gap:10}}>
-          <button onClick={onStay}  style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>Stay</button>
-          <button onClick={onLeave} style={{flex:1,background:"#ef4444",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Leave</button>
+          <button onClick={onStay}  style={{flex:1,background:stayGreen?"#16a34a":"var(--color-background-secondary)",color:stayGreen?"#fff":"var(--color-text-primary)",border:stayGreen?"none":"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:stayGreen?700:500,cursor:"pointer",fontFamily:"inherit"}}>{stayLabel||"Stay"}</button>
+          <button onClick={onLeave} style={{flex:1,background:"#ef4444",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{leaveLabel||"Leave"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Pause overlay — strong blur over the whole exam so nothing is visible/clickable.
+function PauseOverlay({ onResume }) {
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",background:"rgba(15,16,32,0.45)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}}>
+      <div className="slide-up" style={{textAlign:"center",maxWidth:340}}>
+        <div style={{fontSize:30,fontWeight:800,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif",marginBottom:8}}>⏸ Exam Paused</div>
+        <div style={{fontSize:14,color:"rgba(255,255,255,0.85)",marginBottom:24}}>Your progress is saved</div>
+        <button onClick={onResume} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:14,padding:"15px 40px",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 24px rgba(79,70,229,0.4)"}}>Resume Exam</button>
+      </div>
+    </div>
+  );
+}
+
+// Time's-up — non-dismissable, shown while the exam auto-submits.
+function TimeUpModal() {
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:950,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",background:"rgba(15,16,32,0.7)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
+      <div style={{background:"var(--color-background-primary)",borderRadius:18,padding:"32px 26px",maxWidth:320,width:"100%",textAlign:"center",boxShadow:"0 12px 40px rgba(0,0,0,0.4)"}}>
+        <div style={{fontSize:46,marginBottom:10}}>⏰</div>
+        <h3 style={{margin:"0 0 6px",fontSize:22,fontWeight:800,color:"#dc2626",fontFamily:"'Playfair Display',Georgia,serif"}}>Time's Up!</h3>
+        <p style={{margin:"0 0 20px",fontSize:14,color:"var(--color-text-secondary)",lineHeight:1.5}}>Your exam is being submitted now.</p>
+        <div style={{width:36,height:36,margin:"0 auto",border:"3px solid var(--color-border-secondary)",borderTopColor:"#4f46e5",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+      </div>
+    </div>
+  );
+}
+
+// Offered on a refresh that interrupted an exam.
+function ResumeModal({ info, onResume, onDiscard, fmtClock }) {
+  if (!info) return null;
+  const answered = info.examAns ? Object.values(info.examAns).filter(v=>v!==undefined&&v!=="").length : 0;
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:560,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"28px 22px",maxWidth:330,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.25)"}}>
+        <div style={{fontSize:36,marginBottom:10}}>📝</div>
+        <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>Exam in progress — Continue?</h3>
+        <p style={{margin:"0 0 20px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>
+          {(info.examQs?.length||0)} questions · {answered} answered{info.examTimerOn && info.examTimeLeft!=null ? " · "+fmtClock(info.examTimeLeft)+" left" : ""}
+        </p>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onDiscard} style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>Discard</button>
+          <button onClick={onResume} style={{flex:2,background:"#4f46e5",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Continue exam</button>
         </div>
       </div>
     </div>
@@ -631,8 +680,13 @@ function Confetti() {
 // ── Ad placeholders (free users only) ─────────────────────────────────
 // Side 160x600 banners on desktop (where there's empty margin), a 320x50
 // bottom banner on mobile. Visibility is controlled by CSS media queries.
+// Ads are master-switched by VITE_ADS_ENABLED — set it to "true" once
+// AdSense is approved and redeploy; nothing renders until then.
+const ADS_ENABLED = import.meta.env.VITE_ADS_ENABLED === "true";
 function AdBanners({ isPro }) {
-  if (isPro) return null;
+  const dev = useDev();
+  const adsOn = dev.devMode && dev.ads !== null ? dev.ads : ADS_ENABLED;
+  if (isPro || !adsOn) return null;
   return (
     <>
       <div className="ad-placeholder rv-ad rv-ad-side rv-ad-left"><span className="rv-ad-label">Advertisement</span></div>
@@ -645,6 +699,7 @@ function AdBanners({ isPro }) {
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const { lang, setLang, t } = useLang();
+  const dev = useDev();
   const { isPro, trialEnd, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile } = useAuth();
   const navigate = useNavigate();
   // Days left in the free trial (null if no trial, 0 if already ended).
@@ -696,6 +751,21 @@ export default function StudyQuiz() {
   const [examIdx,     setExamIdx]     = useState(0);
   const [examAns,     setExamAns]     = useState({});
   const [examEvals,   setExamEvals]   = useState(null);
+  // ── Exam timer ──
+  const [examTimerOn,   setExamTimerOn]   = useState(false);
+  const [examTimerMin,  setExamTimerMin]  = useState("60");
+  const [examTotalSec,  setExamTotalSec]  = useState(0);     // total seconds for the exam
+  const [examTimeLeft,  setExamTimeLeft]  = useState(null);  // seconds remaining (null = no timer)
+  const [examPaused,    setExamPaused]    = useState(false);
+  const [examTimeUp,    setExamTimeUp]    = useState(false);
+  const [examReview,    setExamReview]    = useState(false); // reviewing answers before final submit
+  const [showSubmitPrompt, setShowSubmitPrompt] = useState(false);
+  const [examResume,    setExamResume]    = useState(null);  // saved in-progress exam to resume
+  const [examTimeUsedSec,  setExamTimeUsedSec]  = useState(null);
+  const [examAnsweredCount,setExamAnsweredCount]= useState(0);
+  const [examTimeExpired,  setExamTimeExpired]  = useState(false);
+  const timeLeftRef = useRef(null);
+  const examSnapRef = useRef(null);
   const [showConfetti,setShowConfetti]= useState(false);
   const [soundOn,      setSoundOn]      = useState(true);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
@@ -804,11 +874,13 @@ export default function StudyQuiz() {
   },[]);
 
   // ── Feature access ───────────────────────────────────────────────
-  const adActive    = useCallback((key) => !!(adUnlocked && adUnlocked.feature===key && adUnlocked.until>Date.now()), [adUnlocked]);
+  const adActive    = useCallback((key) => (dev.devMode && dev.adUnlocked===true) ? true : !!(adUnlocked && adUnlocked.feature===key && adUnlocked.until>Date.now()), [adUnlocked, dev.devMode, dev.adUnlocked]);
   const canUseQType = useCallback((type) => type==="mcq" || isPro || adActive(`quizType:${type}`), [isPro,adActive]);
   const canExtraQ   = useCallback(() => isPro || adActive("questions"), [isPro,adActive]);
   const canCustomQ  = useCallback(() => isPro || adActive("questions"), [isPro,adActive]);
   const fileLimitMB = useCallback(() => isPro?PRO_FILE_MB : adActive("files")?AD_FILE_MB : FREE_FILE_MB, [isPro,adActive]);
+  // Dev: reset the daily quiz counter when the panel asks.
+  useEffect(()=>{ if(dev.devMode && dev.resetDailySignal>0){ setDailyUsed(0); } },[dev.resetDailySignal, dev.devMode]);
 
   const effectiveNumQ = useCallback(()=>{
     if (useCustomQ && canCustomQ()) {
@@ -908,9 +980,12 @@ export default function StudyQuiz() {
         marksPerQ: examMode==="custom" ? (marksMap[q.section]||1) : 1,
       }));
       setExamQs(annotated);setExamIdx(0);setExamAns({});setExamEvals(null);setShowConfetti(false);
+      const tSec = examTimerOn ? Math.min(Math.max(parseInt(examTimerMin)||60,5),180)*60 : 0;
+      setExamTotalSec(tSec); setExamTimeLeft(examTimerOn ? tSec : null);
+      setExamPaused(false); setExamTimeUp(false); setExamReview(false); setShowSubmitPrompt(false); setExamTimeExpired(false);
       setScreen("exam_run");
     }catch(err){setError(err.message.includes("parse")?"Unexpected format — please try again.":err.message);setScreen("exam_setup");}
-  },[examFiles,examMode,examSections,examTotalQ,diff,fileLimitMB]);
+  },[examFiles,examMode,examSections,examTotalQ,diff,fileLimitMB,examTimerOn,examTimerMin]);
 
   const evaluateExam=useCallback(async(answers)=>{
     const hasWritten=examQs.some(q=>q.type==="written");
@@ -938,20 +1013,93 @@ export default function StudyQuiz() {
     }catch{return examQs.map((q,i)=>({score:q.type==="mcq"?(answers[i]===q.correct?1:0):0,feedback:""}));}
   },[examQs]);
 
-  const submitExam=useCallback(async()=>{ if(soundOn) SoundEngine.submit();
-    const evs=await evaluateExam(examAns);
+  const submitExam=useCallback(async(answersArg,opts={})=>{
+    const answers = answersArg ?? examAns;
+    const answered = examQs.reduce((c,q,i)=> (answers[i]!==undefined && answers[i]!=="") ? c+1 : c, 0);
+    setExamAnsweredCount(answered);
+    setExamTimeExpired(!!opts.expired);
+    setExamTimeUsedSec(examTimerOn ? Math.max(0, examTotalSec - (timeLeftRef.current ?? 0)) : null);
+    try{ sessionStorage.removeItem("revyy_exam"); }catch{ /* ignore */ }
+    if(soundOn && !opts.expired) SoundEngine.submit();
+    const evs=await evaluateExam(answers);
     setExamEvals(evs);
     const totalPossible=examQs.reduce((s,q)=>s+(q.marksPerQ||1),0);
     const total=evs.reduce((s,e,i)=>s+(e.score||0)*(examQs[i]?.marksPerQ||1),0);
     const pct=Math.round((total/totalPossible)*100);
     const passed=pct>=50;
-    if(pct>=90){ setTimeout(()=>setShowConfetti(true),400); if(soundOn) setTimeout(()=>SoundEngine.celebrate(),600); } else if(passed&&soundOn) SoundEngine.pass(); else if(!passed&&soundOn) SoundEngine.fail();
+    if(pct>=90){ setTimeout(()=>setShowConfetti(true),400); if(soundOn&&!opts.expired) setTimeout(()=>SoundEngine.celebrate(),600); }
+    else if(soundOn&&!opts.expired){ passed?SoundEngine.pass():SoundEngine.fail(); }
     setScreen("exam_results");
-  },[examQs,examAns,evaluateExam]);
+  },[examQs,examAns,evaluateExam,soundOn,examTimerOn,examTotalSec]);
+
+  // Time ran out: lock the screen, mark unanswered as "", and auto-submit.
+  const handleTimeUp=useCallback(()=>{
+    if(examTimeUp) return;
+    setExamTimeUp(true);
+    if(soundOn) SoundEngine.fail();
+    const filled={...examAns};
+    examQs.forEach((q,i)=>{ if(filled[i]===undefined) filled[i]=""; });
+    setExamAns(filled);
+    setTimeout(()=>submitExam(filled,{expired:true}),500);
+  },[examTimeUp,examAns,examQs,soundOn,submitExam]);
+
+  // Clicking final submit: if timed and time remains, offer a review first.
+  const handleSubmitClick=()=>{
+    if(examTimerOn && !examTimeUp && (examTimeLeft??0)>0 && !examReview) setShowSubmitPrompt(true);
+    else submitExam();
+  };
 
   const pickExam=(ans)=>{ setExamAns(prev=>({...prev,[examIdx]:ans})); if(soundOn) SoundEngine.tick(); };
-  const nextExam=()=>{if(examIdx+1>=examQs.length)submitExam();else setExamIdx(i=>i+1);};
+  const nextExam=()=>{if(examIdx+1>=examQs.length)handleSubmitClick();else setExamIdx(i=>i+1);};
   const prevExam=()=>{if(examIdx>0)setExamIdx(i=>i-1);};
+
+  // ── Timer effects ──
+  useEffect(()=>{ timeLeftRef.current = examTimeLeft; },[examTimeLeft]);
+  // Countdown tick — only during an active, unpaused, timed exam.
+  useEffect(()=>{
+    if(screen!=="exam_run" || !examTimerOn || examPaused || examTimeUp) return;
+    const id=setInterval(()=>setExamTimeLeft(s=> s===null ? null : Math.max(0, s-1)),1000);
+    return ()=>clearInterval(id);
+  },[screen,examTimerOn,examPaused,examTimeUp]);
+  // Fire time-up once when the clock reaches zero.
+  useEffect(()=>{
+    if(screen==="exam_run" && examTimerOn && examTimeLeft===0 && !examTimeUp) handleTimeUp();
+  },[screen,examTimerOn,examTimeLeft,examTimeUp,handleTimeUp]);
+  // Auto-pause when the tab is hidden/switched.
+  useEffect(()=>{
+    if(screen!=="exam_run" || !examTimerOn) return;
+    const onVis=()=>{ if(document.hidden) setExamPaused(true); };
+    document.addEventListener("visibilitychange",onVis);
+    return ()=>document.removeEventListener("visibilitychange",onVis);
+  },[screen,examTimerOn]);
+  // Drop focus from any input while paused so keystrokes can't reach it.
+  useEffect(()=>{ if(examPaused) document.activeElement?.blur?.(); },[examPaused]);
+  // Snapshot the live exam for refresh-recovery; persist on unload.
+  useEffect(()=>{
+    examSnapRef.current = (screen==="exam_run" && examQs.length && !examTimeUp)
+      ? { examQs, examAns, examIdx, examTimeLeft, examTotalSec, examTimerOn, examMode, examSections, diff }
+      : null;
+  });
+  useEffect(()=>{
+    const save=()=>{ try{ if(examSnapRef.current) sessionStorage.setItem("revyy_exam",JSON.stringify(examSnapRef.current)); }catch{ /* ignore */ } };
+    window.addEventListener("beforeunload",save);
+    return ()=>window.removeEventListener("beforeunload",save);
+  },[]);
+  // On mount, offer to resume an exam interrupted by a refresh.
+  useEffect(()=>{
+    try{ const s=sessionStorage.getItem("revyy_exam"); if(s) setExamResume(JSON.parse(s)); }catch{ /* ignore */ }
+  },[]);
+
+  const resumeExam=()=>{
+    const r=examResume; if(!r) return;
+    setExamQs(r.examQs||[]); setExamAns(r.examAns||{}); setExamIdx(r.examIdx||0);
+    setExamTotalSec(r.examTotalSec||0); setExamTimeLeft(r.examTimeLeft??null); setExamTimerOn(!!r.examTimerOn);
+    setExamMode(r.examMode||null); if(r.examSections) setExamSections(r.examSections); if(r.diff!==undefined) setDiff(r.diff);
+    setExamPaused(false); setExamTimeUp(false); setExamReview(false); setExamEvals(null);
+    setExamResume(null); setScreen("exam_run");
+  };
+  const discardResume=()=>{ try{ sessionStorage.removeItem("revyy_exam"); }catch{ /* ignore */ } setExamResume(null); };
+  const fmtClock=(s)=>{ const m=Math.floor(s/60), ss=s%60; return m+":"+String(ss).padStart(2,"0"); };
 
   // After returning from Stripe checkout (?upgraded=true): show a welcome
   // banner and refresh Pro status from Supabase (the webhook sets it).
@@ -1079,7 +1227,7 @@ export default function StudyQuiz() {
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}}>
-          <span style={Sb.brand}><Logo/>{t.appName}</span>
+          <span style={Sb.brand}><Logo/>{t.appName} <DevBadge/></span>
           <div style={{display:"flex",gap:10,alignItems:"center",marginLeft:"auto"}}>
             <select value={lang} onChange={e=>setLang(e.target.value)} title="Language"
               style={{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,fontSize:12,padding:"3px 6px",cursor:"pointer",fontFamily:"inherit",outline:"none"}}>
@@ -1125,6 +1273,7 @@ export default function StudyQuiz() {
       </div>
       {showProModal && <ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
       {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
+      <ResumeModal info={examResume} onResume={resumeExam} onDiscard={discardResume} fmtClock={fmtClock}/>
     </div>
   );
 
@@ -1447,6 +1596,27 @@ export default function StudyQuiz() {
             </div>
           </div>
         )}
+        {examMode && (
+          <div style={{marginBottom:22}}>
+            <p style={Sb.secLabel}>TIMER</p>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"var(--color-background-primary)",borderRadius:12,padding:"12px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>⏱ Enable Timer</div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>Add a countdown to the whole exam</div>
+              </div>
+              <Toggle on={examTimerOn} onChange={setExamTimerOn}/>
+            </div>
+            {examTimerOn && (
+              <div style={{marginTop:10,background:"var(--color-background-primary)",borderRadius:12,padding:"12px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                  <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>Total exam time (minutes):</span>
+                  <input type="number" min={5} max={180} value={examTimerMin} onChange={e=>setExamTimerMin(e.target.value)} style={{width:80,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:16,fontWeight:700,padding:"7px 10px",fontFamily:"inherit",outline:"none",textAlign:"center"}}/>
+                </div>
+                <p style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.5,margin:"10px 0 0"}}>Timer applies to the entire exam. Unanswered questions when time expires are marked as 0.</p>
+              </div>
+            )}
+          </div>
+        )}
         <div style={{marginBottom:22}}>
           <p style={Sb.secLabel}>{t.difficulty.toUpperCase()}</p>
           <div style={{display:"flex",gap:8}}>{t.diffOpts.map((d,i)=><Chip key={d} label={d} active={diff===i} onClick={()=>setDiff(i)}/>)}</div>
@@ -1491,10 +1661,24 @@ export default function StudyQuiz() {
       {!upgraded && trialDaysLeft>0 && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#4f46e5",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>⏳ Your free trial ends in {trialDaysLeft} day{trialDaysLeft!==1?"s":""} — you will be charged after</div>}
         <div style={Sb.topbar} className="rv-topbar">
           <button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>Exit</button>
-          <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.examProgress} {examIdx+1}/{examQs.length}</span>
-          <span style={{fontSize:11,color:answered===examQs.length?"#16a34a":"var(--color-text-tertiary)",fontWeight:600}}>{answered}/{examQs.length} done</span>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.examProgress} {examIdx+1}/{examQs.length}</span>
+            {examTimerOn && examTimeLeft!=null && (
+              <span className={examTimeLeft<60?"rv-timer-flash":""} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:14,fontWeight:800,fontVariantNumeric:"tabular-nums",color: examTimeLeft<60?"#ef4444" : (examTimeLeft/examTotalSec)>0.5?"var(--color-text-primary)" : (examTimeLeft/examTotalSec)>0.25?"#f59e0b":"#ef4444"}}>🕐 {fmtClock(examTimeLeft)}</span>
+            )}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            {examTimerOn && !examTimeUp && <button onClick={()=>setExamPaused(true)} title="Pause" style={{background:"none",border:"1px solid var(--color-border-secondary)",borderRadius:8,padding:"3px 9px",fontSize:13,cursor:"pointer",color:"var(--color-text-secondary)",fontFamily:"inherit"}}>⏸</button>}
+            <span style={{fontSize:11,color:answered===examQs.length?"#16a34a":"var(--color-text-tertiary)",fontWeight:600}}>{answered}/{examQs.length}</span>
+          </div>
         </div>
         <div style={{height:4,background:"var(--color-border-tertiary)"}}><div style={{height:"100%",background:"#94a3b8",width:((examIdx/examQs.length)*100)+"%",transition:"width 0.3s"}}/></div>
+        {examReview && (
+          <div style={{background:"#f0fdf4",borderBottom:"1px solid #86efac",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <span style={{fontSize:12,color:"#15803d",fontWeight:600}}>Review mode — change any answer, then submit</span>
+            <button onClick={()=>submitExam()} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>✓ Final Submit</button>
+          </div>
+        )}
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}>
           {q.section&&(examIdx===0||examQs[examIdx-1]?.section!==q.section)&&(
             <div style={{background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}} className="fade-in">
@@ -1530,7 +1714,30 @@ export default function StudyQuiz() {
           )}
           {isLast&&q.type!=="fill"&&<p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>Review your answers above before submitting.</p>}
         </div>
-        <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);setScreen("exam_setup");}}/>
+        <ExitModal show={showExitConfirm}
+          title="Are you sure you want to exit?"
+          message="Your exam progress will be lost and cannot be recovered."
+          stayLabel="Continue Exam" leaveLabel="Exit" stayGreen
+          onStay={()=>setShowExitConfirm(false)}
+          onLeave={()=>{setShowExitConfirm(false);try{sessionStorage.removeItem("revyy_exam")}catch{ /* ignore */ };setScreen("exam_setup");}}/>
+
+        {/* Submit-before-time-up review prompt */}
+        {showSubmitPrompt && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:560,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+            <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"26px 22px",maxWidth:330,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.25)"}}>
+              <div style={{fontSize:34,marginBottom:8}}>📋</div>
+              <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>Submit your exam?</h3>
+              <p style={{margin:"0 0 18px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>You still have <strong style={{color:"#4f46e5"}}>{fmtClock(examTimeLeft||0)}</strong> remaining. Review your answers before submitting?</p>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <button onClick={()=>{setShowSubmitPrompt(false);setExamReview(true);setExamIdx(0);}} style={{...Sb.btnPrimary,width:"100%",margin:0,background:"#4f46e5",fontSize:14}}>Review Answers</button>
+                <button onClick={()=>{setShowSubmitPrompt(false);submitExam();}} style={{width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Submit Now</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {examPaused && !examTimeUp && <PauseOverlay onResume={()=>setExamPaused(false)}/>}
+        {examTimeUp && <TimeUpModal/>}
       </div>
     );
   }
@@ -1579,6 +1786,19 @@ export default function StudyQuiz() {
               </div>
             ))}
           </div>
+          {(examTimeUsedSec!=null || examTimerOn) && (
+            <div style={{display:"flex",gap:10,marginBottom:18}}>
+              {[
+                {v: examTimeExpired ? "Time Expired" : (examTimeUsedSec!=null ? Math.floor(examTimeUsedSec/60)+" min "+(examTimeUsedSec%60)+" sec" : "—"), l:"Time Used", red:examTimeExpired},
+                {v: examAnsweredCount+" / "+examQs.length, l:"Questions Answered"},
+              ].map(({v,l,red},i)=>(
+                <div key={i} style={{flex:1,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 6px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
+                  <div style={{fontSize:14,fontWeight:700,color:red?"#dc2626":"var(--color-text-primary)"}}>{v}</div>
+                  <div style={{fontSize:10,color:"var(--color-text-secondary)",marginTop:2}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          )}
           {examMode==="custom"&&examSections.length>1&&(
             <div style={{background:"var(--color-background-primary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)",marginBottom:16,overflow:"hidden"}}>
               <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:11,fontWeight:700,color:"var(--color-text-secondary)",letterSpacing:1}}>SECTION BREAKDOWN</div>
@@ -1689,6 +1909,8 @@ const CSS = `
   select{appearance:auto}
   .no-anim *{animation:none!important;transition:none!important}
   @keyframes slideFromRight{from{transform:translateX(100%)}to{transform:translateX(0)}}
+  @keyframes rvTimerFlash{0%,100%{opacity:1}50%{opacity:0.25}}
+  .rv-timer-flash{animation:rvTimerFlash 1s steps(1) infinite}
   .settings-panel{animation:slideFromRight 0.22s ease}
   ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--color-border-secondary);border-radius:2px}
 

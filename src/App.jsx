@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { LanguageProvider } from './context/LanguageContext.jsx'
+import { DevProvider } from './context/DevContext.jsx'
+import DevWidget from './components/DevWidget.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import SiteLayout from './components/SiteLayout.jsx'
 import Home from './pages/Home.jsx'
@@ -20,8 +22,10 @@ import './site.css'
 export default function App() {
   return (
     <BrowserRouter>
+      <DevProvider>
       <LanguageProvider>
       <AuthProvider>
+        <DevWidget />
         <Routes>
           {/* Marketing website — wrapped in navbar + footer layout */}
           <Route element={<SiteLayout />}>
@@ -57,6 +61,7 @@ export default function App() {
         </Routes>
       </AuthProvider>
       </LanguageProvider>
+      </DevProvider>
     </BrowserRouter>
   )
 }

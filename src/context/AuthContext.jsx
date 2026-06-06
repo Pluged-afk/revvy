@@ -1,7 +1,11 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabase.js";
+import { useDev } from "./DevContext.jsx";
 
 const AuthContext = createContext(null);
+
+// Fake user used only by the dev "bypass auth" override (local testing).
+const DEV_USER = { id: "dev-user-0000", email: "dev@revyy.local", identities: [{ provider: "email" }] };
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);
@@ -13,6 +17,7 @@ export function AuthProvider({ children }) {
   const [trialEnd, setTrialEnd] = useState(null);            // ISO string | null
   const [subStatus, setSubStatus] = useState(null);          // stripe subscription status
   const [loading, setLoading] = useState(true);
+  const dev = useDev();
 
   // Read the user's profile row (creating it if missing) and sync state.
   const loadProfile = useCallback(async (uid) => {
@@ -77,6 +82,8 @@ export function AuthProvider({ children }) {
   const signOut = () => supabase.auth.signOut();
 
   // Send a password-reset email; the link lands on /reset-password.
+  // Send a reset link. Supabase intentionally does NOT reveal whether the
+  // email is registered (anti-enumeration), so this always "succeeds".
   const resetPassword = (email) =>
     supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
@@ -161,8 +168,14 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
+  // Dev-mode overrides (local only — `dev.devMode` is false in production).
+  const effIsPro = dev.devMode && dev.pro !== null ? dev.pro : isPro;
+  const effUser = dev.devMode && dev.loggedIn !== null
+    ? (dev.loggedIn ? (user || DEV_USER) : null)
+    : user;
+
   const value = {
-    session, user, isPro, trialEnd, subStatus, loading,
+    session, user: effUser, isPro: effIsPro, trialEnd, subStatus, loading,
     signUp, signInWithPassword, signInWithGoogle, signOut, setProStatus, deleteAccount, reauthenticate,
     resetPassword, updatePassword, refreshProfile, startCheckout, openPortal,
   };
