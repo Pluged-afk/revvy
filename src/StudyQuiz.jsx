@@ -412,7 +412,9 @@ function SectionLabel({ label }) {
 
 function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, t }) {
   const s = t.set || {};
-  const { subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout } = useAuth();
+  const { subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile } = useAuth();
+  const [checkingSub, setCheckingSub] = useState(false);
+  const doRefreshSub = async () => { setCheckingSub(true); try { await refreshProfile?.(); } finally { setCheckingSub(false); } };
   const [confirmDel, setConfirmDel] = useState(false);
   const [delBusy,    setDelBusy]    = useState(false);
   const [delErr,     setDelErr]     = useState("");
@@ -567,6 +569,11 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                   </button>
                 )}
                 {portalErr && <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"8px 11px",fontSize:12,lineHeight:1.4}}>{portalErr}</div>}
+                <button onClick={doRefreshSub} disabled={checkingSub}
+                  style={{width:"100%",marginTop:8,background:"none",border:"none",
+                    fontSize:12,fontWeight:500,color:"var(--color-text-tertiary)",cursor:checkingSub?"default":"pointer",fontFamily:"inherit"}}>
+                  {checkingSub ? "Checking…" : "🔄 Refresh subscription status"}
+                </button>
               </>
             ) : (
               <>
@@ -586,6 +593,11 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                   {t.upgradeToPro} →
                 </button>
                 <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"9px 0 0",lineHeight:1.5}}>{t.cancelAnytime}</p>
+                <button onClick={doRefreshSub} disabled={checkingSub}
+                  style={{width:"100%",marginTop:8,background:"none",border:"none",
+                    fontSize:12,fontWeight:500,color:"var(--color-text-tertiary)",cursor:checkingSub?"default":"pointer",fontFamily:"inherit"}}>
+                  {checkingSub ? "Checking…" : "🔄 Already paid? Refresh status"}
+                </button>
               </>
             )}
           </div>

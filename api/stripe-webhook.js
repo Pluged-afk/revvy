@@ -33,6 +33,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Webhook Error: ${err.message}` });
   }
   console.log(`[wh] ✓ event: ${event.type} (${event.id})`);
+  console.log("[webhook] received:", event.type);
 
   const emailFromCustomer = async (customerId) => {
     if (!customerId) return null;
@@ -44,8 +45,11 @@ export default async function handler(req, res) {
   // COALESCE keeps existing values when a field is null. `isPro` null = leave.
   const apply = async ({ isPro = null, userId = null, email = null, customerId = null,
                          subscriptionId = null, status = null, plan = null, periodEnd = null, cancelAtPeriodEnd = null, source }) => {
+    console.log("[webhook] customer email:", email || "(none)", "· clerk_user_id:", userId || "(none)", "· customer:", customerId || "(none)");
+    console.log("[webhook] updating profile...");
     try {
-      const rows = await sql`
+      // Match by clerk_user_id first (most reliable), then id, email, customer.
+      const result = await sql`
         UPDATE profiles SET
           is_pro               = COALESCE(${isPro}, is_pro),
           stripe_customer_id   = COALESCE(${customerId}, stripe_customer_id),
@@ -54,10 +58,11 @@ export default async function handler(req, res) {
           subscription_plan    = COALESCE(${plan}, subscription_plan),
           current_period_end   = COALESCE(${periodEnd}, current_period_end),
           cancel_at_period_end = COALESCE(${cancelAtPeriodEnd}, cancel_at_period_end)
-        WHERE id = ${userId} OR email = ${email} OR stripe_customer_id = ${customerId}
+        WHERE clerk_user_id = ${userId} OR id = ${userId} OR email = ${email} OR stripe_customer_id = ${customerId}
         RETURNING id, is_pro`;
-      console.log(`[wh] ${source}: updated ${rows.length} row(s) · id=${userId || "?"} email=${email || "?"} cust=${customerId || "?"} →`, rows[0] || "(no match)");
-      return rows;
+      console.log("[webhook] result:", JSON.stringify(result));
+      console.log(`[wh] ${source}: updated ${result.length} row(s)${result.length ? "" : " (NO MATCH — user not found by clerk id / email / customer)"}`);
+      return result;
     } catch (e) {
       console.error(`[wh] ${source}: DB error:`, e.message);
       return [];
@@ -74,7 +79,7 @@ export default async function handler(req, res) {
         const s = event.data.object;
         await apply({
           isPro: true,
-          userId: s.client_reference_id || s.metadata?.user_id || null,
+          userId: s.client_reference_id || s.metadata?.clerk_user_id || null,
           email: s.customer_details?.email || s.customer_email || null,
           customerId: s.customer,
           subscriptionId: s.subscription || null,
@@ -88,7 +93,7 @@ export default async function handler(req, res) {
         const pro = ACTIVE.includes(sub.status);
         await apply({
           isPro: pro,
-          userId: sub.metadata?.user_id || null,
+          userId: sub.metadata?.clerk_user_id || null,
           email: await emailFromCustomer(sub.customer),
           customerId: sub.customer,
           subscriptionId: sub.id,
@@ -106,7 +111,7 @@ export default async function handler(req, res) {
         const isPro = ACTIVE.includes(sub.status) ? true : INACTIVE.includes(sub.status) ? false : null;
         await apply({
           isPro,
-          userId: sub.metadata?.user_id || null,
+          userId: sub.metadata?.clerk_user_id || null,
           customerId: sub.customer,
           subscriptionId: sub.id,
           status: sub.status,
@@ -124,7 +129,7 @@ export default async function handler(req, res) {
           const rows = await sql`
             UPDATE profiles SET is_pro = false, subscription_id = NULL,
               subscription_status = 'canceled', current_period_end = NULL, cancel_at_period_end = false
-            WHERE id = ${sub.metadata?.user_id || null} OR stripe_customer_id = ${sub.customer}
+            WHERE clerk_user_id = ${sub.metadata?.clerk_user_id || null} OR id = ${sub.metadata?.clerk_user_id || null} OR stripe_customer_id = ${sub.customer}
             RETURNING id`;
           console.log(`[wh] subscription.deleted: cleared ${rows.length} row(s)`);
         } catch (e) { console.error("[wh] subscription.deleted DB error:", e.message); }

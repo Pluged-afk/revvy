@@ -1,10 +1,11 @@
 -- ───────────────────────────────────────────────────────────────
 -- Revyy — run once against your Neon database (or hit /api/init-db).
--- Profiles are keyed by the Clerk user id (TEXT).
+-- Profiles are keyed by the Clerk user id; clerk_user_id mirrors it.
 -- ───────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS profiles (
   id                   TEXT PRIMARY KEY,            -- Clerk user id
+  clerk_user_id        TEXT UNIQUE,                 -- mirrors id (explicit)
   email                TEXT UNIQUE,
   is_pro               BOOLEAN DEFAULT FALSE,
   stripe_customer_id   TEXT,
@@ -16,6 +17,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   created_at           TIMESTAMP DEFAULT NOW()
 );
 
--- Lookups the Stripe webhook performs.
-CREATE INDEX IF NOT EXISTS profiles_email_idx        ON profiles (email);
-CREATE INDEX IF NOT EXISTS profiles_stripe_cust_idx  ON profiles (stripe_customer_id);
+-- If the table predates clerk_user_id:
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS clerk_user_id TEXT UNIQUE;
+UPDATE profiles SET clerk_user_id = id WHERE clerk_user_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS profiles_clerk_idx       ON profiles (clerk_user_id);
+CREATE INDEX IF NOT EXISTS profiles_email_idx       ON profiles (email);
+CREATE INDEX IF NOT EXISTS profiles_stripe_cust_idx ON profiles (stripe_customer_id);

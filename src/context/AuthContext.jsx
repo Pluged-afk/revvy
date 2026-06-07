@@ -9,7 +9,7 @@ export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }) {
   const { isLoaded, isSignedIn, user: clerkUser } = useUser();
-  const { signOut: clerkSignOut } = useClerkAuth();
+  const { signOut: clerkSignOut, getToken } = useClerkAuth();
   const dev = useDev();
 
   const [isPro, setIsPro] = useState(false);
@@ -31,27 +31,31 @@ export function AuthProvider({ children }) {
     };
   }, [isSignedIn, clerkUser]);
 
-  // Read the profile from Neon via the serverless API. Returns is_pro (bool)
-  // or null if the read failed (lets pollers keep trying).
-  const loadProfile = useCallback(async (uid) => {
-    if (!uid) {
-      setIsPro(false); setSubStatus(null); setSubPlan(null); setPeriodEnd(null); setCancelAtPeriodEnd(false);
-      return false;
-    }
+  // Read the profile FRESH from Neon via the serverless API (token-verified
+  // server-side). Never cached in localStorage. Returns is_pro (bool) or null
+  // if the read failed (lets pollers keep trying).
+  const loadProfile = useCallback(async () => {
     try {
-      const res = await fetch(`/api/get-profile?userId=${encodeURIComponent(uid)}`);
+      const token = await getToken();
+      if (!token) {
+        setIsPro(false); setSubStatus(null); setSubPlan(null); setPeriodEnd(null); setCancelAtPeriodEnd(false);
+        return false;
+      }
+      const res = await fetch("/api/get-profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!res.ok) return null;
       const p = await res.json();
-      setIsPro(!!p.is_pro);
+      setIsPro(p.is_pro === true);
       setSubStatus(p.subscription_status || null);
       setSubPlan(p.subscription_plan || null);
       setPeriodEnd(p.current_period_end || null);
       setCancelAtPeriodEnd(!!p.cancel_at_period_end);
-      return !!p.is_pro;
+      return p.is_pro === true;
     } catch {
       return null;
     }
-  }, []);
+  }, [getToken]);
 
   // On sign-in: ensure a profile row exists, then load it.
   useEffect(() => {
@@ -70,7 +74,7 @@ export function AuthProvider({ children }) {
           body: JSON.stringify({ userId: clerkUser.id, email }),
         });
       } catch { /* non-fatal */ }
-      await loadProfile(clerkUser.id);
+      await loadProfile();
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -81,7 +85,7 @@ export function AuthProvider({ children }) {
   // Re-read the profile (e.g. after returning from Stripe checkout).
   const refreshProfile = useCallback(async () => {
     if (!clerkUser?.id) return false;
-    return await loadProfile(clerkUser.id);
+    return await loadProfile();
   }, [clerkUser, loadProfile]);
 
   // Local-only optimistic toggle (dev / immediate UI); the webhook is the

@@ -41,14 +41,15 @@ export default async function handler(req, res) {
   }
 
   try {
+    const meta = { clerk_user_id: userId, email: userEmail || "" };
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: { metadata: { user_id: userId } },
+      subscription_data: { metadata: meta },
       payment_method_collection: "always",
       automatic_tax: { enabled: true },
       client_reference_id: userId,
-      metadata: { user_id: userId },
+      metadata: meta,
       ...(existingCustomerId ? { customer: existingCustomerId } : { customer_email: userEmail || undefined }),
       allow_promotion_codes: true,
       success_url: `${baseUrl}/app?upgraded=true`,
