@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import emailjs from "@emailjs/browser";
+import usePageMeta from "../lib/usePageMeta.js";
 
 // EmailJS config (public by design — the public key is safe in client code).
 const EMAILJS_SERVICE_ID = "service_nxh1vpu";
@@ -8,6 +9,7 @@ const EMAILJS_TEMPLATE_ID = "template_6cwrm14";
 const EMAILJS_PUBLIC_KEY = "RHMZNoZuyGsSenMXI";
 
 export default function Contact() {
+  usePageMeta("Contact — Revyy", "Questions, feedback, or feature ideas? Get in touch with the Revyy team.");
   const [form, setForm] = useState({ name: "", email: "", message: "" });
   const [status, setStatus] = useState("idle"); // idle | sending | sent | error
   const [errMsg, setErrMsg] = useState("");
@@ -88,7 +90,7 @@ export default function Contact() {
             <div className="contact-card" style={{ marginBottom: 18 }}>
               <h3>Email us</h3>
               <p>Prefer email? Reach us directly:</p>
-              <a className="maillink" href="mailto:Revyy.support@gmail.com">Revyy.support@gmail.com</a>
+              <a className="maillink" href="mailto:revyyapp@outlook.com">revyyapp@outlook.com</a>
             </div>
             <div className="contact-card" style={{ marginBottom: 18 }}>
               <h3>Response time</h3>

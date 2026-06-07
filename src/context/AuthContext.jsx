@@ -16,15 +16,22 @@ export function AuthProvider({ children }) {
   const [isPro, setIsPro] = useState(false);
   const [trialEnd, setTrialEnd] = useState(null);            // ISO string | null
   const [subStatus, setSubStatus] = useState(null);          // stripe subscription status
+  const [subPlan, setSubPlan] = useState(null);              // 'monthly' | 'yearly' | null
+  const [periodEnd, setPeriodEnd] = useState(null);          // ISO string — next billing date
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [loading, setLoading] = useState(true);
   const dev = useDev();
 
   // Read the user's profile row (creating it if missing) and sync state.
   const loadProfile = useCallback(async (uid) => {
-    if (!uid) { setIsPro(false); setTrialEnd(null); setSubStatus(null); return; }
+    const clearSub = () => {
+      setIsPro(false); setTrialEnd(null); setSubStatus(null);
+      setSubPlan(null); setPeriodEnd(null); setCancelAtPeriodEnd(false);
+    };
+    if (!uid) { clearSub(); return; }
     const { data, error } = await supabase
       .from("profiles")
-      .select("is_pro, trial_end, subscription_status")
+      .select("is_pro, trial_end, subscription_status, subscription_plan, current_period_end, cancel_at_period_end")
       .eq("id", uid)
       .maybeSingle();
 
@@ -33,11 +40,14 @@ export function AuthProvider({ children }) {
     if (!data) {
       // First sign-in for this user — create their profile row.
       await supabase.from("profiles").insert({ id: uid, is_pro: false });
-      setIsPro(false); setTrialEnd(null); setSubStatus(null);
+      clearSub();
     } else {
       setIsPro(!!data.is_pro);
       setTrialEnd(data.trial_end || null);
       setSubStatus(data.subscription_status || null);
+      setSubPlan(data.subscription_plan || null);
+      setPeriodEnd(data.current_period_end || null);
+      setCancelAtPeriodEnd(!!data.cancel_at_period_end);
     }
   }, []);
 
@@ -151,13 +161,14 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   // Open the Stripe Customer Portal (manage / cancel subscription).
-  const openPortal = useCallback(async () => {
+  // Pass flow:"cancel" to deep-link straight to the cancellation page.
+  const openPortal = useCallback(async (flow) => {
     if (!user) return { error: "Please sign in first." };
     try {
       const res = await fetch("/api/create-portal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({ userId: user.id, flow }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) return { error: data.error || "Could not open billing portal." };
@@ -175,7 +186,7 @@ export function AuthProvider({ children }) {
     : user;
 
   const value = {
-    session, user: effUser, isPro: effIsPro, trialEnd, subStatus, loading,
+    session, user: effUser, isPro: effIsPro, trialEnd, subStatus, subPlan, periodEnd, cancelAtPeriodEnd, loading,
     signUp, signInWithPassword, signInWithGoogle, signOut, setProStatus, deleteAccount, reauthenticate,
     resetPassword, updatePassword, refreshProfile, startCheckout, openPortal,
   };

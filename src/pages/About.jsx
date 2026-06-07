@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import usePageMeta from "../lib/usePageMeta.js";
 
 const VALUES = [
   { icon: "🎓", title: "Student First", desc: "Every feature is built around real study needs — not buzzwords or busywork." },
@@ -7,13 +8,14 @@ const VALUES = [
 ];
 
 export default function About() {
+  usePageMeta("About — Revyy", "Revyy started as a personal tool to get ready for exams — built to test yourself before the real thing.");
   return (
     <>
       <section className="hero" style={{ padding: "84px 0 90px" }}>
         <div className="container">
           <span className="eyebrow">About</span>
           <h1>Built by a student, for students</h1>
-          <p className="hero-sub">Revyy started as a personal tool to survive exam season. Now it helps thousands study smarter.</p>
+          <p className="hero-sub">Revyy started as a personal tool to get ready for exams — built to test yourself before the real thing.</p>
         </div>
       </section>
 
@@ -59,14 +61,24 @@ export default function About() {
             <h2>Meet the maker</h2>
           </div>
           <div className="founder">
-            <div className="avatar">R</div>
+            <div className="avatar">
+              <span>P</span>
+              <img
+                src="/plug.jpg"
+                alt="Plug"
+                onError={(e) => {
+                  console.error("[About] founder avatar failed to load:", e.currentTarget.src);
+                  e.currentTarget.remove();   // reveal the "P" fallback behind it
+                }}
+              />
+            </div>
             <div>
-              <h3>Revyy Founder</h3>
-              <div className="role">Creator & Student</div>
+              <h3>Plug</h3>
+              <div className="role">Creator &amp; Student</div>
               <p>
-                A university student who got tired of inefficient studying and decided to do
-                something about it. Revyy is built in the open, shaped by feedback from students
-                who use it every day to prepare for real exams.
+                I always wanted a way to assess and test myself before sitting the real exam — so
+                I built Revyy to do exactly that. I'm constantly updating it and making sure it
+                works great. If you have any suggestions or run into any issues, feel free to reach out.
               </p>
             </div>
           </div>

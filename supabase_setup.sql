@@ -17,6 +17,9 @@ alter table public.profiles add column if not exists stripe_customer_id  text;
 alter table public.profiles add column if not exists subscription_id     text;
 alter table public.profiles add column if not exists subscription_status text;
 alter table public.profiles add column if not exists trial_end           timestamp;
+alter table public.profiles add column if not exists subscription_plan   text;        -- 'monthly' | 'yearly'
+alter table public.profiles add column if not exists current_period_end  timestamp;   -- next billing date
+alter table public.profiles add column if not exists cancel_at_period_end boolean default false;
 
 alter table public.profiles enable row level security;
 

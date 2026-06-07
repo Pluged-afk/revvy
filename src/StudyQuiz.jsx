@@ -23,6 +23,11 @@ const STRIPE_YEARLY_PRICE  = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
 
 function getTodayStr() { return new Date().toLocaleDateString("en-US"); }
 function fmtMB(bytes)  { return (bytes/1024/1024).toFixed(1)+"MB"; }
+function fmtDate(iso)  {
+  if (!iso) return "";
+  try { return new Date(iso).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}); }
+  catch { return ""; }
+}
 function msUntil(ts)   {
   const d = ts - Date.now();
   if (d <= 0) return null;
@@ -112,7 +117,7 @@ async function callClaude({ blocks, numQ, diff, type }) {
   };
   const prompt = `Generate exactly ${numQ} study questions from the material.\nQuiz type: ${typeMap[type]}\nDifficulty: ${diff}.\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence"}]}\nMake all 4 options plausible. Vary question styles across the set.`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:4000,
       system:"You are an expert educator. Return ONLY valid raw JSON, no markdown.",
@@ -205,7 +210,7 @@ function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
 }
 
 // ── Locked Feature Modal ──────────────────────────────────────────────
-function LockedModal({ info, adWatchedToday, adUnlocked, onClose, onUpgrade, onWatchAd, t }) {
+function LockedModal({ info, adWatchedToday, adUnlocked, adsOn, onClose, onUpgrade, onWatchAd, t }) {
   if (!info) return null;
   const adLabelKey = info.featureKey.startsWith("quizType:")
     ? info.featureKey.replace("quizType:", "")
@@ -232,13 +237,13 @@ function LockedModal({ info, adWatchedToday, adUnlocked, onClose, onUpgrade, onW
         <button onClick={onUpgrade} style={{...Sb.btnPrimary,width:"100%",marginBottom:10,fontFamily:"inherit",fontSize:14,background:"#4f46e5"}}>
           ✦ {t.upgradeToPro}
         </button>
-        {adLabel && !adWatchedToday && (
+        {adsOn && adLabel && !adWatchedToday && (
           <button onClick={()=>onWatchAd(info.featureKey)} style={{width:"100%",marginBottom:10,background:"#fefce8",border:"1.5px solid #f59e0b",color:"#92400e",borderRadius:12,padding:"12px 14px",fontSize:13,cursor:"pointer",fontFamily:"inherit",lineHeight:1.6,textAlign:"center"}}>
             {t.watchAdBtn}<br/>
             <span style={{fontSize:11,opacity:0.8}}>Unlocks: {adLabel} for {AD_HOURS} hour{AD_HOURS!==1?"s":""}</span>
           </button>
         )}
-        {adLabel && adWatchedToday && (
+        {adsOn && adLabel && adWatchedToday && (
           <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:12,color:"var(--color-text-secondary)",textAlign:"center"}}>
             📵 {t.adUsedToday} — {t.adUsedDesc}
           </div>
@@ -405,16 +410,31 @@ function SectionLabel({ label }) {
 }
 
 function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, t }) {
+  const s = t.set || {};
+  const { subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout } = useAuth();
   const [confirmDel, setConfirmDel] = useState(false);
   const [delBusy,    setDelBusy]    = useState(false);
   const [delErr,     setDelErr]     = useState("");
   const [delPwd,     setDelPwd]     = useState("");
-  const [portalBusy, setPortalBusy] = useState(false);
+  const [portalBusy, setPortalBusy] = useState("");        // "" | "manage" | "cancel"
   const [portalErr,  setPortalErr]  = useState("");
+  const [showUpgrade,setShowUpgrade]= useState(false);
+  const [coBusy,     setCoBusy]     = useState("");        // "" | "monthly" | "yearly"
+  const [coErr,      setCoErr]      = useState("");
   const doManage = async () => {
-    setPortalErr(""); setPortalBusy(true);
-    const res = await onManageSubscription?.();   // redirects on success
-    if (res?.error) { setPortalBusy(false); setPortalErr(res.error); }
+    setPortalErr(""); setPortalBusy("manage");
+    const res = await (onManageSubscription ? onManageSubscription() : openPortal()); // redirects on success
+    if (res?.error) { setPortalBusy(""); setPortalErr(res.error); }
+  };
+  const doCancel = async () => {
+    setPortalErr(""); setPortalBusy("cancel");
+    const res = await openPortal("cancel");        // deep-link to Stripe cancellation
+    if (res?.error) { setPortalBusy(""); setPortalErr(res.error); }
+  };
+  const doUpgrade = async (priceId, which) => {
+    setCoErr(""); setCoBusy(which);
+    const res = await startCheckout(priceId);      // redirects to Stripe Checkout
+    if (res?.error) { setCoBusy(""); setCoErr(res.error); }
   };
   const closeConfirm = () => { if (!delBusy) { setConfirmDel(false); setDelErr(""); setDelPwd(""); } };
   const runDelete = async () => {
@@ -446,29 +466,29 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           padding:"18px 18px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",flexShrink:0}}>
           <span style={{fontSize:18,fontWeight:700,
             fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>
-            ⚙️ Settings
+            ⚙️ {s.title}
           </span>
           <button onClick={onCancel} style={{background:"none",border:"none",fontSize:20,
             cursor:"pointer",color:"var(--color-text-secondary)",lineHeight:1,padding:"2px 6px"}}>✕</button>
         </div>
 
         <div style={{flex:1,overflowY:"auto"}}>
-          <SectionLabel label="APPEARANCE"/>
-          <SettingRow label="Theme" desc={draft.theme==="light"?"Forced light mode":draft.theme==="dark"?"Forced dark mode":"Follows your device"}>
-            <Seg options={[["system","Auto"],["light","☀️"],["dark","🌙"]]} value={draft.theme} onChange={v=>update("theme",v)}/>
+          <SectionLabel label={s.secAppearance}/>
+          <SettingRow label={s.theme} desc={draft.theme==="light"?s.themeLight:draft.theme==="dark"?s.themeDark:s.themeFollows}>
+            <Seg options={[["system",s.segAuto],["light","☀️"],["dark","🌙"]]} value={draft.theme} onChange={v=>update("theme",v)}/>
           </SettingRow>
-          <SettingRow label="Font Size" desc={draft.fontSize==="small"?"Compact":""}> 
+          <SettingRow label={s.fontSize} desc={draft.fontSize==="small"?s.fontCompact:""}>
             <Seg options={[["small","S"],["medium","M"],["large","L"]]} value={draft.fontSize} onChange={v=>update("fontSize",v)}/>
           </SettingRow>
-          <SettingRow label="Animations" desc="Disable for reduced motion">
+          <SettingRow label={s.animations} desc={s.animationsDesc}>
             <Toggle on={draft.animations} onChange={v=>update("animations",v)}/>
           </SettingRow>
 
-          <SectionLabel label="SOUND"/>
-          <SettingRow label="Sound Effects">
+          <SectionLabel label={s.secSound}/>
+          <SettingRow label={s.soundEffects}>
             <Toggle on={draft.sound} onChange={v=>update("sound",v)}/>
           </SettingRow>
-          <SettingRow label={"Volume  "+draft.volume+"%"} desc={!draft.sound?"Enable sound first":undefined}>
+          <SettingRow label={s.volume+"  "+draft.volume+"%"} desc={!draft.sound?s.volumeNeedSound:undefined}>
             <div style={{display:"flex",alignItems:"center",gap:6,width:130}}>
               <span style={{fontSize:13}}>🔇</span>
               <input type="range" min={0} max={100} step={5} value={draft.volume}
@@ -479,71 +499,117 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             </div>
           </SettingRow>
 
-          <SectionLabel label="HAPTICS"/>
-          <SettingRow label="Vibration" desc="Android only — not available on iOS">
+          <SectionLabel label={s.secHaptics}/>
+          <SettingRow label={s.vibration} desc={s.vibrationDesc}>
             <Toggle on={draft.haptics} onChange={v=>update("haptics",v)}/>
           </SettingRow>
 
-          <SectionLabel label="QUIZ BEHAVIOUR"/>
-          <SettingRow label="Answer Feedback"
-            desc={draft.feedback==="immediate"?"Correct/wrong shown immediately after each pick":"All answers revealed only at the final results screen"}>
-            <Seg options={[["immediate","Instant"],["end","At End"]]} value={draft.feedback} onChange={v=>update("feedback",v)}/>
+          <SectionLabel label={s.secBehaviour}/>
+          <SettingRow label={s.feedback}
+            desc={draft.feedback==="immediate"?s.feedbackImmediate:s.feedbackEnd}>
+            <Seg options={[["immediate",s.segInstant],["end",s.segAtEnd]]} value={draft.feedback} onChange={v=>update("feedback",v)}/>
           </SettingRow>
-          <SettingRow label="Auto-advance" desc="Moves to next question 1 second after answering">
+          <SettingRow label={s.autoAdvance} desc={s.autoAdvanceDesc}>
             <Toggle on={draft.autoAdvance} onChange={v=>update("autoAdvance",v)}/>
           </SettingRow>
-          <SettingRow label="Default Difficulty" desc="Starting difficulty when opening a new quiz">
-            <Seg options={[["0","Easy"],["1","Med"],["2","Hard"]]} value={String(draft.defaultDiff)} onChange={v=>update("defaultDiff",parseInt(v))}/>
+          <SettingRow label={s.defaultDiff} desc={s.defaultDiffDesc}>
+            <Seg options={[["0",s.segEasy],["1",s.segMed],["2",s.segHard]]} value={String(draft.defaultDiff)} onChange={v=>update("defaultDiff",parseInt(v))}/>
           </SettingRow>
-          <SettingRow label="Default Questions" desc="Starting question count for new quizzes" last>
+          <SettingRow label={s.defaultQ} desc={s.defaultQDesc} last>
             <Seg options={[["5","5"],["10","10"],["15","15"],["20","20"]]} value={String(draft.defaultQCount)} onChange={v=>update("defaultQCount",parseInt(v))}/>
           </SettingRow>
 
           <div style={{margin:"14px 18px 4px",padding:"12px 14px",background:"var(--color-background-secondary)",
             borderRadius:10,border:"0.5px solid var(--color-border-tertiary)"}}>
-            <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)",marginBottom:3}}>💡 More settings coming</div>
-            <div style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.5}}>Account sync, quiz history, and shared quizzes arrive when accounts go live.</div>
+            <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)",marginBottom:3}}>{s.comingTitle}</div>
+            <div style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.5}}>{s.comingDesc}</div>
           </div>
 
           <button onClick={()=>Object.entries(DEFAULTS).forEach(([k,v])=>update(k,v))}
             style={{margin:"8px 18px 8px",width:"calc(100% - 36px)",background:"none",
               border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"9px",
               fontSize:12,color:"var(--color-text-tertiary)",cursor:"pointer",fontFamily:"inherit",display:"block"}}>
-            Reset all to defaults
+            {s.resetAll}
           </button>
 
-          <SectionLabel label="ACCOUNT"/>
-          {isPro && (
-            <div style={{padding:"4px 18px 6px"}}>
-              <button onClick={doManage} disabled={portalBusy}
-                style={{width:"100%",background:"var(--color-background-secondary)",
-                  border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
-                  fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:portalBusy?"default":"pointer",fontFamily:"inherit",opacity:portalBusy?0.6:1}}>
-                {portalBusy ? "Opening…" : `💳 ${t.manageSubscription}`}
-              </button>
-              {portalErr && <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"8px 11px",fontSize:12,lineHeight:1.4}}>{portalErr}</div>}
-            </div>
-          )}
+          <SectionLabel label={s.secSubscription}/>
+          <div style={{margin:"4px 18px 6px",padding:"14px 16px",borderRadius:12,
+            border:isPro?"1px solid #86efac":"0.5px solid var(--color-border-tertiary)",
+            background:isPro?"var(--color-background-success)":"var(--color-background-secondary)"}}>
+            {isPro ? (
+              <>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
+                  <span style={{fontSize:15,fontWeight:700,color:"var(--color-text-primary)"}}>⭐ Revyy Pro</span>
+                  <span style={{fontSize:10,fontWeight:700,background:"#dcfce7",color:"#15803d",border:"0.5px solid #86efac",borderRadius:8,padding:"3px 9px"}}>{s.proActive}</span>
+                </div>
+                <div style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.7}}>
+                  {subPlan && <div>{s.planWord}: <strong style={{color:"var(--color-text-primary)"}}>{subPlan==="yearly"?`${t.planYearly} · €39.99/yr`:`${t.planMonthly} · €4.99/mo`}</strong></div>}
+                  {periodEnd && !cancelAtPeriodEnd && <div>{s.nextBilling}: <strong style={{color:"var(--color-text-primary)"}}>{fmtDate(periodEnd)}</strong></div>}
+                </div>
+                {cancelAtPeriodEnd && periodEnd && (
+                  <div style={{marginTop:10,background:"#fffbeb",border:"0.5px solid #fcd34d",borderRadius:10,padding:"9px 12px",fontSize:12,color:"#92400e",lineHeight:1.5}}>
+                    {s.accessUntil} <strong>{fmtDate(periodEnd)}</strong>.
+                  </div>
+                )}
+                <button onClick={doManage} disabled={!!portalBusy}
+                  style={{width:"100%",marginTop:12,background:"var(--color-background-primary)",
+                    border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
+                    fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:portalBusy?"default":"pointer",fontFamily:"inherit",opacity:portalBusy?0.6:1}}>
+                  {portalBusy==="manage" ? s.opening : `💳 ${t.manageSubscription}`}
+                </button>
+                {!cancelAtPeriodEnd && (
+                  <button onClick={doCancel} disabled={!!portalBusy}
+                    style={{width:"100%",marginTop:8,background:"none",
+                      border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
+                      fontSize:13,fontWeight:500,color:"#dc2626",cursor:portalBusy?"default":"pointer",fontFamily:"inherit",opacity:portalBusy?0.6:1}}>
+                    {portalBusy==="cancel" ? s.opening : s.cancelSub}
+                  </button>
+                )}
+                {portalErr && <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"8px 11px",fontSize:12,lineHeight:1.4}}>{portalErr}</div>}
+              </>
+            ) : (
+              <>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
+                  <span style={{fontSize:15,fontWeight:700,color:"var(--color-text-primary)"}}>{s.freePlan}</span>
+                  <span style={{fontSize:10,fontWeight:700,background:"var(--color-background-tertiary)",color:"var(--color-text-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:8,padding:"3px 9px"}}>{s.freeBadge}</span>
+                </div>
+                <ul style={{margin:"0 0 2px",padding:0,listStyle:"none",fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.9}}>
+                  <li>· {FREE_DAILY} {s.freeLimQuizzes}</li>
+                  <li>· {s.freeLimMcq}</li>
+                  <li>· {s.freeLimAds}</li>
+                </ul>
+                <button onClick={()=>{setCoErr("");setShowUpgrade(true);}}
+                  style={{width:"100%",marginTop:10,background:"#4f46e5",color:"#fff",
+                    border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,
+                    cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",boxShadow:"0 2px 12px #4f46e544"}}>
+                  {t.upgradeToPro} →
+                </button>
+                <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"9px 0 0",lineHeight:1.5}}>{s.trialAvail}</p>
+              </>
+            )}
+          </div>
+
+          <SectionLabel label={s.secAccount}/>
           <div style={{padding:"4px 18px 6px"}}>
             <button onClick={onSignOut}
               style={{width:"100%",background:"var(--color-background-secondary)",
                 border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
                 fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
-              ↩ Sign out
+              ↩ {s.signOut}
             </button>
           </div>
 
           {/* Danger Zone */}
           <div style={{margin:"14px 18px 22px",padding:"16px",borderRadius:12,
             border:"1.5px solid #ef4444",background:"rgba(239,68,68,0.07)"}}>
-            <div style={{fontSize:12,fontWeight:700,color:"#ef4444",marginBottom:8}}>⚠️ Account deletion</div>
+            <div style={{fontSize:12,fontWeight:700,color:"#ef4444",marginBottom:8}}>{s.deletionTitle}</div>
             <div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.55,marginBottom:13}}>
-              Deleting your account is permanent and cannot be undone. All your data will be lost.
+              {s.deletionDesc}
             </div>
             <button onClick={()=>{setDelErr("");setConfirmDel(true);}}
               style={{width:"100%",background:"#dc2626",border:"none",borderRadius:10,padding:"11px",
                 fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>
-              Delete My Account
+              {s.deleteAccount}
             </button>
           </div>
         </div>
@@ -553,11 +619,11 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           <button onClick={onCancel} style={{flex:1,background:"var(--color-background-secondary)",
             border:"0.5px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",
             fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit",
-            color:"var(--color-text-secondary)"}}>Cancel</button>
+            color:"var(--color-text-secondary)"}}>{s.cancel}</button>
           <button onClick={onApply} style={{flex:2,background:"#4f46e5",color:"#fff",
             border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,
             cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",
-            boxShadow:"0 2px 12px #4f46e544"}}>✓ Apply & Save</button>
+            boxShadow:"0 2px 12px #4f46e544"}}>✓ {s.applySave}</button>
         </div>
       </div>
 
@@ -565,32 +631,41 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
         <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}} onClick={closeConfirm}>
           <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:16,padding:"26px 22px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.28)"}}>
             <div style={{fontSize:38,marginBottom:10}}>⚠️</div>
-            <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>Are you sure?</h3>
-            <p style={{margin:"0 0 16px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.55}}>This cannot be undone. Your account and all your data will be permanently deleted.</p>
+            <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{s.confirmTitle}</h3>
+            <p style={{margin:"0 0 16px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.55}}>{s.confirmDesc}</p>
             {requiresPassword ? (
               <div style={{textAlign:"left",marginBottom:14}}>
-                <label style={{display:"block",fontSize:12.5,fontWeight:600,color:"var(--color-text-primary)",marginBottom:6}}>Enter your password to confirm</label>
+                <label style={{display:"block",fontSize:12.5,fontWeight:600,color:"var(--color-text-primary)",marginBottom:6}}>{s.confirmPwdLabel}</label>
                 <input
                   type="password" autoFocus value={delPwd} disabled={delBusy}
                   onChange={e=>setDelPwd(e.target.value)}
                   onKeyDown={e=>{ if(e.key==="Enter" && delPwd && !delBusy) runDelete(); }}
-                  placeholder="Your password"
+                  placeholder={s.pwdPlaceholder}
                   autoComplete="current-password"
                   style={{width:"100%",boxSizing:"border-box",padding:"11px 13px",fontSize:14,fontFamily:"inherit",borderRadius:11,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",outline:"none"}}
                 />
               </div>
             ) : (
               <div style={{textAlign:"left",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:10,padding:"10px 12px",fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,marginBottom:14}}>
-                You're signed in with a social provider, so no password is required — confirm below to permanently delete your account.
+                {s.noPwdNote}
               </div>
             )}
             {delErr && <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,lineHeight:1.4,marginBottom:14,textAlign:"left"}}>{delErr}</div>}
             <div style={{display:"flex",gap:10}}>
-              <button onClick={closeConfirm} disabled={delBusy} style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:delBusy?"default":"pointer",fontFamily:"inherit",opacity:delBusy?0.6:1}}>Cancel</button>
-              <button onClick={runDelete} disabled={delBusy || (requiresPassword && !delPwd)} style={{flex:1,background:"#dc2626",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:(delBusy||(requiresPassword&&!delPwd))?"default":"pointer",fontFamily:"inherit",opacity:(delBusy||(requiresPassword&&!delPwd))?0.6:1}}>{delBusy?"Deleting…":"Delete"}</button>
+              <button onClick={closeConfirm} disabled={delBusy} style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:delBusy?"default":"pointer",fontFamily:"inherit",opacity:delBusy?0.6:1}}>{s.cancel}</button>
+              <button onClick={runDelete} disabled={delBusy || (requiresPassword && !delPwd)} style={{flex:1,background:"#dc2626",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:(delBusy||(requiresPassword&&!delPwd))?"default":"pointer",fontFamily:"inherit",opacity:(delBusy||(requiresPassword&&!delPwd))?0.6:1}}>{delBusy?s.deleting:s.delete}</button>
             </div>
           </div>
         </div>
+      )}
+
+      {showUpgrade && (
+        <ProModal
+          onClose={()=>{ setShowUpgrade(false); setCoErr(""); }}
+          onMonthly={()=>doUpgrade(STRIPE_MONTHLY_PRICE,"monthly")}
+          onYearly={()=>doUpgrade(STRIPE_YEARLY_PRICE,"yearly")}
+          busy={coBusy} error={coErr} t={t}
+        />
       )}
     </div>
   );
@@ -720,7 +795,6 @@ export default function StudyQuiz() {
   const [tab,          setTab]          = useState("file");
   const [file,         setFile]         = useState(null);
   const [textVal,      setTextVal]      = useState("");
-  const [urlVal,       setUrlVal]       = useState("");
   const [numQ,         setNumQ]         = useState(10);
   const [customQ,      setCustomQ]      = useState("25");
   const [useCustomQ,   setUseCustomQ]   = useState(false);
@@ -792,7 +866,7 @@ export default function StudyQuiz() {
   useEffect(()=>{
     (async()=>{
       try {
-        const ss = await window.storage.get("revvy_settings");
+        const ss = await window.storage.get("revyy_settings");
         if (ss) {
           const d = JSON.parse(ss.value);
           setSettings(prev=>({...prev,...d}));
@@ -806,7 +880,7 @@ export default function StudyQuiz() {
   // Sync settings changed in another tab (localStorage `storage` event).
   useEffect(()=>{
     const onStorage = (e) => {
-      if (e.key === "revvy_settings" && e.newValue) {
+      if (e.key === "revyy_settings" && e.newValue) {
         try { const d = JSON.parse(e.newValue); setSettings(prev=>({...prev,...d})); } catch { /* ignore */ }
       }
     };
@@ -822,8 +896,8 @@ export default function StudyQuiz() {
   // colour variables are ALWAYS defined (otherwise the settings panel and
   // other surfaces using var(--color-*) would render transparent).
   useEffect(()=>{
-    let el=document.getElementById("revvy-theme");
-    if(!el){el=document.createElement("style");el.id="revvy-theme";document.head.appendChild(el);}
+    let el=document.getElementById("revyy-theme");
+    if(!el){el=document.createElement("style");el.id="revyy-theme";document.head.appendChild(el);}
     const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
     const resolved = settings.theme==="dark" ? "dark"
       : settings.theme==="light" ? "light"
@@ -833,8 +907,8 @@ export default function StudyQuiz() {
 
   // ── Font size injection ──
   useEffect(()=>{
-    let el=document.getElementById("revvy-font");
-    if(!el){el=document.createElement("style");el.id="revvy-font";document.head.appendChild(el);}
+    let el=document.getElementById("revyy-font");
+    if(!el){el=document.createElement("style");el.id="revyy-font";document.head.appendChild(el);}
     const s=settings.fontSize==="small"?"13px":settings.fontSize==="large"?"17px":"15px";
     el.textContent="body,input,textarea,select,button{font-size:"+s+" !important;}";
   },[settings.fontSize]);
@@ -847,7 +921,7 @@ export default function StudyQuiz() {
   const updateSetting = (key,val) => {
     setSettings(prev=>{
       const next={...prev,[key]:val};
-      window.storage.set("revvy_settings",JSON.stringify(next)).catch(()=>{});
+      window.storage.set("revyy_settings",JSON.stringify(next)).catch(()=>{});
       return next;
     });
   };
@@ -878,6 +952,8 @@ export default function StudyQuiz() {
   const canUseQType = useCallback((type) => type==="mcq" || isPro || adActive(`quizType:${type}`), [isPro,adActive]);
   const canExtraQ   = useCallback(() => isPro || adActive("questions"), [isPro,adActive]);
   const canCustomQ  = useCallback(() => isPro || adActive("questions"), [isPro,adActive]);
+  // Max questions the current user may pick: 100 (Pro) / 50 (ad unlock) / 20 (free).
+  const qCap        = useCallback(() => isPro ? PRO_MAX_Q : adActive("questions") ? AD_MAX_Q : FREE_MAX_Q, [isPro,adActive]);
   const fileLimitMB = useCallback(() => isPro?PRO_FILE_MB : adActive("files")?AD_FILE_MB : FREE_FILE_MB, [isPro,adActive]);
   // Dev: reset the daily quiz counter when the panel asks.
   useEffect(()=>{ if(dev.devMode && dev.resetDailySignal>0){ setDailyUsed(0); } },[dev.resetDailySignal, dev.devMode]);
@@ -893,6 +969,9 @@ export default function StudyQuiz() {
 
   const adWatchedToday = adWatchedDate === getTodayStr();
   const adTimeLeft     = adUnlocked&&adUnlocked.until>Date.now() ? msUntil(adUnlocked.until) : null;
+  // Whether the ad system is live at all (mirrors AdBanners). When false the
+  // "watch ad" path is completely disabled — no ad UI of any kind is shown.
+  const adsOn          = dev.devMode && dev.ads!==null ? dev.ads : ADS_ENABLED;
 
   const watchAd = useCallback((featureKey) => {
     const until = Date.now() + AD_HOURS*3600000;
@@ -966,7 +1045,7 @@ export default function StudyQuiz() {
     const prompt="You are creating a real graded exam.\n"+typeInst+"\nDifficulty: "+diffLabel+".\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\"}]}\nFor written/fill: options:[], correct:0. Keep questions in section order.";
     setScreen("loading");
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+      const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:6000,
           system:"You are an expert exam setter. Return ONLY valid raw JSON, no markdown.",
           messages:[{role:"user",content:[...blocks,{type:"text",text:prompt}]}]})});
@@ -996,7 +1075,7 @@ export default function StudyQuiz() {
     const writtenLines=examQs.map((q,i)=>q.type==="written"?"Q"+(i+1)+": "+q.question+"\nModel: "+(q.answer||"")+"\nStudent: \""+(answers[i]||"(no answer)")+"\"":null).filter(Boolean).join("\n\n");
     const evalPrompt="Evaluate each student written answer. Return ONLY JSON: {\"evals\":[{\"idx\":0,\"score\":1.0,\"feedback\":\"brief\"}]}\nscore: 1=correct, 0.5=partial, 0=wrong\n\n"+writtenLines;
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+      const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,
           system:"Evaluate student exam answers. Return ONLY raw JSON.",
           messages:[{role:"user",content:[{type:"text",text:evalPrompt}]}]})});
@@ -1122,7 +1201,7 @@ export default function StudyQuiz() {
     const { error } = await deleteAccount();
     if (error) return { error };
     // Wipe locally-stored per-user data too.
-    try { localStorage.removeItem("revvy_settings"); localStorage.removeItem("sq_v3"); } catch { /* ignore */ }
+    try { localStorage.removeItem("revyy_settings"); localStorage.removeItem("sq_v3"); } catch { /* ignore */ }
     navigate("/", { replace: true });
     await signOut();
     return {};
@@ -1137,7 +1216,7 @@ export default function StudyQuiz() {
     setDiff(settingsDraft.defaultDiff);
     setNumQ(settingsDraft.defaultQCount);
     SoundEngine.setVolume(settingsDraft.volume);
-    window.storage.set("revvy_settings",JSON.stringify(settingsDraft)).catch(()=>{});
+    window.storage.set("revyy_settings",JSON.stringify(settingsDraft)).catch(()=>{});
     setSettingsDraft(null);
     setShowSettings(false);
   };
@@ -1182,12 +1261,9 @@ export default function StudyQuiz() {
       if (file.type==="pdf")   blocks=[{type:"document",source:{type:"base64",media_type:"application/pdf",data:file.content}}];
       else if (file.type==="image") blocks=[{type:"image",source:{type:"base64",media_type:file.mime,data:file.content}}];
       else blocks=[{type:"text",text:`Study material (${file.name}):\n\n${file.content}`}];
-    } else if (tab==="text") {
+    } else {
       if (!textVal.trim()) { setError("Please paste study text first."); return; }
       blocks=[{type:"text",text:`Study material:\n\n${textVal.trim()}`}];
-    } else {
-      if (!urlVal.trim()) { setError("Please enter a URL."); return; }
-      blocks=[{type:"text",text:`Generate questions about: ${urlVal.trim()}`}];
     }
     setScreen("loading");
     try {
@@ -1202,7 +1278,7 @@ export default function StudyQuiz() {
       setError(err.message.includes("parse")?"AI returned unexpected format. Please try again.":err.message);
       setScreen("upload");
     }
-  },[isPro,dailyUsed,qType,tab,file,textVal,urlVal,diff,canUseQType,effectiveNumQ,adWatchedDate,adUnlocked,saveState]);
+  },[isPro,dailyUsed,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,adWatchedDate,adUnlocked,saveState]);
 
   const pick    = i => { if(selected===null) setSelected(i); };
   const nextQ   = isCorrect => {
@@ -1212,7 +1288,7 @@ export default function StudyQuiz() {
   };
   const nextMCQ = () => { if(selected===null)return; nextQ(selected===quiz.questions[qIdx].correct); };
   const retry   = () => { setQIdx(0);setAnswers([]);setSelected(null);setScreen("quiz"); };
-  const newMat  = () => { setScreen("upload");setQuiz(null);setFile(null);setTextVal("");setUrlVal("");setError(""); };
+  const newMat  = () => { setScreen("upload");setQuiz(null);setFile(null);setTextVal("");setError(""); };
 
   const score = answers.filter(a=>a.isCorrect).length;
   const pct   = quiz ? Math.round((score/quiz.questions.length)*100) : 0;
@@ -1247,7 +1323,7 @@ export default function StudyQuiz() {
       <div className="rv-home-body" style={{padding:"20px 16px 32px"}}>
         <p style={Sb.secLabel}>{t.whatUpload}</p>
         <div className="rv-feat-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
-          {t.features.map(([icon,title,sub],i)=>(
+          {[...t.features.filter(([icon])=>icon!=="🔗"), t.langFeature].map(([icon,title,sub],i)=>(
             <div key={i} style={Sb.fCard}>
               <span style={{fontSize:22}}>{icon}</span>
               <span style={{fontSize:13,fontWeight:600,color:"var(--color-text-primary)"}}>{title}</span>
@@ -1297,7 +1373,7 @@ export default function StudyQuiz() {
         <div className="rv-ul-left">
         <h2 style={Sb.h2}>{t.uploadTitle}</h2>
         <div style={{display:"flex",gap:5,marginBottom:16}}>
-          {t.tabs.map((lb,i)=>{ const id=["file","text","url","photo"][i]; return <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4f46e5":"var(--color-border-secondary)",background:tab===id?"#4f46e5":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s"}}>{lb}</button>; })}
+          {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4f46e5":"var(--color-border-secondary)",background:tab===id?"#4f46e5":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s"}}>{lb}</button>)}
         </div>
         {tab==="file" && (
           <div style={{...Sb.dropzone,...(drag?{borderColor:"#4f46e5",background:"#ede9fe"}:{}),...(file?{borderStyle:"solid",borderColor:"#4f46e5"}:{})}}
@@ -1315,7 +1391,6 @@ export default function StudyQuiz() {
           </div>
         )}
         {tab==="text" && <textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>}
-        {tab==="url"  && <div><input value={urlVal} onChange={e=>setUrlVal(e.target.value)} placeholder="https://..." style={Sb.urlInput}/><p style={{fontSize:12,color:"var(--color-text-tertiary)",margin:"6px 0 14px",lineHeight:1.5}}>{t.urlHint}</p></div>}
         {error && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,lineHeight:1.5}}>⚠️ {error}</div>}
         </div>
         <div className="rv-ul-right">
@@ -1338,46 +1413,26 @@ export default function StudyQuiz() {
           <div style={{...Sb.settingRow,flexDirection:"column",alignItems:"flex-start",gap:8}}>
             <div style={{display:"flex",justifyContent:"space-between",width:"100%",alignItems:"center"}}>
               <span style={Sb.settingLabel}>{t.questions}</span>
-              <span style={{fontWeight:700,fontSize:14,color:"#4f46e5",minWidth:32,textAlign:"right"}}>{useCustomQ?customQ:numQ}</span>
+              <span style={{fontWeight:700,fontSize:14,color:"#4f46e5",minWidth:32,textAlign:"right"}}>{Math.min(numQ,qCap())}</span>
             </div>
             <div style={{width:"100%",paddingRight:2}}>
               <input type="range"
-                min={5} max={canExtraQ()?50:20} step={5}
-                value={useCustomQ?Math.min(parseInt(customQ)||10,canExtraQ()?50:20):Math.min(numQ,canExtraQ()?50:20)}
+                min={5} max={qCap()} step={5}
+                value={Math.min(numQ,qCap())}
                 onChange={e=>{setUseCustomQ(false);setNumQ(parseInt(e.target.value));}}
                 style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}
               />
               <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>
                 <span>5</span>
-                <span style={{color:canExtraQ()?"var(--color-text-tertiary)":"#f59e0b"}}>20{!canExtraQ()&&" (free max)"}</span>
-                {canExtraQ()&&<span>50</span>}
+                <span style={{color:canExtraQ()?"var(--color-text-tertiary)":"#f59e0b"}}>{qCap()}{!canExtraQ()&&" (free max)"}</span>
               </div>
             </div>
-            {canCustomQ()&&(
-              <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
-                <span style={{fontSize:11,color:"var(--color-text-secondary)",flexShrink:0}}>{t.custom}:</span>
-                <input type="number" min={1} max={PRO_MAX_Q} placeholder={"1-"+PRO_MAX_Q}
-                  value={useCustomQ?customQ:""}
-                  onFocus={()=>setUseCustomQ(true)}
-                  onChange={e=>{setUseCustomQ(true);setCustomQ(e.target.value);}}
-                  style={{width:70,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:13,padding:"5px 8px",fontFamily:"inherit",outline:"none",textAlign:"center"}}
-                />
-                <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>up to {PRO_MAX_Q}</span>
-              </div>
-            )}
             {!canExtraQ()&&(
               <button onClick={()=>setLockedModal({featureKey:"questions"})} style={{fontSize:11,color:"#f59e0b",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0,textAlign:"left"}}>
-                🔒 Unlock up to 50 questions (Pro/Ad)
+                🔒 Unlock up to {PRO_MAX_Q} questions (Pro/Ad)
               </button>
             )}
           </div>
-          {useCustomQ && canCustomQ() && (
-            <div style={{padding:"6px 14px 10px",borderTop:"0.5px solid var(--color-border-tertiary)",display:"flex",alignItems:"center",gap:10}}>
-              <input type="number" min={1} max={PRO_MAX_Q} value={customQ} onChange={e=>setCustomQ(e.target.value)}
-                style={{width:80,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"8px 10px",fontFamily:"inherit",outline:"none",textAlign:"center"}}/>
-              <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.customHint}</span>
-            </div>
-          )}
           <div style={Sb.settingRow}>
             <span style={Sb.settingLabel}>{t.difficulty}</span>
             <div style={{display:"flex",gap:5}}>
@@ -1392,7 +1447,7 @@ export default function StudyQuiz() {
         <button style={{...Sb.btnPrimary,width:"100%"}} onClick={generate}>{t.generate}</button>
         </div>
       </div>
-      <LockedModal info={lockedModal} adWatchedToday={adWatchedToday} adUnlocked={adUnlocked} t={t}
+      <LockedModal info={lockedModal} adWatchedToday={adWatchedToday} adUnlocked={adUnlocked} adsOn={adsOn} t={t}
         onClose={()=>{setLockedModal(null);setPendingFile(null);}} onUpgrade={openUpgrade} onWatchAd={watchAd}/>
       {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
       {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
@@ -1498,7 +1553,7 @@ export default function StudyQuiz() {
           <button style={{...Sb.btnPrimary,flex:1,margin:0}} onClick={retry}>{t.retry}</button>
           <button style={{...Sb.btnOutline,flex:1}} onClick={newMat}>{t.newMat}</button>
         </div>
-        {!isPro&&<div style={{background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",textAlign:"center",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}>📣 Banner ad — connect Google AdSense here</div>}
+        {!isPro&&adsOn&&<div style={{background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",textAlign:"center",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}>📣 Banner ad — connect Google AdSense here</div>}
         <p style={Sb.secLabel}>{t.review}</p>
         {quiz.type==="match"?<p style={{fontSize:13,color:"var(--color-text-secondary)",textAlign:"center",padding:"16px 0"}}>Matching results shown above</p>:
           quiz.questions.map((q,i)=>{
@@ -1541,9 +1596,13 @@ export default function StudyQuiz() {
         {examMode&&examMode!=="custom"&&(
           <div style={{marginBottom:20}}>
             <p style={Sb.secLabel}>{t.totalQ.toUpperCase()}</p>
-            <div style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",borderRadius:12,padding:"12px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
-              <input type="number" min={1} max={100} value={examTotalQ} onChange={e=>setExamTotalQ(e.target.value)} style={{width:80,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:18,fontWeight:700,padding:"8px 12px",fontFamily:"inherit",outline:"none",textAlign:"center"}}/>
-              <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>questions (1–100)</span>
+            <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>questions</span>
+                <span style={{fontWeight:700,fontSize:18,color:"#4f46e5"}}>{Math.min(Math.max(parseInt(examTotalQ)||1,1),100)}</span>
+              </div>
+              <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(examTotalQ)||1,1),100)} onChange={e=>setExamTotalQ(e.target.value)} style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}/>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>100</span></div>
             </div>
           </div>
         )}
@@ -1565,22 +1624,28 @@ export default function StudyQuiz() {
                         {examSections.length>1&&<button onClick={()=>removeSection(sec.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",fontSize:16,lineHeight:1,padding:"0 2px"}}>✕</button>}
                       </div>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px",gap:8,padding:"12px 14px",alignItems:"center"}}>
-                      <div>
-                        <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>QUESTION TYPE</div>
-                        <select value={sec.type} onChange={e=>updateSection(sec.id,"type",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:13,padding:"7px 8px",fontFamily:"inherit",outline:"none"}}>
-                          <option value="mcq">Multiple Choice</option>
-                          <option value="written">Written (Open)</option>
-                          <option value="fill">Fill in Blank</option>
-                        </select>
+                    <div style={{display:"flex",flexDirection:"column",gap:12,padding:"12px 14px"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 96px",gap:8,alignItems:"end"}}>
+                        <div>
+                          <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>QUESTION TYPE</div>
+                          <select value={sec.type} onChange={e=>updateSection(sec.id,"type",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:13,padding:"7px 8px",fontFamily:"inherit",outline:"none"}}>
+                            <option value="mcq">Multiple Choice</option>
+                            <option value="written">Written (Open)</option>
+                            <option value="fill">Fill in Blank</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>MARKS/Q</div>
+                          <input type="number" min={0.5} max={20} step={0.5} value={sec.marksPerQ} onChange={e=>updateSection(sec.id,"marksPerQ",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
+                        </div>
                       </div>
                       <div>
-                        <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>QUESTIONS</div>
-                        <input type="number" min={1} max={100} value={sec.count} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
-                      </div>
-                      <div>
-                        <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>MARKS/Q</div>
-                        <input type="number" min={0.5} max={20} step={0.5} value={sec.marksPerQ} onChange={e=>updateSection(sec.id,"marksPerQ",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                          <span style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)"}}>QUESTIONS</span>
+                          <span style={{fontWeight:700,fontSize:14,color:"#4f46e5"}}>{Math.min(Math.max(parseInt(sec.count)||1,1),100)}</span>
+                        </div>
+                        <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(sec.count)||1,1),100)} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}/>
+                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>100</span></div>
                       </div>
                     </div>
                     <div style={{padding:"6px 14px 10px",fontSize:11,color:"var(--color-text-secondary)"}}>
@@ -1878,7 +1943,6 @@ const Sb = {
   backBtn:     { background:"none", border:"none", cursor:"pointer", fontSize:13, color:"var(--color-text-secondary)", fontFamily:"inherit", padding:0, fontWeight:500 },
   dropzone:    { border:"1.5px dashed var(--color-border-secondary)", borderRadius:14, padding:"28px 20px", cursor:"pointer", background:"var(--color-background-primary)", textAlign:"center", marginBottom:14, transition:"all 0.2s", display:"flex", flexDirection:"column", alignItems:"center", gap:8 },
   textarea:    { width:"100%", height:180, borderRadius:12, border:"0.5px solid var(--color-border-secondary)", background:"var(--color-background-primary)", color:"var(--color-text-primary)", fontSize:14, padding:"13px 14px", resize:"vertical", fontFamily:"inherit", outline:"none", marginBottom:14, boxSizing:"border-box", lineHeight:1.6 },
-  urlInput:    { width:"100%", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", background:"var(--color-background-primary)", color:"var(--color-text-primary)", fontSize:14, padding:"13px 14px", fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
   settingsBox: { background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-tertiary)", marginBottom:14, overflow:"hidden" },
   settingRow:  { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"11px 14px", borderBottom:"0.5px solid var(--color-border-tertiary)", gap:10, flexWrap:"wrap" },
   settingLabel:{ fontSize:13, fontWeight:600, color:"var(--color-text-primary)", flexShrink:0 },

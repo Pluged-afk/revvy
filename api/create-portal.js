@@ -21,17 +21,18 @@ export default async function handler(req, res) {
   if (!body || typeof body !== "object") {
     try { body = JSON.parse(await readRaw(req) || "{}"); } catch { body = {}; }
   }
-  const { userId } = body;
+  const { userId, flow } = body;
   if (!userId) return res.status(400).json({ error: "Missing userId." });
 
-  // Look up the user's Stripe customer id stored on their profile.
-  let customerId;
+  // Look up the user's Stripe customer id (and subscription id) on their profile.
+  let customerId, subscriptionId;
   try {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    const { data } = await admin.from("profiles").select("stripe_customer_id").eq("id", userId).maybeSingle();
+    const { data } = await admin.from("profiles").select("stripe_customer_id, subscription_id").eq("id", userId).maybeSingle();
     customerId = data?.stripe_customer_id;
+    subscriptionId = data?.subscription_id;
   } catch (e) {
     console.error("[create-portal] profile lookup failed:", e.message);
   }
@@ -42,10 +43,18 @@ export default async function handler(req, res) {
 
   try {
     const stripe = new Stripe(STRIPE_SECRET_KEY);
-    const session = await stripe.billingPortal.sessions.create({
+    const params = {
       customer: customerId,
       return_url: `${SITE_URL}/app`,
-    });
+    };
+    // Deep-link straight to the cancellation flow when requested.
+    if (flow === "cancel" && subscriptionId) {
+      params.flow_data = {
+        type: "subscription_cancel",
+        subscription_cancel: { subscription: subscriptionId },
+      };
+    }
+    const session = await stripe.billingPortal.sessions.create(params);
     return res.status(200).json({ url: session.url });
   } catch (err) {
     console.error("[create-portal] Stripe error:", err);

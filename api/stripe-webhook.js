@@ -51,6 +51,12 @@ export default async function handler(req, res) {
   };
 
   const trialIso = (sub) => (sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null);
+  const periodEndIso = (sub) => (sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null);
+  // Derive 'monthly' | 'yearly' from the subscription's price recurring interval.
+  const planFrom = (sub) => {
+    const interval = sub.items?.data?.[0]?.price?.recurring?.interval;
+    return interval === "year" ? "yearly" : interval === "month" ? "monthly" : null;
+  };
 
   try {
     switch (event.type) {
@@ -65,6 +71,9 @@ export default async function handler(req, res) {
             subscription_id: sub.id,
             subscription_status: sub.status,
             trial_end: trialIso(sub),
+            subscription_plan: planFrom(sub),
+            current_period_end: periodEndIso(sub),
+            cancel_at_period_end: !!sub.cancel_at_period_end,
           },
         });
         break;
@@ -73,7 +82,14 @@ export default async function handler(req, res) {
         const sub = event.data.object;
         const isPro = ACTIVE.includes(sub.status) ? true
           : INACTIVE.includes(sub.status) ? false : undefined;
-        const patch = { subscription_status: sub.status, subscription_id: sub.id, trial_end: trialIso(sub) };
+        const patch = {
+          subscription_status: sub.status,
+          subscription_id: sub.id,
+          trial_end: trialIso(sub),
+          subscription_plan: planFrom(sub),
+          current_period_end: periodEndIso(sub),
+          cancel_at_period_end: !!sub.cancel_at_period_end,
+        };
         if (isPro !== undefined) patch.is_pro = isPro;
         await updateProfile({ userId: sub.metadata?.supabase_user_id, customerId: sub.customer, patch });
         break;
@@ -83,7 +99,7 @@ export default async function handler(req, res) {
         await updateProfile({
           userId: sub.metadata?.supabase_user_id,
           customerId: sub.customer,
-          patch: { is_pro: false, subscription_id: null, subscription_status: "canceled", trial_end: null },
+          patch: { is_pro: false, subscription_id: null, subscription_status: "canceled", trial_end: null, current_period_end: null, cancel_at_period_end: false },
         });
         break;
       }

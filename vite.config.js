@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
   // Startup diagnostic — printed to the terminal running `npm run dev`.
   const k = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   console.log(
-    `\n[revvy] env from ${process.cwd()}\\.env\n` +
+    `\n[revyy] env from ${process.cwd()}\\.env\n` +
     `        SUPABASE_URL .............. ${process.env.SUPABASE_URL ? 'loaded' : 'MISSING'}\n` +
     `        SUPABASE_ANON_KEY ......... ${process.env.SUPABASE_ANON_KEY ? 'loaded' : 'MISSING'}\n` +
     `        SUPABASE_SERVICE_ROLE_KEY . ${k ? `loaded (${k.slice(0, 10)}…, len ${k.length})` : 'MISSING — delete will not work'}\n`

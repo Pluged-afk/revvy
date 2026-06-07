@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
+import usePageMeta from "../lib/usePageMeta.js";
 
 export default function TermsOfService() {
+  usePageMeta("Terms of Service — Revyy", "The terms that govern your use of Revyy.");
   return (
     <section className="section">
       <div className="container legal">
@@ -63,7 +65,7 @@ export default function TermsOfService() {
         <h2>7. Contact</h2>
         <p>
           Questions about these Terms? Email{" "}
-          <a href="mailto:hello@revvy.app">hello@revvy.app</a> or visit our{" "}
+          <a href="mailto:revyyapp@outlook.com">revyyapp@outlook.com</a> or visit our{" "}
           <Link to="/contact">Contact page</Link>.
         </p>
       </div>

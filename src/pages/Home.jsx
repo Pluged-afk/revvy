@@ -1,19 +1,30 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
+import usePageMeta from "../lib/usePageMeta.js";
 
 const FEATURES = [
-  { icon: "🤖", title: "AI-Powered Questions", desc: "Claude reads your material and writes accurate, exam-quality questions in seconds." },
+  { icon: "🤖", title: "AI-Powered Questions", desc: "AI reads your material and writes accurate, exam-quality questions in seconds." },
   { icon: "🎯", title: "4 Quiz Types", desc: "Multiple choice, flashcards, fill-in-the-blank, and match terms — pick what fits." },
   { icon: "🎓", title: "Exam Mode", desc: "Simulate real exam conditions with AI-graded written and multiple-choice papers." },
   { icon: "📱", title: "Works on Any Device", desc: "Phone, tablet, or laptop — Revyy is fully responsive and needs no install." },
 ];
 
 const STEPS = [
-  { n: 1, title: "Upload your material", desc: "Drop a PDF, paste your notes, add a link, or snap a photo of your textbook." },
+  { n: 1, title: "Upload your material", desc: "Drop a PDF, paste your notes, or snap a photo of your textbook." },
   { n: 2, title: "Revyy generates your quiz", desc: "Our AI identifies the key concepts and writes a tailored quiz in seconds." },
   { n: 3, title: "Study and track progress", desc: "Answer, get instant explanations, and see your score climb every session." },
 ];
 
+const FREE_PERKS = ["3 quizzes per day", "Multiple choice quizzes", "Up to 20 questions", "Files up to 5MB"];
+const PRO_PERKS = ["Unlimited quizzes", "All 4 quiz types", "Up to 100 questions", "Exam Mode (AI-graded)", "No ads"];
+
 export default function Home() {
+  const { user, isPro } = useAuth();
+  usePageMeta(
+    "Revyy — Turn Any Material Into a Quiz",
+    "Upload a PDF, paste notes or take a photo. Revyy builds your perfect study quiz in seconds using AI."
+  );
+
   return (
     <>
       {/* Hero */}
@@ -26,7 +37,11 @@ export default function Home() {
             study quiz in seconds using AI.
           </p>
           <div className="hero-btns">
-            <Link to="/signup" className="btn btn-light btn-lg">Start Studying Free →</Link>
+            {user ? (
+              <Link to="/app" className="btn btn-light btn-lg">Start a Quiz →</Link>
+            ) : (
+              <Link to="/signup" className="btn btn-light btn-lg">Start Studying Free →</Link>
+            )}
             <a href="#how-it-works" className="btn btn-ghost-light btn-lg">See How It Works</a>
           </div>
         </div>
@@ -71,14 +86,47 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Social proof */}
-      <section className="section section-dark">
-        <div className="container proof">
-          <h2>Join thousands of students studying smarter</h2>
-          <div className="proof-stats">
-            <div className="proof-stat"><div className="num">12k+</div><div className="label">Quizzes generated</div></div>
-            <div className="proof-stat"><div className="num">20+</div><div className="label">Languages supported</div></div>
-            <div className="proof-stat"><div className="num">4.8★</div><div className="label">Average rating</div></div>
+      {/* Plans */}
+      <section className="section">
+        <div className="container">
+          <div className="section-head">
+            <div className="section-label">Plans</div>
+            <h2>Simple pricing, no surprises</h2>
+            <p>Start free. Upgrade whenever you need the full toolkit.</p>
+          </div>
+          <div className="pricing-grid">
+            {/* Free */}
+            <div className="price-card">
+              <div className="price-name">Free</div>
+              <div className="price-amount">€0<span> /forever</span></div>
+              <ul className="price-list">
+                {FREE_PERKS.map((p) => <li key={p}>{p}</li>)}
+              </ul>
+              {user ? (
+                <Link to="/app" className="btn btn-ghost btn-block">Open App →</Link>
+              ) : (
+                <Link to="/signup" className="btn btn-ghost btn-block">Start Free</Link>
+              )}
+            </div>
+
+            {/* Pro */}
+            <div className="price-card pro">
+              <span className="price-badge">MOST POPULAR</span>
+              <div className="price-name">Pro</div>
+              <div className="price-amount">€4.99<span> /month</span></div>
+              <ul className="price-list">
+                {PRO_PERKS.map((p) => <li key={p}>{p}</li>)}
+              </ul>
+              {isPro ? (
+                <span className="btn btn-amber btn-block is-static" aria-disabled="true">You're on Pro ⭐</span>
+              ) : (
+                <Link to="/pricing" className="btn btn-amber btn-block">Upgrade →</Link>
+              )}
+              <p className="price-trial">7-day free trial · Card required</p>
+            </div>
+          </div>
+          <div style={{ textAlign: "center", marginTop: 32 }}>
+            <Link to="/pricing" className="btn btn-ghost">Compare all plans →</Link>
           </div>
         </div>
       </section>
@@ -89,7 +137,11 @@ export default function Home() {
           <div className="section-dark cta-band" style={{ borderRadius: 24, padding: "64px 24px" }}>
             <h2>Ready to study smarter?</h2>
             <p>Create your first quiz in under a minute. No credit card required.</p>
-            <Link to="/signup" className="btn btn-light btn-lg">Sign Up Free →</Link>
+            {user ? (
+              <Link to="/app" className="btn btn-light btn-lg">Start a Quiz →</Link>
+            ) : (
+              <Link to="/signup" className="btn btn-light btn-lg">Sign Up Free →</Link>
+            )}
           </div>
         </div>
       </section>

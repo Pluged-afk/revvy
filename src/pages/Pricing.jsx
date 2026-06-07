@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLang } from "../context/LanguageContext.jsx";
+import usePageMeta from "../lib/usePageMeta.js";
 
 const MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const YEARLY_PRICE = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
@@ -43,6 +44,7 @@ export default function Pricing() {
   const { user, startCheckout, loading } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
+  usePageMeta("Pricing — Revyy", "Start free forever, or go Pro with a 7-day free trial. Cancel anytime.");
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
 
@@ -96,8 +98,8 @@ export default function Pricing() {
             </div>
 
             {/* Pro Yearly */}
-            <div className="price-card pro">
-              <span className="price-badge">BEST VALUE</span>
+            <div className="price-card pro featured">
+              <span className="price-badge best">⭐ BEST VALUE</span>
               <div className="price-name">Pro Yearly</div>
               <div className="price-amount">€39.99<span> /year</span></div>
               <ul className="price-list">

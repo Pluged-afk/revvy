@@ -27,6 +27,14 @@ export function LanguageProvider({ children }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // Reflect the language + text direction on <html> so RTL languages
+  // (Arabic, Hebrew) flow right-to-left. Numbers stay LTR automatically.
+  useEffect(() => {
+    const RTL = ["ar", "he"];
+    document.documentElement.lang = lang;
+    document.documentElement.dir = RTL.includes(lang) ? "rtl" : "ltr";
+  }, [lang]);
+
   const t = getTranslations(lang);
   return <LangContext.Provider value={{ lang, setLang, t }}>{children}</LangContext.Provider>;
 }

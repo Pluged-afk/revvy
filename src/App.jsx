@@ -16,7 +16,8 @@ import Login from './pages/Login.jsx'
 import Signup from './pages/Signup.jsx'
 import AuthCallback from './pages/AuthCallback.jsx'
 import ResetPassword from './pages/ResetPassword.jsx'
-import StudyQuiz from './revvy quiz app.jsx'
+import NotFound from './pages/NotFound.jsx'
+import StudyQuiz from './StudyQuiz.jsx'
 import './site.css'
 
 export default function App() {
@@ -54,9 +55,9 @@ export default function App() {
             }
           />
 
-          {/* Unknown routes fall back to the marketing home page */}
+          {/* Unknown routes render a proper 404 (inside the site chrome) */}
           <Route path="*" element={<SiteLayout />}>
-            <Route path="*" element={<Home />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </AuthProvider>

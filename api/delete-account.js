@@ -41,7 +41,7 @@ export default async function handler(req, res) {
   if (!SERVICE_ROLE_KEY) {
     err("aborting: SUPABASE_SERVICE_ROLE_KEY is not set in the server environment");
     return res.status(500).json({
-      error: "Server is not configured. SUPABASE_SERVICE_ROLE_KEY is missing from the environment (check revvy/.env and restart the dev server).",
+      error: "Server is not configured. SUPABASE_SERVICE_ROLE_KEY is missing from the environment (check Revyy/.env and restart the dev server).",
     });
   }
 

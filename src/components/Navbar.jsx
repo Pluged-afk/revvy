@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import RevyyMark from "./Logo.jsx";
 import { DevBadge } from "../context/DevContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const LINKS = [
   { to: "/", label: "Home", end: true },
@@ -13,6 +14,7 @@ const LINKS = [
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
   return (
     <nav className="nav">
       <div className="container nav-inner">
@@ -37,7 +39,11 @@ export default function Navbar() {
         </div>
 
         <div className="nav-right">
-          <Link to="/signup" className="btn btn-primary">Try Revyy Free</Link>
+          {user ? (
+            <Link to="/app" className="btn btn-primary">Open App →</Link>
+          ) : (
+            <Link to="/signup" className="btn btn-primary">Try Revyy Free</Link>
+          )}
           <button
             className="nav-toggle"
             aria-label="Toggle menu"

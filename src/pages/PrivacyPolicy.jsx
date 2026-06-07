@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
+import usePageMeta from "../lib/usePageMeta.js";
 
 export default function PrivacyPolicy() {
+  usePageMeta("Privacy Policy — Revyy", "How Revyy collects, uses, and protects your data.");
   return (
     <section className="section">
       <div className="container legal">
@@ -66,7 +68,7 @@ export default function PrivacyPolicy() {
         <h2>7. Contact</h2>
         <p>
           For any privacy questions or requests, email us at{" "}
-          <a href="mailto:hello@revvy.app">hello@revvy.app</a> or visit our{" "}
+          <a href="mailto:revyyapp@outlook.com">revyyapp@outlook.com</a> or visit our{" "}
           <Link to="/contact">Contact page</Link>.
         </p>
       </div>

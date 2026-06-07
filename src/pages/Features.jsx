@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import usePageMeta from "../lib/usePageMeta.js";
 
 const FEATURES = [
   { icon: "📝", title: "Multiple Choice Quizzes", desc: "Classic 4-option questions, auto-graded with a clear explanation for every answer." },
@@ -29,6 +30,7 @@ function Cell({ v, pro }) {
 }
 
 export default function Features() {
+  usePageMeta("Features — Revyy", "Four quiz types, full exam simulation, and AI that understands your study material.");
   return (
     <>
       <section className="hero" style={{ padding: "84px 0 90px" }}>
