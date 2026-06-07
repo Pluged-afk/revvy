@@ -41,8 +41,16 @@ export default async function handler(req, res) {
       body: JSON.stringify({ model, max_tokens, system, messages }),
     });
     const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok) {
+      // Surface the real Anthropic error in the server logs (Vercel → Logs).
+      console.error(
+        `[anthropic] ${upstream.status} for model "${model}":`,
+        JSON.stringify(data?.error || data)
+      );
+    }
     return res.status(upstream.status).json(data);
   } catch (err) {
+    console.error("[anthropic] proxy request threw:", err?.message || err);
     return res.status(502).json({ error: { message: err.message || "Upstream request failed." } });
   }
 }

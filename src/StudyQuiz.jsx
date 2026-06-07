@@ -119,7 +119,7 @@ async function callClaude({ blocks, numQ, diff, type }) {
 
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:4000,
+    body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:4000,
       system:"You are an expert educator. Return ONLY valid raw JSON, no markdown.",
       messages:[{ role:"user", content:[...blocks,{type:"text",text:prompt}] }] }),
   });
@@ -1046,7 +1046,7 @@ export default function StudyQuiz() {
     setScreen("loading");
     try{
       const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:6000,
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:6000,
           system:"You are an expert exam setter. Return ONLY valid raw JSON, no markdown.",
           messages:[{role:"user",content:[...blocks,{type:"text",text:prompt}]}]})});
       if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||"Error "+res.status);}
@@ -1076,7 +1076,7 @@ export default function StudyQuiz() {
     const evalPrompt="Evaluate each student written answer. Return ONLY JSON: {\"evals\":[{\"idx\":0,\"score\":1.0,\"feedback\":\"brief\"}]}\nscore: 1=correct, 0.5=partial, 0=wrong\n\n"+writtenLines;
     try{
       const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,
           system:"Evaluate student exam answers. Return ONLY raw JSON.",
           messages:[{role:"user",content:[{type:"text",text:evalPrompt}]}]})});
       const data=await res.json();
