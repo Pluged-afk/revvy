@@ -3,6 +3,7 @@ import { LANGS } from "./i18n.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { useLang } from "./context/LanguageContext.jsx";
 import { useDev, DevBadge } from "./context/DevContext.jsx";
+import { UserButton } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 
 // ── Limits ────────────────────────────────────────────────────────────
@@ -1340,6 +1341,7 @@ export default function StudyQuiz() {
               ))}
             </select>
             <button onClick={()=>openSettings()} title="Settings" style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:"2px 4px",color:"rgba(255,255,255,0.7)"}}>⚙️</button>
+            <UserButton afterSignOutUrl="/" />
           </div>
         </div>
         <h1 style={Sb.h1}>{t.tagline}</h1>

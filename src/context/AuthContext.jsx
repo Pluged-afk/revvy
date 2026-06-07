@@ -1,151 +1,112 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { supabase } from "../lib/supabase.js";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
+import { useUser, useAuth as useClerkAuth } from "@clerk/clerk-react";
 import { useDev } from "./DevContext.jsx";
 
 const AuthContext = createContext(null);
-
-// Fake user used only by the dev "bypass auth" override (local testing).
-const DEV_USER = { id: "dev-user-0000", email: "dev@revyy.local", identities: [{ provider: "email" }] };
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(null);
-  const [user, setUser] = useState(null);
-  const [isPro, setIsPro] = useState(false);
-  const [trialEnd, setTrialEnd] = useState(null);            // ISO string | null
-  const [subStatus, setSubStatus] = useState(null);          // stripe subscription status
-  const [subPlan, setSubPlan] = useState(null);              // 'monthly' | 'yearly' | null
-  const [periodEnd, setPeriodEnd] = useState(null);          // ISO string — next billing date
-  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { isLoaded, isSignedIn, user: clerkUser } = useUser();
+  const { signOut: clerkSignOut } = useClerkAuth();
   const dev = useDev();
 
-  // Read the user's profile row (creating it if missing) and sync state.
-  const loadProfile = useCallback(async (uid) => {
-    const clearSub = () => {
-      setIsPro(false); setTrialEnd(null); setSubStatus(null);
-      setSubPlan(null); setPeriodEnd(null); setCancelAtPeriodEnd(false);
+  const [isPro, setIsPro] = useState(false);
+  const [subStatus, setSubStatus] = useState(null);
+  const [subPlan, setSubPlan] = useState(null);
+  const [periodEnd, setPeriodEnd] = useState(null);
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Normalized user object the rest of the app expects ({ id, email }).
+  const user = useMemo(() => {
+    if (!isSignedIn || !clerkUser) return null;
+    return {
+      id: clerkUser.id,
+      email: clerkUser.primaryEmailAddress?.emailAddress || "",
+      // Clerk handles re-auth itself, so no email/password identity is exposed
+      // (this makes account-deletion skip the password re-prompt).
+      identities: [],
     };
-    if (!uid) { clearSub(); return false; }
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("is_pro, trial_end, subscription_status, subscription_plan, current_period_end, cancel_at_period_end")
-      .eq("id", uid)
-      .maybeSingle();
+  }, [isSignedIn, clerkUser]);
 
-    if (error) { return null; }   // unknown — let pollers keep trying
-
-    if (!data) {
-      // First sign-in for this user — create their profile row.
-      await supabase.from("profiles").insert({ id: uid, is_pro: false });
-      clearSub();
+  // Read the profile from Neon via the serverless API. Returns is_pro (bool)
+  // or null if the read failed (lets pollers keep trying).
+  const loadProfile = useCallback(async (uid) => {
+    if (!uid) {
+      setIsPro(false); setSubStatus(null); setSubPlan(null); setPeriodEnd(null); setCancelAtPeriodEnd(false);
       return false;
     }
-    setIsPro(!!data.is_pro);
-    setTrialEnd(data.trial_end || null);
-    setSubStatus(data.subscription_status || null);
-    setSubPlan(data.subscription_plan || null);
-    setPeriodEnd(data.current_period_end || null);
-    setCancelAtPeriodEnd(!!data.cancel_at_period_end);
-    return !!data.is_pro;
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      setSession(session);
-      setUser(session?.user ?? null);
-      loadProfile(session?.user?.id).finally(() => mounted && setLoading(false));
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      // Defer Supabase calls out of the auth callback to avoid deadlocks.
-      setTimeout(() => loadProfile(session?.user?.id), 0);
-    });
-
-    return () => { mounted = false; subscription.unsubscribe(); };
-  }, [loadProfile]);
-
-  // ── Auth actions ──────────────────────────────────────────────
-  const signUp = (email, password) =>
-    supabase.auth.signUp({
-      email,
-      password,
-      // After the user clicks the confirmation email, land on /auth/callback.
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-    });
-
-  const signInWithPassword = (email, password) =>
-    supabase.auth.signInWithPassword({ email, password });
-
-  const signInWithGoogle = () =>
-    supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-
-  const signOut = () => supabase.auth.signOut();
-
-  // Send a password-reset email; the link lands on /reset-password.
-  // Send a reset link. Supabase intentionally does NOT reveal whether the
-  // email is registered (anti-enumeration), so this always "succeeds".
-  const resetPassword = (email) =>
-    supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-
-  // Set a new password (used on /reset-password with the recovery session).
-  const updatePassword = (password) =>
-    supabase.auth.updateUser({ password });
-
-  // Re-authenticate the user by their password (used to confirm sensitive
-  // actions like account deletion). Returns { error } — null on success.
-  const reauthenticate = useCallback(async (password) => {
-    if (!user?.email) return { error: "This account has no email/password to verify." };
-    const { error } = await supabase.auth.signInWithPassword({ email: user.email, password });
-    return { error: error ? error.message : null };
-  }, [user]);
-
-  // Permanently delete the account via the serverless function (which holds
-  // the service-role key). Returns { error } on failure, {} on success.
-  const deleteAccount = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) return { error: "You are not signed in." };
     try {
-      const res = await fetch("/api/delete-account", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) return { error: body.error || `Delete failed (${res.status}).` };
-      return {};
-    } catch (e) {
-      return { error: e.message || "Network error — could not reach the server." };
+      const res = await fetch(`/api/get-profile?userId=${encodeURIComponent(uid)}`);
+      if (!res.ok) return null;
+      const p = await res.json();
+      setIsPro(!!p.is_pro);
+      setSubStatus(p.subscription_status || null);
+      setSubPlan(p.subscription_plan || null);
+      setPeriodEnd(p.current_period_end || null);
+      setCancelAtPeriodEnd(!!p.cancel_at_period_end);
+      return !!p.is_pro;
+    } catch {
+      return null;
     }
   }, []);
 
-  // Update isPro in the Supabase profile (and locally, optimistically).
-  const setProStatus = useCallback(async (value) => {
-    setIsPro(value);
-    if (!user) return;
-    await supabase.from("profiles").upsert({ id: user.id, is_pro: value });
-  }, [user]);
+  // On sign-in: ensure a profile row exists, then load it.
+  useEffect(() => {
+    if (!isLoaded) return;
+    let cancelled = false;
+    (async () => {
+      if (!isSignedIn || !clerkUser) {
+        if (!cancelled) { setIsPro(false); setLoading(false); }
+        return;
+      }
+      const email = clerkUser.primaryEmailAddress?.emailAddress || "";
+      try {
+        await fetch("/api/create-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: clerkUser.id, email }),
+        });
+      } catch { /* non-fatal */ }
+      await loadProfile(clerkUser.id);
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [isLoaded, isSignedIn, clerkUser, loadProfile]);
 
-  // Re-read the profile from Supabase (e.g. after returning from checkout).
-  // Returns the fresh is_pro value (true/false), or null if it couldn't read.
+  const signOut = useCallback(() => clerkSignOut(), [clerkSignOut]);
+
+  // Re-read the profile (e.g. after returning from Stripe checkout).
   const refreshProfile = useCallback(async () => {
-    if (!user?.id) return false;
-    return await loadProfile(user.id);
-  }, [user, loadProfile]);
+    if (!clerkUser?.id) return false;
+    return await loadProfile(clerkUser.id);
+  }, [clerkUser, loadProfile]);
 
-  // Start a Stripe Checkout session for the given price and redirect to it.
+  // Local-only optimistic toggle (dev / immediate UI); the webhook is the
+  // source of truth in Neon.
+  const setProStatus = useCallback((value) => setIsPro(!!value), []);
+
+  // Clerk handles re-auth; deletion needs no password re-prompt.
+  const reauthenticate = useCallback(async () => ({ error: null }), []);
+
+  // Delete: remove the Neon row, then delete the Clerk user (self-only).
+  const deleteAccount = useCallback(async () => {
+    if (!clerkUser) return { error: "You are not signed in." };
+    try {
+      await fetch("/api/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: clerkUser.id }),
+      });
+      await clerkUser.delete();   // ends the session
+      return {};
+    } catch (e) {
+      return { error: e.message || "Could not delete account." };
+    }
+  }, [clerkUser]);
+
   const startCheckout = useCallback(async (priceId) => {
     if (!user) return { error: "Please sign in first." };
     try {
@@ -163,8 +124,6 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
-  // Open the Stripe Customer Portal (manage / cancel subscription).
-  // Pass flow:"cancel" to deep-link straight to the cancellation page.
   const openPortal = useCallback(async (flow) => {
     if (!user) return { error: "Please sign in first." };
     try {
@@ -182,16 +141,13 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
-  // Dev-mode overrides (local only — `dev.devMode` is false in production).
+  // Dev-mode Pro override (local only — dev.devMode is false in production).
   const effIsPro = dev.devMode && dev.pro !== null ? dev.pro : isPro;
-  const effUser = dev.devMode && dev.loggedIn !== null
-    ? (dev.loggedIn ? (user || DEV_USER) : null)
-    : user;
 
   const value = {
-    session, user: effUser, isPro: effIsPro, trialEnd, subStatus, subPlan, periodEnd, cancelAtPeriodEnd, loading,
-    signUp, signInWithPassword, signInWithGoogle, signOut, setProStatus, deleteAccount, reauthenticate,
-    resetPassword, updatePassword, refreshProfile, startCheckout, openPortal,
+    user, isPro: effIsPro, loading: loading || !isLoaded,
+    subStatus, subPlan, periodEnd, cancelAtPeriodEnd,
+    signOut, deleteAccount, reauthenticate, setProStatus, refreshProfile, startCheckout, openPortal,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

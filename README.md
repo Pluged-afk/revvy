@@ -24,27 +24,30 @@ the webhook, the portal, and account deletion all work locally.
 ## Environment variables (`.env`, not committed)
 
 ```
-VITE_SUPABASE_URL=            # frontend
-VITE_SUPABASE_ANON_KEY=       # frontend (publishable key)
-SUPABASE_SERVICE_ROLE_KEY=    # server only — secret
-STRIPE_SECRET_KEY=            # server only — secret
-STRIPE_WEBHOOK_SECRET=        # server only — secret
+VITE_CLERK_PUBLISHABLE_KEY=   # frontend (Clerk)
 VITE_STRIPE_PUBLISHABLE_KEY=
 VITE_STRIPE_MONTHLY_PRICE=
 VITE_STRIPE_YEARLY_PRICE=
+CLERK_SECRET_KEY=             # server only — secret
+DATABASE_URL=                 # server only — Neon connection string
+STRIPE_SECRET_KEY=            # server only — secret
+STRIPE_WEBHOOK_SECRET=        # server only — secret
+ANTHROPIC_API_KEY=            # server only — secret (quiz generation proxy)
 ```
 
 On Vercel, set the same variables in **Project → Settings → Environment Variables**.
 
-## Database
+## Auth & Database
 
-Run [`supabase_setup.sql`](./supabase_setup.sql) once in the Supabase SQL editor
-to create the `profiles` table (Pro status, Stripe IDs, trial) and its policies.
+Authentication is handled by **Clerk** (`@clerk/clerk-react`). Profiles live in
+**Neon** (Postgres). Run [`neon_setup.sql`](./neon_setup.sql) once against your
+Neon database — or hit `GET /api/init-db` after deploy — to create the
+`profiles` table (Pro status + Stripe IDs).
 
 ## Routes
 
 `/` home · `/features` · `/pricing` · `/about` · `/contact` · `/privacy` ·
-`/terms` · `/login` · `/signup` · `/reset-password` · `/auth/callback` ·
+`/terms` · `/login` · `/signup` (Clerk) ·
 `/app` (the quiz app — requires sign-in)
 
 ## Testing payments

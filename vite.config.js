@@ -47,19 +47,20 @@ export default defineConfig(({ mode }) => {
   // Set when defined; otherwise CLEAR it, so a stale value can't linger in a
   // reused dev process and masquerade as a configured (but invalid) key.
   const setEnv = (key, value) => { if (value) process.env[key] = value; else delete process.env[key] }
-  setEnv('SUPABASE_URL', env.SUPABASE_URL || env.VITE_SUPABASE_URL)
-  setEnv('SUPABASE_SERVICE_ROLE_KEY', env.SUPABASE_SERVICE_ROLE_KEY)
-  setEnv('SUPABASE_ANON_KEY', env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY)
+  setEnv('DATABASE_URL', env.DATABASE_URL)
+  setEnv('CLERK_SECRET_KEY', env.CLERK_SECRET_KEY)
   setEnv('STRIPE_SECRET_KEY', env.STRIPE_SECRET_KEY)
   setEnv('STRIPE_WEBHOOK_SECRET', env.STRIPE_WEBHOOK_SECRET)
+  setEnv('ANTHROPIC_API_KEY', env.ANTHROPIC_API_KEY)
 
   // Startup diagnostic — printed to the terminal running `npm run dev`.
-  const k = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   console.log(
     `\n[revyy] env from ${process.cwd()}\\.env\n` +
-    `        SUPABASE_URL .............. ${process.env.SUPABASE_URL ? 'loaded' : 'MISSING'}\n` +
-    `        SUPABASE_ANON_KEY ......... ${process.env.SUPABASE_ANON_KEY ? 'loaded' : 'MISSING'}\n` +
-    `        SUPABASE_SERVICE_ROLE_KEY . ${k ? `loaded (${k.slice(0, 10)}…, len ${k.length})` : 'MISSING — delete will not work'}\n`
+    `        DATABASE_URL ......... ${process.env.DATABASE_URL ? 'loaded' : 'MISSING'}\n` +
+    `        CLERK_SECRET_KEY ..... ${process.env.CLERK_SECRET_KEY ? 'loaded' : 'MISSING'}\n` +
+    `        STRIPE_SECRET_KEY .... ${process.env.STRIPE_SECRET_KEY ? 'loaded' : 'MISSING'}\n` +
+    `        STRIPE_WEBHOOK_SECRET. ${process.env.STRIPE_WEBHOOK_SECRET ? 'loaded' : 'MISSING'}\n` +
+    `        ANTHROPIC_API_KEY .... ${process.env.ANTHROPIC_API_KEY ? 'loaded' : 'MISSING'}\n`
   )
 
   return {

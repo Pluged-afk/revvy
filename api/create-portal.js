@@ -1,11 +1,7 @@
 import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
+import sql, { readBody } from "./db.js";
 
-// Creates a Stripe Customer Portal session so the user can manage/cancel
-// their subscription, and returns its URL.
-
-// Final fallback only — the real return domain is derived from the request
-// (origin header) so the portal returns to the deployment the user is on.
+// Opens the Stripe Customer Portal (manage / cancel) for the signed-in user.
 const SITE_URL_FALLBACK = process.env.SITE_URL || "https://revyy.vercel.app";
 
 function getBaseUrl(req) {
@@ -24,46 +20,27 @@ export default async function handler(req, res) {
   }
 
   const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-  const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!STRIPE_SECRET_KEY) return res.status(500).json({ error: "Server missing STRIPE_SECRET_KEY." });
 
-  let body = req.body;
-  if (!body || typeof body !== "object") {
-    try { body = JSON.parse(await readRaw(req) || "{}"); } catch { body = {}; }
-  }
-  const { userId, flow } = body;
+  const { userId, flow } = await readBody(req);
   if (!userId) return res.status(400).json({ error: "Missing userId." });
 
-  // Look up the user's Stripe customer id (and subscription id) on their profile.
   let customerId, subscriptionId;
   try {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-    const { data } = await admin.from("profiles").select("stripe_customer_id, subscription_id").eq("id", userId).maybeSingle();
-    customerId = data?.stripe_customer_id;
-    subscriptionId = data?.subscription_id;
+    const rows = await sql`SELECT stripe_customer_id, subscription_id FROM profiles WHERE id = ${userId} LIMIT 1`;
+    customerId = rows[0]?.stripe_customer_id;
+    subscriptionId = rows[0]?.subscription_id;
   } catch (e) {
-    console.error("[create-portal] profile lookup failed:", e.message);
+    console.error("[create-portal] Neon lookup failed:", e.message);
   }
 
-  if (!customerId) {
-    return res.status(400).json({ error: "No subscription found for this account yet." });
-  }
+  if (!customerId) return res.status(400).json({ error: "No subscription found for this account yet." });
 
   try {
     const stripe = new Stripe(STRIPE_SECRET_KEY);
-    const params = {
-      customer: customerId,
-      return_url: `${getBaseUrl(req)}/app`,
-    };
-    // Deep-link straight to the cancellation flow when requested.
+    const params = { customer: customerId, return_url: `${getBaseUrl(req)}/app` };
     if (flow === "cancel" && subscriptionId) {
-      params.flow_data = {
-        type: "subscription_cancel",
-        subscription_cancel: { subscription: subscriptionId },
-      };
+      params.flow_data = { type: "subscription_cancel", subscription_cancel: { subscription: subscriptionId } };
     }
     const session = await stripe.billingPortal.sessions.create(params);
     return res.status(200).json({ url: session.url });
@@ -71,10 +48,4 @@ export default async function handler(req, res) {
     console.error("[create-portal] Stripe error:", err);
     return res.status(500).json({ error: err.message || "Could not open billing portal." });
   }
-}
-
-async function readRaw(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(typeof c === "string" ? Buffer.from(c) : c);
-  return Buffer.concat(chunks).toString("utf8");
 }
