@@ -28,27 +28,28 @@ export function AuthProvider({ children }) {
       setIsPro(false); setTrialEnd(null); setSubStatus(null);
       setSubPlan(null); setPeriodEnd(null); setCancelAtPeriodEnd(false);
     };
-    if (!uid) { clearSub(); return; }
+    if (!uid) { clearSub(); return false; }
     const { data, error } = await supabase
       .from("profiles")
       .select("is_pro, trial_end, subscription_status, subscription_plan, current_period_end, cancel_at_period_end")
       .eq("id", uid)
       .maybeSingle();
 
-    if (error) { return; }
+    if (error) { return null; }   // unknown — let pollers keep trying
 
     if (!data) {
       // First sign-in for this user — create their profile row.
       await supabase.from("profiles").insert({ id: uid, is_pro: false });
       clearSub();
-    } else {
-      setIsPro(!!data.is_pro);
-      setTrialEnd(data.trial_end || null);
-      setSubStatus(data.subscription_status || null);
-      setSubPlan(data.subscription_plan || null);
-      setPeriodEnd(data.current_period_end || null);
-      setCancelAtPeriodEnd(!!data.cancel_at_period_end);
+      return false;
     }
+    setIsPro(!!data.is_pro);
+    setTrialEnd(data.trial_end || null);
+    setSubStatus(data.subscription_status || null);
+    setSubPlan(data.subscription_plan || null);
+    setPeriodEnd(data.current_period_end || null);
+    setCancelAtPeriodEnd(!!data.cancel_at_period_end);
+    return !!data.is_pro;
   }, []);
 
   useEffect(() => {
@@ -138,8 +139,10 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   // Re-read the profile from Supabase (e.g. after returning from checkout).
+  // Returns the fresh is_pro value (true/false), or null if it couldn't read.
   const refreshProfile = useCallback(async () => {
-    if (user?.id) await loadProfile(user.id);
+    if (!user?.id) return false;
+    return await loadProfile(user.id);
   }, [user, loadProfile]);
 
   // Start a Stripe Checkout session for the given price and redirect to it.

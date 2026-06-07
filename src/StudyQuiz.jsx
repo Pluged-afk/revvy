@@ -771,6 +771,19 @@ function AdBanners({ isPro }) {
   );
 }
 
+// Full-screen overlay shown while we poll Supabase for Pro status after a
+// successful Stripe checkout (the webhook writes is_pro asynchronously).
+function ActivatingOverlay({ show }) {
+  if (!show) return null;
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:18,padding:24,textAlign:"center",background:"rgba(15,16,32,0.55)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
+      <div style={{width:48,height:48,borderRadius:"50%",border:"4px solid rgba(255,255,255,0.25)",borderTopColor:"#fff",animation:"spin 0.8s linear infinite"}}/>
+      <div style={{color:"#fff",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif"}}>✨ Activating your Pro account…</div>
+      <div style={{color:"rgba(255,255,255,0.8)",fontSize:13.5,maxWidth:320,lineHeight:1.5}}>Refreshing your account — this takes a few seconds after payment.</div>
+    </div>
+  );
+}
+
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const { lang, setLang, t } = useLang();
@@ -784,6 +797,7 @@ export default function StudyQuiz() {
   const [coBusy, setCoBusy] = useState("");   // "monthly" | "yearly" while redirecting to Stripe
   const [coErr,  setCoErr]  = useState("");
   const [upgraded, setUpgraded] = useState(false); // "Welcome to Pro!" banner after checkout
+  const [activating, setActivating] = useState(false); // polling Supabase for Pro after checkout
   const doCheckout = async (priceId, which) => {
     setCoErr(""); setCoBusy(which);
     const { error } = await startCheckout(priceId);
@@ -1180,19 +1194,37 @@ export default function StudyQuiz() {
   const discardResume=()=>{ try{ sessionStorage.removeItem("revyy_exam"); }catch{ /* ignore */ } setExamResume(null); };
   const fmtClock=(s)=>{ const m=Math.floor(s/60), ss=s%60; return m+":"+String(ss).padStart(2,"0"); };
 
-  // After returning from Stripe checkout (?upgraded=true): show a welcome
-  // banner and refresh Pro status from Supabase (the webhook sets it).
+  // After returning from Stripe checkout (?upgraded=true): the webhook writes
+  // is_pro asynchronously, so poll Supabase for a fresh value until it flips
+  // to true (or we give up), showing an "activating" overlay meanwhile.
   useEffect(() => {
+    if (!user?.id) return;          // wait until the signed-in user is known
     const params = new URLSearchParams(window.location.search);
     if (params.get("upgraded") !== "true") return;
-    setUpgraded(true);
-    refreshProfile();
+
+    // Strip the param immediately so refreshes don't re-trigger this.
     const url = new URL(window.location.href);
     url.searchParams.delete("upgraded");
     window.history.replaceState({}, "", url.pathname + url.search);
-    const tmr = setTimeout(() => setUpgraded(false), 6000);
-    return () => clearTimeout(tmr);
-  }, [refreshProfile]);
+
+    let cancelled = false;
+    setActivating(true);
+
+    (async () => {
+      // ~30s of polling: the webhook usually lands within a few seconds.
+      for (let i = 0; i < 20 && !cancelled; i++) {
+        const pro = await refreshProfile();   // always a fresh Supabase read
+        if (pro) break;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      if (cancelled) return;
+      setActivating(false);
+      setUpgraded(true);
+      setTimeout(() => !cancelled && setUpgraded(false), 6000);
+    })();
+
+    return () => { cancelled = true; };
+  }, [user, refreshProfile]);
 
   // Delete account: remove all data + auth user via the serverless function,
   // then go to the public home page and clear the local session.
@@ -1297,6 +1329,7 @@ export default function StudyQuiz() {
   // ── HOME ─────────────────────────────────────────────────────────
   if (screen==="home") return (
     <div style={Sb.root}><style>{CSS}</style>
+      <ActivatingOverlay show={activating}/>
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! Your 7-day free trial has started.</div>}
       {!upgraded && trialDaysLeft>0 && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#4f46e5",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>⏳ Your free trial ends in {trialDaysLeft} day{trialDaysLeft!==1?"s":""} — you will be charged after</div>}
