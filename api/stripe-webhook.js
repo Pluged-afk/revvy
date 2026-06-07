@@ -159,17 +159,24 @@ export default async function handler(req, res) {
 
       case "customer.subscription.created": {
         const sub = event.data.object;
+        // A new subscription is "trialing" for the 7-day trial (or "active"
+        // if no trial). BOTH count as Pro.
+        const pro = ACTIVE.includes(sub.status);
+        console.log(`[wh] subscription.created status=${sub.status} → is_pro=${pro}`);
         const email = await emailFromCustomer(sub.customer);
-        await grantPro({
-          userId: sub.metadata?.supabase_user_id,
-          email,
-          customerId: sub.customer,
-          subscriptionId: sub.id,
-          source: "customer.subscription.created",
-        });
+        if (pro) {
+          await grantPro({
+            userId: sub.metadata?.supabase_user_id,
+            email,
+            customerId: sub.customer,
+            subscriptionId: sub.id,
+            source: "customer.subscription.created",
+          });
+        }
         await updateProfile({
           userId: sub.metadata?.supabase_user_id, customerId: sub.customer,
           patch: {
+            is_pro: pro, // trialing OR active ⇒ Pro
             stripe_customer_id: sub.customer, subscription_id: sub.id, subscription_status: sub.status,
             trial_end: trialIso(sub), subscription_plan: planFrom(sub),
             current_period_end: periodEndIso(sub), cancel_at_period_end: !!sub.cancel_at_period_end,
