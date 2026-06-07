@@ -4,7 +4,18 @@ import { createClient } from "@supabase/supabase-js";
 // Creates a Stripe Customer Portal session so the user can manage/cancel
 // their subscription, and returns its URL.
 
-const SITE_URL = "https://revyy.vercel.app";
+// Final fallback only — the real return domain is derived from the request
+// (origin header) so the portal returns to the deployment the user is on.
+const SITE_URL_FALLBACK = process.env.SITE_URL || "https://revyy.vercel.app";
+
+function getBaseUrl(req) {
+  const origin = req.headers.origin;
+  if (origin && /^https?:\/\//.test(origin)) return origin.replace(/\/$/, "");
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  if (host) return `${proto}://${host}`.replace(/\/$/, "");
+  return SITE_URL_FALLBACK;
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -45,7 +56,7 @@ export default async function handler(req, res) {
     const stripe = new Stripe(STRIPE_SECRET_KEY);
     const params = {
       customer: customerId,
-      return_url: `${SITE_URL}/app`,
+      return_url: `${getBaseUrl(req)}/app`,
     };
     // Deep-link straight to the cancellation flow when requested.
     if (flow === "cancel" && subscriptionId) {

@@ -11,16 +11,23 @@ export default function AuthCallback() {
 
   useEffect(() => {
     let cancelled = false;
+    const done = (path) => { if (!cancelled) { cancelled = true; navigate(path, { replace: true }); } };
+
+    // Safety net: if Supabase establishes the session a beat later (OAuth hash
+    // flow, slow token exchange), route straight to the app the moment it does.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (session) done("/app");
+    });
 
     (async () => {
       const url = new URL(window.location.href);
       const code = url.searchParams.get("code");
       const tokenHash = url.searchParams.get("token_hash");
       const type = url.searchParams.get("type");
-      const errDesc = url.searchParams.get("error_description");
+      const errDesc = url.searchParams.get("error_description") || url.searchParams.get("error");
 
       if (errDesc) {
-        if (!cancelled) { setError(errDesc); setTimeout(() => navigate("/login", { replace: true }), 2500); }
+        if (!cancelled) { setError(errDesc); setTimeout(() => done("/login"), 2500); }
         return;
       }
 
@@ -34,16 +41,21 @@ export default function AuthCallback() {
           if (error && !/already|verifier|non-empty/i.test(error.message)) throw error;
         }
       } catch (e) {
-        if (!cancelled) { setError(e.message || "Could not complete sign-in."); setTimeout(() => navigate("/login", { replace: true }), 2500); }
+        if (!cancelled) { setError(e.message || "Could not complete sign-in."); setTimeout(() => done("/login"), 2500); }
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (cancelled) return;
-      navigate(session ? "/app" : "/login", { replace: true });
+      // Poll briefly for the session (covers detectSessionInUrl races) before
+      // deciding where to send the user. Never dead-ends on the callback route.
+      for (let i = 0; i < 6 && !cancelled; i++) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) return done("/app");
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      done("/login");
     })();
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; subscription.unsubscribe(); };
   }, [navigate]);
 
   return (

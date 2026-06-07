@@ -10,7 +10,19 @@ import { createClient } from "@supabase/supabase-js";
 //   Use the sk_test_/pk_test_ keys during development; switch to live
 //   keys only when you're ready to launch.
 
-const SITE_URL = "https://revyy.vercel.app";
+// Final fallback only — the real return domain is derived from the request
+// (origin header) so redirects always come back to the deployment the user is
+// actually on, even on preview/custom domains. Override with SITE_URL env if set.
+const SITE_URL_FALLBACK = process.env.SITE_URL || "https://revyy.vercel.app";
+
+function getBaseUrl(req) {
+  const origin = req.headers.origin;
+  if (origin && /^https?:\/\//.test(origin)) return origin.replace(/\/$/, "");
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  if (host) return `${proto}://${host}`.replace(/\/$/, "");
+  return SITE_URL_FALLBACK;
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -31,6 +43,7 @@ export default async function handler(req, res) {
   if (!priceId || !userId) return res.status(400).json({ error: "Missing priceId or userId." });
 
   const stripe = new Stripe(STRIPE_SECRET_KEY);
+  const baseUrl = getBaseUrl(req);
 
   // Pull email + any existing subscription info from Supabase.
   let email = userEmail;
@@ -73,8 +86,8 @@ export default async function handler(req, res) {
       // Reuse the saved customer if we have one, else pre-fill the email.
       ...(existingCustomerId ? { customer: existingCustomerId } : { customer_email: email || undefined }),
       allow_promotion_codes: true,
-      success_url: `${SITE_URL}/app?upgraded=true`,
-      cancel_url: `${SITE_URL}/pricing`,
+      success_url: `${baseUrl}/app?upgraded=true`,
+      cancel_url: `${baseUrl}/pricing`,
     });
     return res.status(200).json({ url: session.url });
   } catch (err) {
