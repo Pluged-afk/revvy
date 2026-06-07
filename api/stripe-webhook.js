@@ -37,17 +37,36 @@ export default async function handler(req, res) {
   let event;
   try {
     const raw = await readRaw(req);
+    // If this logs 0, Vercel parsed/consumed the body before we read it and
+    // signature verification will always fail — see notes in the summary.
+    console.log("[stripe-webhook] raw body bytes:", raw?.length ?? 0, "· sig present:", !!sig);
     event = stripe.webhooks.constructEvent(raw, sig, WEBHOOK_SECRET);
   } catch (err) {
-    console.error("[stripe-webhook] signature verification failed:", err.message);
+    console.error("[stripe-webhook] signature verification FAILED:", err.message);
     return res.status(400).json({ error: `Webhook Error: ${err.message}` });
   }
 
-  // Update a profile by Supabase user id (preferred) or Stripe customer id.
+  console.log(`[stripe-webhook] ✓ received event: ${event.type} (${event.id})`);
+
+  // Update a profile by Supabase user id (upsert so a missing row is created)
+  // or by Stripe customer id. Logs the affected row count + any DB error so a
+  // silent 0-row update is visible in the Vercel logs.
   const updateProfile = async ({ userId, customerId, patch }) => {
-    if (userId) await admin.from("profiles").update(patch).eq("id", userId);
-    else if (customerId) await admin.from("profiles").update(patch).eq("stripe_customer_id", customerId);
-    console.log(`[stripe-webhook] ${event.type}:`, JSON.stringify(patch), "user=", userId || "?", "cust=", customerId || "?");
+    let result;
+    if (userId) {
+      result = await admin.from("profiles").upsert({ id: userId, ...patch }, { onConflict: "id" }).select("id");
+    } else if (customerId) {
+      result = await admin.from("profiles").update(patch).eq("stripe_customer_id", customerId).select("id");
+    } else {
+      console.warn(`[stripe-webhook] ${event.type}: no userId or customerId to match — skipped`);
+      return;
+    }
+    const { data, error } = result;
+    if (error) {
+      console.error(`[stripe-webhook] ${event.type} DB write error:`, error.message);
+    } else {
+      console.log(`[stripe-webhook] ${event.type}: wrote ${data?.length ?? 0} row(s) · user=${userId || "?"} cust=${customerId || "?"} ·`, JSON.stringify(patch));
+    }
   };
 
   const trialIso = (sub) => (sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null);
@@ -60,6 +79,24 @@ export default async function handler(req, res) {
 
   try {
     switch (event.type) {
+      // Canonical "payment complete / trial started" event. Carries the
+      // Supabase user id (client_reference_id) AND the Stripe customer id, so
+      // it both grants Pro and links the customer id for later customer-only
+      // events (invoices). This is the most reliable place to flip is_pro.
+      case "checkout.session.completed": {
+        const s = event.data.object;
+        const userId = s.client_reference_id || s.metadata?.supabase_user_id;
+        await updateProfile({
+          userId,
+          customerId: s.customer,
+          patch: {
+            is_pro: true,
+            stripe_customer_id: s.customer,
+            subscription_id: s.subscription || undefined,
+          },
+        });
+        break;
+      }
       case "customer.subscription.created": {
         const sub = event.data.object;
         await updateProfile({
@@ -115,6 +152,7 @@ export default async function handler(req, res) {
         break;
       }
       default:
+        console.log(`[stripe-webhook] (no handler for ${event.type} — ignored)`);
         break;
     }
   } catch (err) {
