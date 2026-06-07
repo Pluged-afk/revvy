@@ -32,7 +32,7 @@ export default function TermsOfService() {
 
         <h2>3. Payment and refunds</h2>
         <ul>
-          <li>Pro subscriptions (monthly or yearly) are billed securely through Stripe, and include a 7-day free trial.</li>
+          <li>Pro subscriptions (monthly or yearly) are billed securely through Stripe and charged immediately at checkout. You can cancel anytime.</li>
           <li>You may cancel at any time; access continues until the end of the current billing period.</li>
           <li>Except where required by law, payments are non-refundable, but we will always consider reasonable refund requests in good faith.</li>
         </ul>

@@ -1,8 +1,8 @@
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
-// Creates a Stripe Checkout session (subscription with a 7-day free trial)
-// and returns its URL. The secret key stays server-side only.
+// Creates a Stripe Checkout session (subscription, charged immediately — no
+// trial) and returns its URL. The secret key stays server-side only.
 //
 // ── Testing (Stripe TEST mode) ───────────────────────────────────────
 //   Test card:  4242 4242 4242 4242
@@ -48,7 +48,6 @@ export default async function handler(req, res) {
   // Pull email + any existing subscription info from Supabase.
   let email = userEmail;
   let existingCustomerId = null;
-  let hadTrialAlready = false;
   try {
     if (SUPABASE_URL && SERVICE_ROLE_KEY) {
       const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
@@ -60,20 +59,18 @@ export default async function handler(req, res) {
       }
       const { data: prof } = await admin
         .from("profiles")
-        .select("stripe_customer_id, trial_end")
+        .select("stripe_customer_id")
         .eq("id", userId)
         .maybeSingle();
       existingCustomerId = prof?.stripe_customer_id || null;
-      hadTrialAlready = !!prof?.trial_end;
     }
   } catch (e) {
     console.warn("[create-checkout] Supabase lookup failed:", e.message);
   }
 
   try {
+    // No trial — the customer is charged immediately at checkout.
     const subscription_data = { metadata: { supabase_user_id: userId } };
-    // Only grant the free trial to users who have never had one before.
-    if (!hadTrialAlready) subscription_data.trial_period_days = 7;
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",

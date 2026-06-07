@@ -159,8 +159,9 @@ export default async function handler(req, res) {
 
       case "customer.subscription.created": {
         const sub = event.data.object;
-        // A new subscription is "trialing" for the 7-day trial (or "active"
-        // if no trial). BOTH count as Pro.
+        // No trial — a new subscription is "active" immediately on payment.
+        // ("trialing" stays in ACTIVE as a harmless safety net for any
+        // in-flight subscriptions created before trials were removed.)
         const pro = ACTIVE.includes(sub.status);
         console.log(`[wh] subscription.created status=${sub.status} → is_pro=${pro}`);
         const email = await emailFromCustomer(sub.customer);

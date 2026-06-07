@@ -16,7 +16,6 @@ const FREE = [
 ];
 
 const PRO_MONTHLY = [
-  "7-day free trial",
   "Unlimited quizzes",
   "All 4 quiz types",
   "Up to 100 questions",
@@ -35,7 +34,7 @@ const PRO_YEARLY = [
 
 const FAQ = [
   { q: "Can I cancel anytime?", a: "Yes. Manage or cancel your subscription anytime from the billing portal — you'll keep Pro until the end of your billing period, with no cancellation fees." },
-  { q: "Is there a free trial?", a: "Yes — every Pro plan starts with a 7-day free trial. You won't be charged until the trial ends, and you can cancel before then for free." },
+  { q: "When am I charged?", a: "You're charged immediately when you upgrade, then automatically each billing period (monthly or yearly) until you cancel." },
   { q: "What payment methods do you accept?", a: "All major credit and debit cards, processed securely by Stripe. We never see or store your card details." },
   { q: "Is my data safe?", a: "Yes. We don't store your uploaded files — they're used only to generate your quiz and then discarded. See our Privacy Policy for full details." },
 ];
@@ -44,7 +43,7 @@ export default function Pricing() {
   const { user, startCheckout, loading } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
-  usePageMeta("Pricing — Revyy", "Start free forever, or go Pro with a 7-day free trial. Cancel anytime.");
+  usePageMeta("Pricing — Revyy", "Start free forever, or go Pro for €4.99/month. Cancel anytime.");
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
 
@@ -64,7 +63,7 @@ export default function Pricing() {
         <div className="container">
           <span className="eyebrow">Pricing</span>
           <h1>Simple, honest pricing</h1>
-          <p className="hero-sub">Start free forever, or go Pro with a 7-day free trial — cancel anytime.</p>
+          <p className="hero-sub">Start free forever, or go Pro — cancel anytime.</p>
         </div>
       </section>
 
@@ -92,9 +91,9 @@ export default function Pricing() {
               </ul>
               <button className="btn btn-amber btn-block" disabled={busy === "monthly" || loading}
                 onClick={() => upgrade(MONTHLY_PRICE, "monthly")}>
-                {busy === "monthly" ? "Starting…" : t.tryFree7Days}
+                {busy === "monthly" ? "Starting…" : t.upgradeToPro}
               </button>
-              <p className="price-trial">{t.trialNote}</p>
+              <p className="price-trial">{t.cancelAnytime}</p>
             </div>
 
             {/* Pro Yearly */}
@@ -107,9 +106,9 @@ export default function Pricing() {
               </ul>
               <button className="btn btn-amber btn-block" disabled={busy === "yearly" || loading}
                 onClick={() => upgrade(YEARLY_PRICE, "yearly")}>
-                {busy === "yearly" ? "Starting…" : t.tryFree7Days}
+                {busy === "yearly" ? "Starting…" : t.upgradeToPro}
               </button>
-              <p className="price-trial">{t.trialNote}</p>
+              <p className="price-trial">{t.cancelAnytime}</p>
             </div>
           </div>
         </div>

@@ -122,7 +122,7 @@ export default function Home() {
               ) : (
                 <Link to="/pricing" className="btn btn-amber btn-block">Upgrade →</Link>
               )}
-              <p className="price-trial">7-day free trial · Card required</p>
+              <p className="price-trial">Cancel anytime</p>
             </div>
           </div>
           <div style={{ textAlign: "center", marginTop: 32 }}>
