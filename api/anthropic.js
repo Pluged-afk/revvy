@@ -37,6 +37,8 @@ export default async function handler(req, res) {
         "Content-Type": "application/json",
         "x-api-key": KEY,
         "anthropic-version": "2023-06-01",
+        // Allows messages to reference uploaded files via source.type "file".
+        "anthropic-beta": "files-api-2025-04-14",
       },
       body: JSON.stringify({ model, max_tokens, system, messages }),
     });

@@ -131,7 +131,6 @@ async function callClaude({ blocks, numQ, diff, type }) {
   return JSON.parse(raw);
 }
 
-function readBase64(f) { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result.split(",")[1]); r.onerror=()=>rej(new Error("Read failed")); r.readAsDataURL(f); }); }
 function readText(f)   { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error("Read failed")); r.readAsText(f); }); }
 
 function Logo({ size=28 }) {
@@ -1020,7 +1019,7 @@ export default function StudyQuiz() {
     try{
       let p;
       if(isTxt){const text=await readText(f);p={type:"text",content:text,mime:null,name:f.name};}
-      else{const b64=await readBase64(f);p={type:isPdf?"pdf":"image",content:b64,mime:f.type,name:f.name};}
+      else{p={type:isPdf?"pdf":"image",raw:f,mime:f.type,name:f.name};}
       setExamFiles(prev=>{const a=[...prev];a[idx]=p;return a.filter(Boolean);});
       setError("");
     }catch{setError("Could not read file.");}
@@ -1038,15 +1037,30 @@ export default function StudyQuiz() {
   const sectionTotalMarks = examSections.reduce((s,sec)=>s+(parseInt(sec.count)||0)*(parseFloat(sec.marksPerQ)||1),0);
   const sectionTotalQs    = examSections.reduce((s,sec)=>s+(parseInt(sec.count)||0),0);
 
+  // Upload a raw File to the Anthropic Files API (via our server) → file_id.
+  // Cached per File so re-generating with the same file doesn't re-upload.
+  const fileIdCache = useRef(new WeakMap());
+  const uploadFileToAnthropic = useCallback(async (f) => {
+    if (fileIdCache.current.has(f)) return fileIdCache.current.get(f);
+    const res = await fetch("/api/upload-file", {
+      method: "POST",
+      headers: { "Content-Type": f.type || "application/octet-stream", "x-filename": encodeURIComponent(f.name) },
+      body: f,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.file_id) {
+      throw new Error(data.error || (res.status === 413
+        ? "File too large to upload (try a file under ~4MB)."
+        : "Could not upload file. Please try again."));
+    }
+    fileIdCache.current.set(f, data.file_id);
+    return data.file_id;
+  }, []);
+
   const generateExam=useCallback(async()=>{
     if(examFiles.length===0){setError("Upload at least one study file.");return;}
     if(examMode==="custom" && sectionTotalQs===0){setError("Please add at least one question to your sections.");return;}
     setError("");
-    const blocks=examFiles.map(f=>{
-      if(f.type==="pdf") return{type:"document",source:{type:"base64",media_type:"application/pdf",data:f.content}};
-      if(f.type==="image") return{type:"image",source:{type:"base64",media_type:f.mime,data:f.content}};
-      return{type:"text",text:"Study material ("+f.name+"):\n\n"+f.content};
-    });
     const totN=Math.min(Math.max(parseInt(examTotalQ)||5,1),100);
     const diffLabel=t.diffOpts[diff];
     let typeInst="";
@@ -1068,6 +1082,14 @@ export default function StudyQuiz() {
     const prompt="You are creating a real graded exam.\n"+typeInst+"\nDifficulty: "+diffLabel+".\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\"}]}\nFor written/fill: options:[], correct:0. Keep questions in section order.";
     setScreen("loading");
     try{
+      // Upload each study file to the Files API → reference by file_id.
+      const blocks=await Promise.all(examFiles.map(async f=>{
+        if(f.type==="text") return {type:"text",text:"Study material ("+f.name+"):\n\n"+f.content};
+        const fid=await uploadFileToAnthropic(f.raw);
+        return f.type==="pdf"
+          ? {type:"document",source:{type:"file",file_id:fid}}
+          : {type:"image",source:{type:"file",file_id:fid}};
+      }));
       const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:6000,
           system:"You are an expert exam setter. Return ONLY valid raw JSON, no markdown.",
@@ -1087,7 +1109,7 @@ export default function StudyQuiz() {
       setExamPaused(false); setExamTimeUp(false); setExamReview(false); setShowSubmitPrompt(false); setExamTimeExpired(false);
       setScreen("exam_run");
     }catch(err){setError(err.message.includes("parse")?"Unexpected format — please try again.":err.message);setScreen("exam_setup");}
-  },[examFiles,examMode,examSections,examTotalQ,diff,fileLimitMB,examTimerOn,examTimerMin]);
+  },[examFiles,examMode,examSections,examTotalQ,diff,fileLimitMB,examTimerOn,examTimerMin,uploadFileToAnthropic]);
 
   const evaluateExam=useCallback(async(answers)=>{
     const hasWritten=examQs.some(q=>q.type==="written");
@@ -1272,7 +1294,9 @@ export default function StudyQuiz() {
     if (!isPdf&&!isImg&&!isTxt) { setError("Supported: PDF, images (JPG/PNG/WebP), or .txt / .md files"); return; }
     try {
       if (isTxt) { const text=await readText(f); setFile({type:"text",content:text,mime:null,name:f.name,sizeMB:f.size/1024/1024}); }
-      else { const b64=await readBase64(f); setFile({type:isPdf?"pdf":"image",content:b64,mime:f.type,name:f.name,sizeMB:f.size/1024/1024}); }
+      // PDFs/images are uploaded to the Anthropic Files API at generate time —
+      // keep the raw File (no base64) so large files aren't inflated.
+      else { setFile({type:isPdf?"pdf":"image",raw:f,mime:f.type,name:f.name,sizeMB:f.size/1024/1024}); }
       setError("");
     } catch { setError("Could not read file. Please try another."); }
   },[]);
@@ -1296,18 +1320,24 @@ export default function StudyQuiz() {
     setError("");
     const finalType = canUseQType(qType)?qType:"mcq";
     const finalNumQ = effectiveNumQ();
-    let blocks = [];
     if (tab==="file"||tab==="photo") {
       if (!file) { setError("Please upload a file first."); return; }
-      if (file.type==="pdf")   blocks=[{type:"document",source:{type:"base64",media_type:"application/pdf",data:file.content}}];
-      else if (file.type==="image") blocks=[{type:"image",source:{type:"base64",media_type:file.mime,data:file.content}}];
-      else blocks=[{type:"text",text:`Study material (${file.name}):\n\n${file.content}`}];
-    } else {
-      if (!textVal.trim()) { setError("Please paste study text first."); return; }
-      blocks=[{type:"text",text:`Study material:\n\n${textVal.trim()}`}];
-    }
+    } else if (!textVal.trim()) { setError("Please paste study text first."); return; }
+
     setScreen("loading");
     try {
+      let blocks = [];
+      if (tab==="file"||tab==="photo") {
+        if (file.type==="text") blocks=[{type:"text",text:`Study material (${file.name}):\n\n${file.content}`}];
+        else {
+          const fileId = await uploadFileToAnthropic(file.raw);
+          blocks = file.type==="pdf"
+            ? [{type:"document",source:{type:"file",file_id:fileId}}]
+            : [{type:"image",source:{type:"file",file_id:fileId}}];
+        }
+      } else {
+        blocks=[{type:"text",text:`Study material:\n\n${textVal.trim()}`}];
+      }
       const res = await callClaude({blocks, numQ:finalNumQ, diff:t.diffOpts[diff], type:finalType});
       if (!res.questions?.length) throw new Error("No questions returned");
       setQuiz({...res, type:finalType});
@@ -1319,7 +1349,7 @@ export default function StudyQuiz() {
       setError(err.message.includes("parse")?"AI returned unexpected format. Please try again.":err.message);
       setScreen("upload");
     }
-  },[isPro,dailyUsed,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,adWatchedDate,adUnlocked,saveState]);
+  },[isPro,dailyUsed,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,adWatchedDate,adUnlocked,saveState,uploadFileToAnthropic]);
 
   const pick    = i => { if(selected===null) setSelected(i); };
   const nextQ   = isCorrect => {
