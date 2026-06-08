@@ -1434,7 +1434,7 @@ export default function StudyQuiz() {
         {tab==="photo" && (
           <div style={{...Sb.dropzone,...(file&&file.type==="image"?{borderStyle:"solid",borderColor:"#4f46e5"}:{})}} onClick={()=>photoRef.current.click()}>
             <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>loadFile(e.target.files[0])}/>
-            {file&&file.type==="image"?(<><div style={{fontSize:32}}>🖼️</div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{t.tapChange}</div></>):(<><div style={{fontSize:48}}>📷</div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>Take a photo of your notes</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.photoHint}</div></>)}
+            {file&&file.type==="image"?(<><div style={{fontSize:32}}>🖼️</div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{t.tapChange}</div></>):(<><div style={{fontSize:48}}>📷</div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.photoTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.photoHint}</div></>)}
           </div>
         )}
         {tab==="text" && <textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>}
