@@ -800,7 +800,7 @@ export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const { lang, setLang, t } = useLang();
   const dev = useDev();
-  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile } = useAuth();
+  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken } = useAuth();
   const navigate = useNavigate();
   const [coBusy, setCoBusy] = useState("");   // "monthly" | "yearly" while redirecting to Stripe
   const [coErr,  setCoErr]  = useState("");
@@ -1040,22 +1040,49 @@ export default function StudyQuiz() {
   // Upload a raw File to the Anthropic Files API (via our server) → file_id.
   // Cached per File so re-generating with the same file doesn't re-upload.
   const fileIdCache = useRef(new WeakMap());
+  // Files ≤ this go straight through our function; larger Pro files go via
+  // Vercel Blob (direct browser→Blob upload) to bypass the 4.5 MB limit.
+  const DIRECT_MAX = 4 * 1024 * 1024;
   const uploadFileToAnthropic = useCallback(async (f) => {
     if (fileIdCache.current.has(f)) return fileIdCache.current.get(f);
-    const res = await fetch("/api/upload-file", {
-      method: "POST",
-      headers: { "Content-Type": f.type || "application/octet-stream", "x-filename": encodeURIComponent(f.name) },
-      body: f,
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.file_id) {
-      throw new Error(data.error || (res.status === 413
-        ? "File too large to upload (try a file under ~4MB)."
-        : "Could not upload file. Please try again."));
+
+    let fileId;
+    if (isPro && f.size > DIRECT_MAX) {
+      // Pro large-file path: browser → Vercel Blob → server → Anthropic Files.
+      const { upload } = await import("@vercel/blob/client");
+      const token = await getToken?.();
+      const blob = await upload(f.name, f, {
+        access: "public",
+        handleUploadUrl: "/api/blob-upload",
+        clientPayload: token || "",
+      });
+      const res = await fetch("/api/upload-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blobUrl: blob.url, filename: f.name, contentType: f.type }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.file_id) throw new Error(data.error || "Could not process the uploaded file.");
+      fileId = data.file_id;
+    } else {
+      // Direct path (free, and small Pro files).
+      const res = await fetch("/api/upload-file", {
+        method: "POST",
+        headers: { "Content-Type": f.type || "application/octet-stream", "x-filename": encodeURIComponent(f.name) },
+        body: f,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.file_id) {
+        throw new Error(data.error || (res.status === 413
+          ? "File too large. Upgrade to Pro to upload large files."
+          : "Could not upload file. Please try again."));
+      }
+      fileId = data.file_id;
     }
-    fileIdCache.current.set(f, data.file_id);
-    return data.file_id;
-  }, []);
+
+    fileIdCache.current.set(f, fileId);
+    return fileId;
+  }, [isPro, getToken]);
 
   const generateExam=useCallback(async()=>{
     if(examFiles.length===0){setError("Upload at least one study file.");return;}

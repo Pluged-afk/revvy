@@ -150,7 +150,7 @@ export function AuthProvider({ children }) {
 
   const value = {
     user, isPro: effIsPro, loading: loading || !isLoaded,
-    subStatus, subPlan, periodEnd, cancelAtPeriodEnd,
+    subStatus, subPlan, periodEnd, cancelAtPeriodEnd, getToken,
     signOut, deleteAccount, reauthenticate, setProStatus, refreshProfile, startCheckout, openPortal,
   };
 

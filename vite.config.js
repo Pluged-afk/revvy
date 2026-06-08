@@ -52,6 +52,7 @@ export default defineConfig(({ mode }) => {
   setEnv('STRIPE_SECRET_KEY', env.STRIPE_SECRET_KEY)
   setEnv('STRIPE_WEBHOOK_SECRET', env.STRIPE_WEBHOOK_SECRET)
   setEnv('ANTHROPIC_API_KEY', env.ANTHROPIC_API_KEY)
+  setEnv('BLOB_READ_WRITE_TOKEN', env.BLOB_READ_WRITE_TOKEN)
 
   // Startup diagnostic — printed to the terminal running `npm run dev`.
   console.log(
