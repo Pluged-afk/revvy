@@ -118,11 +118,11 @@ export default function Home() {
                 {PRO_PERKS.map((p) => <li key={p}>{p}</li>)}
               </ul>
               {isPro ? (
-                <span className="btn btn-amber btn-block is-static" aria-disabled="true">You're on Pro ⭐</span>
+                <div className="pro-active-badge" aria-disabled="true">✓ You're Pro</div>
               ) : (
                 <Link to="/pricing" className="btn btn-amber btn-block">Upgrade →</Link>
               )}
-              <p className="price-trial">Cancel anytime</p>
+              <p className="price-trial">{isPro ? "Your subscription is active" : "Cancel anytime"}</p>
             </div>
           </div>
           <div style={{ textAlign: "center", marginTop: 32 }}>

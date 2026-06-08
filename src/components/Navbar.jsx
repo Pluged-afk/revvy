@@ -14,12 +14,13 @@ const LINKS = [
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
-  const { user } = useAuth();
+  const { user, isPro } = useAuth();
   return (
     <nav className="nav">
       <div className="container nav-inner">
         <Link to="/" className="nav-logo" onClick={() => setOpen(false)}>
           <RevyyMark /> Revyy
+          {isPro && <span className="nav-pro-badge">PRO</span>}
         </Link>
         <DevBadge />
 
