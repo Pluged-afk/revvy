@@ -40,7 +40,7 @@ const FAQ = [
 ];
 
 export default function Pricing() {
-  const { user, startCheckout, loading } = useAuth();
+  const { user, isPro, startCheckout, loading } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
   usePageMeta("Pricing — Revyy", "Start free forever, or go Pro for €4.99/month. Cancel anytime.");
@@ -89,11 +89,15 @@ export default function Pricing() {
               <ul className="price-list">
                 {PRO_MONTHLY.map((f) => <li key={f}>{f}</li>)}
               </ul>
-              <button className="btn btn-amber btn-block" disabled={busy === "monthly" || loading}
-                onClick={() => upgrade(MONTHLY_PRICE, "monthly")}>
-                {busy === "monthly" ? "Starting…" : t.upgradeToPro}
-              </button>
-              <p className="price-trial">{t.cancelAnytime}</p>
+              {isPro ? (
+                <div className="pro-active-badge" aria-disabled="true">✓ You're Pro</div>
+              ) : (
+                <button className="btn btn-amber btn-block" disabled={busy === "monthly" || loading}
+                  onClick={() => upgrade(MONTHLY_PRICE, "monthly")}>
+                  {busy === "monthly" ? "Starting…" : t.upgradeToPro}
+                </button>
+              )}
+              <p className="price-trial">{isPro ? "Your subscription is active" : t.cancelAnytime}</p>
             </div>
 
             {/* Pro Yearly */}
@@ -104,11 +108,15 @@ export default function Pricing() {
               <ul className="price-list">
                 {PRO_YEARLY.map((f) => <li key={f}>{f}</li>)}
               </ul>
-              <button className="btn btn-amber btn-block" disabled={busy === "yearly" || loading}
-                onClick={() => upgrade(YEARLY_PRICE, "yearly")}>
-                {busy === "yearly" ? "Starting…" : t.upgradeToPro}
-              </button>
-              <p className="price-trial">{t.cancelAnytime}</p>
+              {isPro ? (
+                <div className="pro-active-badge" aria-disabled="true">✓ You're Pro</div>
+              ) : (
+                <button className="btn btn-amber btn-block" disabled={busy === "yearly" || loading}
+                  onClick={() => upgrade(YEARLY_PRICE, "yearly")}>
+                  {busy === "yearly" ? "Starting…" : t.upgradeToPro}
+                </button>
+              )}
+              <p className="price-trial">{isPro ? "Your subscription is active" : t.cancelAnytime}</p>
             </div>
           </div>
         </div>
