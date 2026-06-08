@@ -1344,7 +1344,9 @@ export default function StudyQuiz() {
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}}>
-          <span style={Sb.brand}><Logo/>{t.appName} <DevBadge/></span>
+          <span style={Sb.brand}><Logo/>{t.appName}
+            {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
+            <DevBadge/></span>
           <div style={{display:"flex",gap:10,alignItems:"center",marginLeft:"auto"}}>
             <select value={lang} onChange={e=>setLang(e.target.value)} title="Language"
               style={{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,fontSize:12,padding:"3px 6px",cursor:"pointer",fontFamily:"inherit",outline:"none"}}>
@@ -1385,7 +1387,11 @@ export default function StudyQuiz() {
             <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:"#92400e"}}>✦ {t.proLabel}</div>
             <div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:4}}>{t.proPrice}</div>
             <div style={{fontSize:11,color:"#78350f",lineHeight:1.7}}>{t.proDesc}</div>
-            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>{setCoErr("");setShowProModal(true);}}>{t.upgrade}</button>
+            {isPro ? (
+              <div style={{width:"100%",marginTop:10,fontSize:13,fontWeight:700,color:"#fff",textAlign:"center",padding:"10px",borderRadius:10,background:"linear-gradient(135deg,#16a34a,#15803d)",boxShadow:"0 2px 10px rgba(22,163,74,0.3)"}}>✓ You're Pro</div>
+            ) : (
+              <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>{setCoErr("");setShowProModal(true);}}>{t.upgrade}</button>
+            )}
           </div>
         </div>
       </div>
