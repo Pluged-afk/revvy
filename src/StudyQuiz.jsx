@@ -1380,7 +1380,7 @@ export default function StudyQuiz() {
           <div style={Sb.planCard}>
             <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{t.freeLabel}</div>
             <div style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.7}}>{t.freeDesc}</div>
-            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13}} onClick={()=>setScreen("upload")}>{t.startFree}</button>
+            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13}} onClick={()=>setScreen("upload")}>{isPro ? "Make a quiz" : t.startFree}</button>
           </div>
           <div style={{...Sb.planCard,border:"2px solid #f59e0b",background:"#fffbeb",position:"relative",overflow:"hidden"}}>
             <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,#f59e0b,#fbbf24)"}}/>
