@@ -31,6 +31,7 @@ export default async function handler(req, res) {
         return {
           allowedContentTypes: ["application/pdf", "image/png", "image/jpeg", "image/webp", "image/gif"],
           maximumSizeInBytes: 100 * 1024 * 1024, // 100 MB ceiling for Pro
+          addRandomSuffix: true, // unique blob name per upload — no conflicts
           tokenPayload: JSON.stringify({ userId }),
         };
       },
