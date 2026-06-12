@@ -5,6 +5,7 @@ import { useLang } from "./context/LanguageContext.jsx";
 import { useDev, DevBadge } from "./context/DevContext.jsx";
 import { UserButton } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
+import { upload as blobUpload } from "@vercel/blob/client";
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
@@ -1068,9 +1069,8 @@ export default function StudyQuiz() {
     let fileId;
     if (isPro && f.size > DIRECT_MAX) {
       // Pro large-file path: browser → Vercel Blob → server → Anthropic Files.
-      const { upload } = await import("@vercel/blob/client");
       const token = await getToken?.();
-      const blob = await upload(f.name, f, {
+      const blob = await blobUpload(f.name, f, {
         access: "public",
         handleUploadUrl: "/api/blob-upload",
         clientPayload: token || "",
