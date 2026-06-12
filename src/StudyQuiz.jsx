@@ -1672,20 +1672,38 @@ export default function StudyQuiz() {
           <div style={{...Sb.settingRow,flexDirection:"column",alignItems:"flex-start",gap:8}}>
             <div style={{display:"flex",justifyContent:"space-between",width:"100%",alignItems:"center"}}>
               <span style={Sb.settingLabel}>{t.questions}</span>
-              <span style={{fontWeight:700,fontSize:14,color:"#4f46e5",minWidth:32,textAlign:"right"}}>{Math.min(numQ,qCap())}</span>
+              <span style={{fontWeight:700,fontSize:14,color:"#4f46e5",minWidth:32,textAlign:"right"}}>{useCustomQ&&canCustomQ()?(parseInt(customQ,10)||"—"):Math.min(numQ,qCap())}</span>
             </div>
-            <div style={{width:"100%",paddingRight:2}}>
-              <input type="range"
-                min={5} max={qCap()} step={5}
-                value={Math.min(numQ,qCap())}
-                onChange={e=>{setUseCustomQ(false);setNumQ(parseInt(e.target.value));}}
-                style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}
-              />
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>
-                <span>5</span>
-                <span style={{color:canExtraQ()?"var(--color-text-tertiary)":"#f59e0b"}}>{qCap()}{!canExtraQ()&&" (free max)"}</span>
+            {/* Pro/unlocked: type an exact amount (any number 1–100). */}
+            {canCustomQ()&&(
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%"}}>
+                <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.customAmount}</span>
+                <Toggle on={useCustomQ} onChange={v=>setUseCustomQ(v)}/>
               </div>
-            </div>
+            )}
+            {useCustomQ&&canCustomQ()?(
+              <div style={{width:"100%"}}>
+                <input type="number" min={1} max={PRO_MAX_Q} inputMode="numeric" value={customQ}
+                  onChange={e=>setCustomQ(e.target.value.replace(/[^0-9]/g,"").slice(0,3))}
+                  onBlur={e=>{const n=Math.min(Math.max(parseInt(e.target.value,10)||1,1),PRO_MAX_Q);setCustomQ(String(n));}}
+                  placeholder={"1–"+PRO_MAX_Q}
+                  style={{width:"100%",borderRadius:10,border:"1.5px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:3}}>{t.customAmountHint}</div>
+              </div>
+            ):(
+              <div style={{width:"100%",paddingRight:2}}>
+                <input type="range"
+                  min={5} max={qCap()} step={1}
+                  value={Math.min(numQ,qCap())}
+                  onChange={e=>{setUseCustomQ(false);setNumQ(parseInt(e.target.value));}}
+                  style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}
+                />
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>
+                  <span>5</span>
+                  <span style={{color:canExtraQ()?"var(--color-text-tertiary)":"#f59e0b"}}>{qCap()}{!canExtraQ()&&" (free max)"}</span>
+                </div>
+              </div>
+            )}
             {!canExtraQ()&&(
               <button onClick={()=>setLockedModal({featureKey:"questions"})} style={{fontSize:11,color:"#f59e0b",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0,textAlign:"left"}}>
                 🔒 Unlock up to {PRO_MAX_Q} questions (Pro/Ad)

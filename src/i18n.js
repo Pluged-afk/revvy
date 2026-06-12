@@ -22,7 +22,8 @@ export const LANGS = {
 };
 
 const T_EN = {
-  appName:"Revyy", mainSite:"Main site", skip:"Skip →", autoAdvancing:"Next question in a moment…", tagline:"Turn any material into a quiz",
+  appName:"Revyy", mainSite:"Main site", skip:"Skip →", autoAdvancing:"Next question in a moment…",
+  customAmount:"Custom amount", customAmountHint:"Type any number from 1 to 100", tagline:"Turn any material into a quiz",
   sub:"Upload a PDF, paste notes, take a photo — Revyy builds your quiz in seconds.", start:"Get started →",
   whatUpload:"WHAT YOU CAN UPLOAD",
   features:[
