@@ -1488,6 +1488,7 @@ export default function StudyQuiz() {
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
+        <button onClick={()=>navigate("/")} title={t.mainSite} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.8)",fontFamily:"inherit",padding:0,fontWeight:500,marginBottom:16,display:"inline-flex",alignItems:"center",gap:5}}>← {t.mainSite}</button>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}}>
           <span style={Sb.brand}><Logo/>{t.appName}
             {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
