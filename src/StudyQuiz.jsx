@@ -862,7 +862,10 @@ function Confetti() {
 // Ads are master-switched by VITE_ADS_ENABLED — set it to "true" once
 // AdSense is approved and redeploy; nothing renders until then.
 const ADS_ENABLED = import.meta.env.VITE_ADS_ENABLED === "true";
-function AdBanners({ isPro }) {
+// Side 160x600 banners (desktop margins) + a 320x50 bottom anchor (mobile).
+// `bottom` can be turned off on screens that already have an in-content banner
+// so mobile never shows two banners stacked at once.
+function AdBanners({ isPro, bottom = true }) {
   const dev = useDev();
   const adsOn = dev.devMode && dev.ads !== null ? dev.ads : ADS_ENABLED;
   if (isPro || !adsOn) return null;
@@ -870,7 +873,7 @@ function AdBanners({ isPro }) {
     <>
       <div className="ad-placeholder rv-ad rv-ad-side rv-ad-left"><span className="rv-ad-label">Advertisement</span></div>
       <div className="ad-placeholder rv-ad rv-ad-side rv-ad-right"><span className="rv-ad-label">Advertisement</span></div>
-      <div className="ad-placeholder rv-ad rv-ad-bottom"><span className="rv-ad-label">Advertisement</span></div>
+      {bottom && <div className="ad-placeholder rv-ad rv-ad-bottom"><span className="rv-ad-label">Advertisement</span></div>}
     </>
   );
 }
@@ -1808,7 +1811,7 @@ export default function StudyQuiz() {
   // ── RESULTS ──────────────────────────────────────────────────────
   if (screen==="results" && quiz) return (
     <div style={Sb.root}><style>{CSS}</style>
-      <AdBanners isPro={isPro}/>
+      <AdBanners isPro={isPro} bottom={false}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
       <div style={{background:"linear-gradient(145deg,#1e1b4b,#4f46e5)",padding:"36px 20px 28px",textAlign:"center"}}>
         <div style={{fontSize:50,marginBottom:8}}>{badge.emoji}</div>
