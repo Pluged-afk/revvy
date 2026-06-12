@@ -357,10 +357,14 @@ function MatchQuiz({ questions, onDone, t }) {
     setMatches(m=>({...m,[sel]:i})); setDefUsed(d=>({...d,[i]:true})); setSel(null);
   };
   const check = () => {
-    const r={};
-    terms.forEach((_,i)=>{ r[i]=defs[matches[i]]===questions[i].answer; });
+    const r={}; const detail=[];
+    terms.forEach((_,i)=>{
+      const chosen=defs[matches[i]];
+      const ok=chosen===questions[i].answer;
+      r[i]=ok; detail[i]={isCorrect:ok,chosen};
+    });
     setResults(r); setChecked(true);
-    setTimeout(()=>onDone(Object.values(r).filter(Boolean).length,terms.length),1800);
+    setTimeout(()=>onDone(Object.values(r).filter(Boolean).length,terms.length,detail),1800);
   };
   // Which term (if any) a given definition is paired with.
   const termForDef = di => { const k=Object.keys(matches).find(k=>matches[k]===di); return k===undefined?null:Number(k); };
@@ -1666,7 +1670,7 @@ export default function StudyQuiz() {
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
         <div style={Sb.topbar} className="rv-topbar"><button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button><span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{quiz.title}</span><span/></div>
-        <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}><MatchQuiz questions={quiz.questions} t={t} onDone={(s,total)=>{setAnswers(Array(total).fill(0).map((_,i)=>({isCorrect:i<s})));setScreen("results");}}/></div>
+        <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}><MatchQuiz questions={quiz.questions} t={t} onDone={(s,total,detail)=>{setAnswers(detail||Array(total).fill(0).map((_,i)=>({isCorrect:i<s})));setScreen("results");}}/></div>
         <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);newMat();}}/>
       </div>
     );
@@ -1740,7 +1744,16 @@ export default function StudyQuiz() {
         </div>
         {!isPro&&adsOn&&<div style={{background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",textAlign:"center",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}>📣 Banner ad — connect Google AdSense here</div>}
         <p style={Sb.secLabel}>{t.review}</p>
-        {quiz.type==="match"?<p style={{fontSize:13,color:"var(--color-text-secondary)",textAlign:"center",padding:"16px 0"}}>Matching results shown above</p>:
+        {quiz.type==="match"?
+          quiz.questions.map((q,i)=>{
+            const a=answers[i];
+            return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"14px 14px 14px 11px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${a?.isCorrect?"#22c55e":"#ef4444"}`}} className="fade-in">
+              <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{fontSize:15,flexShrink:0}}>{a?.isCorrect?"✅":"❌"}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}</span></div>
+              {!a?.isCorrect&&a&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {a.chosen||"—"}</div>}
+              <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {q.answer||""}</div>
+            </div>;
+          })
+        :
           quiz.questions.map((q,i)=>{
             const a=answers[i];
             return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"14px 14px 14px 11px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${a?.isCorrect?"#22c55e":"#ef4444"}`}} className="fade-in">
