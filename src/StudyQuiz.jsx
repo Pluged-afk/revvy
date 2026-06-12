@@ -93,6 +93,8 @@ const THEME_LIGHT = `
     --color-border-secondary:#e2e8f0 !important;
     --color-border-tertiary:#f1f5f9 !important;
     --color-border-success:#86efac !important;
+    --color-hover-tint:#f5f3ff !important;
+    --color-sel-tint:#ede9fe !important;
   }
 `;
 const THEME_DARK = `
@@ -109,6 +111,8 @@ const THEME_DARK = `
     --color-border-secondary:#2d3748 !important;
     --color-border-tertiary:#1e293b !important;
     --color-border-success:#166534 !important;
+    --color-hover-tint:#2b2b45 !important;
+    --color-sel-tint:#343152 !important;
   }
 `;
 
@@ -328,17 +332,28 @@ function FillBlank({ q, onNext, isLast, t }) {
 }
 
 // ── Match Quiz ────────────────────────────────────────────────────────
+// Distinct colors so each matched pair is visually linked by both a numbered
+// badge and its border color (term on the left ↔ its definition on the right).
+const PAIR_COLORS = ["#6366f1","#ec4899","#f59e0b","#10b981","#06b6d4","#8b5cf6","#ef4444","#f43f5e","#0ea5e9","#84cc16"];
+const pairColor = n => PAIR_COLORS[((n||1)-1)%PAIR_COLORS.length];
+function PairBadge({ n, color }) {
+  return <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:color,color:"#fff",fontSize:10,fontWeight:700,flexShrink:0,marginTop:1}}>{n}</span>;
+}
+
 function MatchQuiz({ questions, onDone, t }) {
   const terms = questions.map(q=>q.question);
   const defs  = useRef(questions.map(q=>q.answer||"").sort(()=>Math.random()-0.5)).current;
   const [sel,setSel]         = useState(null);
   const [matches,setMatches] = useState({});
+  const [pairNo,setPairNo]   = useState({}); // termIndex -> 1-based pair number
   const [defUsed,setDefUsed] = useState({});
   const [checked,setChecked] = useState(false);
   const [results,setResults] = useState({});
   const pickTerm = i => { if(checked||matches[i]!==undefined)return; setSel(s=>s===i?null:i); };
   const pickDef  = i => {
     if(checked||defUsed[i]||sel===null)return;
+    const n = Object.keys(matches).length + 1; // next free pair number
+    setPairNo(p=>({...p,[sel]:n}));
     setMatches(m=>({...m,[sel]:i})); setDefUsed(d=>({...d,[i]:true})); setSel(null);
   };
   const check = () => {
@@ -347,6 +362,8 @@ function MatchQuiz({ questions, onDone, t }) {
     setResults(r); setChecked(true);
     setTimeout(()=>onDone(Object.values(r).filter(Boolean).length,terms.length),1800);
   };
+  // Which term (if any) a given definition is paired with.
+  const termForDef = di => { const k=Object.keys(matches).find(k=>matches[k]===di); return k===undefined?null:Number(k); };
   const allMatched = Object.keys(matches).length===terms.length;
   return (
     <div>
@@ -355,16 +372,21 @@ function MatchQuiz({ questions, onDone, t }) {
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {terms.map((term,i)=>{
             const matched=matches[i]!==undefined,isSel=sel===i,isOk=checked&&results[i],isBad=checked&&!results[i]&&matched;
-            return <button key={i} onClick={()=>pickTerm(i)} style={{padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:isOk?"#22c55e":isBad?"#ef4444":isSel?"#4f46e5":matched?"#a5b4fc":"var(--color-border-tertiary)",background:isSel?"#ede9fe":matched?"#f5f3ff":"var(--color-background-primary)",fontSize:12,fontWeight:600,cursor:matched||checked?"default":"pointer",color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left",transition:"all 0.15s"}}>
-              {isOk&&"✅ "}{isBad&&"❌ "}{term}
+            const pc=pairColor(pairNo[i]);
+            const bc=isOk?"#22c55e":isBad?"#ef4444":isSel?"#4f46e5":matched?pc:"var(--color-border-tertiary)";
+            return <button key={i} onClick={()=>pickTerm(i)} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:bc,background:isSel?"var(--color-sel-tint)":matched?"var(--color-background-secondary)":"var(--color-background-primary)",fontSize:12,fontWeight:600,cursor:matched||checked?"default":"pointer",color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left",transition:"all 0.15s"}}>
+              {matched && <PairBadge n={pairNo[i]} color={pc}/>}
+              <span style={{flex:1}}>{isOk&&"✅ "}{isBad&&"❌ "}{term}</span>
             </button>;
           })}
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {defs.map((def,i)=>{
-            const used=defUsed[i];
-            return <button key={i} onClick={()=>pickDef(i)} style={{padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:used?"#a5b4fc":"var(--color-border-tertiary)",background:used?"#f5f3ff":"var(--color-background-primary)",fontSize:11,cursor:(used||checked||sel===null)?"default":"pointer",color:used?"var(--color-text-tertiary)":"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left",lineHeight:1.4,transition:"all 0.15s"}}>
-              {def}
+            const used=defUsed[i]; const ti=used?termForDef(i):null; const n=ti!==null?pairNo[ti]:null;
+            const pc=n?pairColor(n):null;
+            return <button key={i} onClick={()=>pickDef(i)} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:used?pc:"var(--color-border-tertiary)",background:used?"var(--color-background-secondary)":"var(--color-background-primary)",fontSize:11,cursor:(used||checked||sel===null)?"default":"pointer",color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left",lineHeight:1.4,transition:"all 0.15s"}}>
+              {used && n && <PairBadge n={n} color={pc}/>}
+              <span style={{flex:1}}>{def}</span>
             </button>;
           })}
         </div>
@@ -2124,10 +2146,10 @@ const CSS = `
   .spin-ring{animation:spin 0.9s linear infinite}
   .step{animation:fadeIn 0.4s ease forwards;opacity:0}
   .step-0{animation-delay:0.3s}.step-1{animation-delay:0.8s}.step-2{animation-delay:1.3s}.step-3{animation-delay:1.8s}
-  .exam-type-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(79,70,229,0.18)!important;border-color:#4f46e5!important;background:#f5f3ff!important}
-  button:hover:not(:disabled){opacity:0.9;transform:translateY(-1px)}
+  .exam-type-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(79,70,229,0.18)!important;border-color:#4f46e5!important;background:var(--color-hover-tint)!important}
+  button:hover:not(:disabled){transform:translateY(-1px)}
   button:active:not(:disabled){transform:scale(0.97)}
-  .quiz-opt:hover:not(:disabled){transform:translateX(4px)!important;border-color:#4f46e5!important;background:#f5f3ff!important;box-shadow:2px 0 0 0 #4f46e5}
+  .quiz-opt:hover:not(:disabled){transform:translateX(4px)!important;border-color:#4f46e5!important;background:var(--color-hover-tint)!important;box-shadow:2px 0 0 0 #4f46e5}
   .quiz-opt:active:not(:disabled){transform:translateX(2px)!important}
   textarea:focus,input:focus{border-color:#4f46e5!important;box-shadow:0 0 0 2px #4f46e520}
   select{appearance:auto}
