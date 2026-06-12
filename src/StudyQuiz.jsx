@@ -19,6 +19,9 @@ const Q_FREE       = [5, 10, 15, 20];
 const Q_EXTRA      = [25, 30, 40, 50];
 const QUIZ_TYPES   = ["mcq","cards","fill","match"];
 const LETTERS      = ["A","B","C","D"];
+// Model for all generation/grading. Haiku 4.5: cheap + fast, plenty for
+// question writing. ($0.80/1M in, $4/1M out vs Sonnet's $3/$15.)
+const AI_MODEL     = "claude-haiku-4-5-20251001";
 const STRIPE_MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const STRIPE_YEARLY_PRICE  = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
 
@@ -125,7 +128,7 @@ async function callClaude({ blocks, numQ, diff, type }) {
 
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:maxTokens,
+    body: JSON.stringify({ model:AI_MODEL, max_tokens:maxTokens,
       system:"You are an expert educator. Return ONLY valid raw JSON, no markdown.",
       messages:[{ role:"user", content:[...blocks,{type:"text",text:prompt}] }] }),
   });
@@ -1144,7 +1147,7 @@ export default function StudyQuiz() {
       const attempt=async(scale)=>{
         const { prompt, marksMap }=buildPrompt(scale);
         const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:maxTokens,
+          body:JSON.stringify({model:AI_MODEL,max_tokens:maxTokens,
             system:"You are an expert exam setter. Return ONLY valid raw JSON, no markdown.",
             messages:[{role:"user",content:[...blocks,{type:"text",text:prompt}]}]})});
         if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||"Error "+res.status);}
@@ -1183,7 +1186,7 @@ export default function StudyQuiz() {
     const evalMaxTokens=Math.min(Math.max(writtenCount*120+1000,2000),10000);
     try{
       const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:evalMaxTokens,
+        body:JSON.stringify({model:AI_MODEL,max_tokens:evalMaxTokens,
           system:"Evaluate student exam answers. Return ONLY raw JSON.",
           messages:[{role:"user",content:[{type:"text",text:evalPrompt}]}]})});
       if(!res.ok) throw new Error("Eval error "+res.status);

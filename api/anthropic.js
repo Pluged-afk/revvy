@@ -90,8 +90,8 @@ export default async function handler(req, res) {
         } catch { /* ignore keep-alive / partial frames */ }
       }
     }
-    // Usage + cost (Sonnet 4.6: $3/1M in, $15/1M out). TRUNCATED = max_tokens hit.
-    const cost = (inTok * 3 + outTok * 15) / 1e6;
+    // Usage + cost (Haiku 4.5: $0.80/1M in, $4/1M out). TRUNCATED = max_tokens hit.
+    const cost = (inTok * 0.8 + outTok * 4) / 1e6;
     console.log(`[anthropic] usage · in=${inTok} out=${outTok} stop=${stopReason} ~$${cost.toFixed(4)}${stopReason === "max_tokens" ? " ⚠️ TRUNCATED (raise max_tokens / fewer questions)" : ""}`);
     return res.end();
   } catch (err) {
