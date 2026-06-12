@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import usePageMeta from "../lib/usePageMeta.js";
+import AdSlot from "../components/AdSlot.jsx";
 
 const FEATURES = [
   { icon: "🤖", title: "AI-Powered Questions", desc: "AI reads your material and writes accurate, exam-quality questions in seconds." },
@@ -67,6 +68,8 @@ export default function Home() {
         </div>
       </section>
 
+      <AdSlot />
+
       {/* How it works */}
       <section id="how-it-works" className="section section-soft">
         <div className="container">
@@ -130,6 +133,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <AdSlot />
 
       {/* Final CTA */}
       <section className="section">

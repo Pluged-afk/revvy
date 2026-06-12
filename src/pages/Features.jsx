@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
+import AdSlot from "../components/AdSlot.jsx";
 
 const FEATURES = [
   { icon: "📝", title: "Multiple Choice Quizzes", desc: "Classic 4-option questions, auto-graded with a clear explanation for every answer." },
@@ -57,6 +58,8 @@ export default function Features() {
           </div>
         </div>
       </section>
+
+      <AdSlot />
 
       <section className="section section-soft">
         <div className="container">

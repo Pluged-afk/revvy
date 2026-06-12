@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLang } from "../context/LanguageContext.jsx";
 import usePageMeta from "../lib/usePageMeta.js";
+import AdSlot from "../components/AdSlot.jsx";
 
 const MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const YEARLY_PRICE = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
@@ -121,6 +122,8 @@ export default function Pricing() {
           </div>
         </div>
       </section>
+
+      <AdSlot />
 
       <section className="section section-soft">
         <div className="container">

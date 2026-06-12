@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import Navbar from "./Navbar.jsx";
 import Footer from "./Footer.jsx";
+import AdPopup from "./AdPopup.jsx";
 
 // Reset scroll position whenever the route changes.
 function ScrollToTop() {
@@ -19,6 +20,7 @@ export default function SiteLayout() {
         <Outlet />
       </main>
       <Footer />
+      <AdPopup />
     </div>
   );
 }

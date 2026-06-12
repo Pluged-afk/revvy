@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
+import AdSlot from "../components/AdSlot.jsx";
 
 const VALUES = [
   { icon: "🎓", title: "Student First", desc: "Every feature is built around real study needs — not buzzwords or busywork." },
@@ -53,6 +54,8 @@ export default function About() {
           </div>
         </div>
       </section>
+
+      <AdSlot />
 
       <section className="section">
         <div className="container">
