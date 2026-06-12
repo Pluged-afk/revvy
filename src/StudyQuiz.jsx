@@ -118,9 +118,14 @@ async function callClaude({ blocks, numQ, diff, type }) {
   };
   const prompt = `Generate exactly ${numQ} study questions from the material.\nQuiz type: ${typeMap[type]}\nDifficulty: ${diff}.\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence"}]}\nMake all 4 options plausible. Vary question styles across the set.`;
 
+  // Scale output budget with the question count so big sets aren't truncated
+  // (each Q ≈ 130 tokens). Capped at 16k. max_tokens is a ceiling, not a
+  // charge — you're only billed for tokens actually generated.
+  const maxTokens = Math.min(Math.max(Math.round(numQ * 160) + 1200, 4000), 16000);
+
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:4000,
+    body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:maxTokens,
       system:"You are an expert educator. Return ONLY valid raw JSON, no markdown.",
       messages:[{ role:"user", content:[...blocks,{type:"text",text:prompt}] }] }),
   });
@@ -1099,25 +1104,33 @@ export default function StudyQuiz() {
     if(examFiles.length===0){setError("Upload at least one study file.");return;}
     if(examMode==="custom" && sectionTotalQs===0){setError("Please add at least one question to your sections.");return;}
     setError("");
-    const totN=Math.min(Math.max(parseInt(examTotalQ)||5,1),100);
     const diffLabel=t.diffOpts[diff];
-    let typeInst="";
-    const marksMap={};
-    if(examMode==="mcq") typeInst="Generate exactly "+totN+" multiple choice questions. 4 options each. Set type:\"mcq\" for all. Set \"section\":1 on every question.";
-    else if(examMode==="written") typeInst="Generate exactly "+totN+" open-ended short-answer questions. Include a model answer. Set type:\"written\", options:[] for all. Set \"section\":1 on every question.";
-    else {
-      typeInst = examSections.map((s,i)=>{
-        const n=Math.min(Math.max(parseInt(s.count)||5,1),100);
-        marksMap[i+1]=parseFloat(s.marksPerQ)||1;
-        const desc=s.type==="mcq"
-          ?n+" multiple choice questions (4 options, type:\"mcq\", correct:0-based index)"
-          :s.type==="fill"
-          ?n+" fill-in-blank questions (type:\"fill\", question MUST contain ___, answer=the exact missing word)"
-          :n+" open-ended written questions (type:\"written\", options:[])";
-        return "Section "+(i+1)+": generate exactly "+desc+". Set \"section\":" +(i+1)+" on EVERY question in this section.";
-      }).join("\n");
-    }
-    const prompt="You are creating a real graded exam.\n"+typeInst+"\nDifficulty: "+diffLabel+".\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\"}]}\nFor written/fill: options:[], correct:0. Keep questions in section order.";
+    const totalQ = examMode==="custom" ? sectionTotalQs : Math.min(Math.max(parseInt(examTotalQ)||5,1),100);
+    // Exams carry model answers/explanations → ~200 tokens/Q. Cap at 20k.
+    const maxTokens = Math.min(Math.max(Math.round(totalQ*200)+2000, 6000), 20000);
+
+    // Build the prompt; `scale` (≤1) shrinks the question counts for a retry.
+    const buildPrompt=(scale)=>{
+      const totN=Math.max(1,Math.round(Math.min(Math.max(parseInt(examTotalQ)||5,1),100)*scale));
+      let typeInst=""; const marksMap={};
+      if(examMode==="mcq") typeInst="Generate exactly "+totN+" multiple choice questions. 4 options each. Set type:\"mcq\" for all. Set \"section\":1 on every question.";
+      else if(examMode==="written") typeInst="Generate exactly "+totN+" open-ended short-answer questions. Include a model answer. Set type:\"written\", options:[] for all. Set \"section\":1 on every question.";
+      else {
+        typeInst = examSections.map((s,i)=>{
+          const n=Math.max(1,Math.round(Math.min(Math.max(parseInt(s.count)||5,1),100)*scale));
+          marksMap[i+1]=parseFloat(s.marksPerQ)||1;
+          const desc=s.type==="mcq"
+            ?n+" multiple choice questions (4 options, type:\"mcq\", correct:0-based index)"
+            :s.type==="fill"
+            ?n+" fill-in-blank questions (type:\"fill\", question MUST contain ___, answer=the exact missing word)"
+            :n+" open-ended written questions (type:\"written\", options:[])";
+          return "Section "+(i+1)+": generate exactly "+desc+". Set \"section\":" +(i+1)+" on EVERY question in this section.";
+        }).join("\n");
+      }
+      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDifficulty: "+diffLabel+".\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\"}]}\nFor written/fill: options:[], correct:0. Keep questions in section order.";
+      return { prompt, marksMap };
+    };
+
     setScreen("loading");
     try{
       // Upload each study file to the Files API → reference by file_id.
@@ -1128,13 +1141,22 @@ export default function StudyQuiz() {
           ? {type:"document",source:{type:"file",file_id:fid}}
           : {type:"image",source:{type:"file",file_id:fid}};
       }));
-      const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:6000,
-          system:"You are an expert exam setter. Return ONLY valid raw JSON, no markdown.",
-          messages:[{role:"user",content:[...blocks,{type:"text",text:prompt}]}]})});
-      if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||"Error "+res.status);}
-      const raw=stripFences(await readStream(res));
-      const parsed=JSON.parse(raw);
+      const attempt=async(scale)=>{
+        const { prompt, marksMap }=buildPrompt(scale);
+        const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:maxTokens,
+            system:"You are an expert exam setter. Return ONLY valid raw JSON, no markdown.",
+            messages:[{role:"user",content:[...blocks,{type:"text",text:prompt}]}]})});
+        if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||"Error "+res.status);}
+        return { parsed: JSON.parse(stripFences(await readStream(res))), marksMap };
+      };
+      let parsed, marksMap;
+      try { ({ parsed, marksMap }=await attempt(1)); }
+      catch(e1){
+        const truncated=/JSON|Unexpected end|Unterminated|parse/i.test(e1.message||"");
+        if(truncated && totalQ>25){ ({ parsed, marksMap }=await attempt(0.5)); }
+        else throw e1;
+      }
       if(!parsed.questions?.length) throw new Error("No questions generated");
       const annotated = parsed.questions.map(q=>({
         ...q,
@@ -1146,7 +1168,7 @@ export default function StudyQuiz() {
       setExamPaused(false); setExamTimeUp(false); setExamReview(false); setShowSubmitPrompt(false); setExamTimeExpired(false);
       setScreen("exam_run");
     }catch(err){setError(err.message.includes("parse")?"Unexpected format — please try again.":err.message);setScreen("exam_setup");}
-  },[examFiles,examMode,examSections,examTotalQ,diff,fileLimitMB,examTimerOn,examTimerMin,uploadFileToAnthropic]);
+  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic]);
 
   const evaluateExam=useCallback(async(answers)=>{
     const hasWritten=examQs.some(q=>q.type==="written");
@@ -1156,9 +1178,12 @@ export default function StudyQuiz() {
     setScreen("exam_eval");
     const writtenLines=examQs.map((q,i)=>q.type==="written"?"Q"+(i+1)+": "+q.question+"\nModel: "+(q.answer||"")+"\nStudent: \""+(answers[i]||"(no answer)")+"\"":null).filter(Boolean).join("\n\n");
     const evalPrompt="Evaluate each student written answer. Return ONLY JSON: {\"evals\":[{\"idx\":0,\"score\":1.0,\"feedback\":\"brief\"}]}\nscore: 1=correct, 0.5=partial, 0=wrong\n\n"+writtenLines;
+    // ~120 tokens of feedback per written answer; cap at 10k.
+    const writtenCount=examQs.filter(q=>q.type==="written").length;
+    const evalMaxTokens=Math.min(Math.max(writtenCount*120+1000,2000),10000);
     try{
       const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:evalMaxTokens,
           system:"Evaluate student exam answers. Return ONLY raw JSON.",
           messages:[{role:"user",content:[{type:"text",text:evalPrompt}]}]})});
       if(!res.ok) throw new Error("Eval error "+res.status);
@@ -1375,7 +1400,18 @@ export default function StudyQuiz() {
       } else {
         blocks=[{type:"text",text:`Study material:\n\n${textVal.trim()}`}];
       }
-      const res = await callClaude({blocks, numQ:finalNumQ, diff:t.diffOpts[diff], type:finalType});
+      let res;
+      try {
+        res = await callClaude({blocks, numQ:finalNumQ, diff:t.diffOpts[diff], type:finalType});
+      } catch (e1) {
+        // A truncated response yields invalid/unterminated JSON. Retry once
+        // with fewer questions so the output fits the token budget.
+        const truncated = /JSON|Unexpected end|Unterminated|parse/i.test(e1.message||"");
+        if (truncated && finalNumQ > 25) {
+          const fewer = Math.max(20, Math.min(50, Math.floor(finalNumQ/2)));
+          res = await callClaude({blocks, numQ:fewer, diff:t.diffOpts[diff], type:finalType});
+        } else throw e1;
+      }
       if (!res.questions?.length) throw new Error("No questions returned");
       setQuiz({...res, type:finalType});
       setQIdx(0); setAnswers([]); setSelected(null);
