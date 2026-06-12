@@ -40,6 +40,12 @@ function msUntil(ts)   {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+// Haptic feedback. navigator.vibrate exists only where the Vibration API is
+// implemented — Android phones/tablets. iOS Safari and virtually all desktop
+// browsers don't implement it, so this is a silent no-op there (exactly the
+// "mobile/tablets only" behaviour we want). `.on` mirrors the user setting.
+const Haptics = { on:false, buzz(ms=35){ try{ if(this.on && navigator.vibrate) navigator.vibrate(ms); }catch{ /* ignore */ } } };
+
 // ── Translations ───────────────────────────────────────────────────────
 // Strings live in ./i18n.js. `t` is resolved per-render from the `lang`
 // state inside StudyQuiz via getTranslations(lang).
@@ -293,8 +299,8 @@ function Flashcard({ q, onNext, isLast, t }) {
       </div>
       {flipped && (
         <div style={{display:"flex",gap:10,marginTop:14}} className="slide-up">
-          <button onClick={()=>{setFlipped(false);setTimeout(()=>onNext(false),200);}} style={{flex:1,background:"#fef2f2",border:"1px solid #fca5a5",color:"#b91c1c",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✗ Didn't know</button>
-          <button onClick={()=>{setFlipped(false);setTimeout(()=>onNext(true),200);}} style={{flex:1,background:"#f0fdf4",border:"1px solid #86efac",color:"#15803d",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✓ Got it</button>
+          <button onClick={()=>{Haptics.buzz();setFlipped(false);setTimeout(()=>onNext(false),200);}} style={{flex:1,background:"#fef2f2",border:"1px solid #fca5a5",color:"#b91c1c",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✗ Didn't know</button>
+          <button onClick={()=>{Haptics.buzz();setFlipped(false);setTimeout(()=>onNext(true),200);}} style={{flex:1,background:"#f0fdf4",border:"1px solid #86efac",color:"#15803d",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✓ Got it</button>
         </div>
       )}
     </div>
@@ -302,12 +308,25 @@ function Flashcard({ q, onNext, isLast, t }) {
 }
 
 // ── Fill in Blank ─────────────────────────────────────────────────────
-function FillBlank({ q, onNext, isLast, t }) {
+function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=false }) {
   const [val,setVal]         = useState("");
   const [checked,setChecked] = useState(false);
   const correct = (q.answer||"").toLowerCase().trim();
   const isRight = val.toLowerCase().trim()===correct || correct.includes(val.toLowerCase().trim().slice(0,5));
   const parts = q.question.split("___");
+  const instant = feedback==="immediate";
+  const submit = () => {
+    if(!val.trim()) return;
+    Haptics.buzz();
+    if(instant) setChecked(true);   // reveal right/wrong
+    else onNext(isRight);           // "at end": record and move on, no reveal
+  };
+  // Instant + auto-advance: once revealed, move on after a readable delay.
+  useEffect(()=>{
+    if(!checked||!autoAdvance) return;
+    const id=setTimeout(()=>onNext(isRight),1200);
+    return ()=>clearTimeout(id);
+  },[checked]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div>
       <div style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.6,marginBottom:20}}>
@@ -317,8 +336,8 @@ function FillBlank({ q, onNext, isLast, t }) {
         </span>
         {parts[1]||""}
       </div>
-      {!checked && <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&val.trim()&&setChecked(true)} placeholder={t.typeIn} style={{width:"100%",borderRadius:12,border:"1.5px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"12px 14px",fontFamily:"inherit",outline:"none",boxSizing:"border-box",marginBottom:10}}/>}
-      {!checked && <button disabled={!val.trim()} onClick={()=>setChecked(true)} style={{...Sb.btnPrimary,width:"100%",opacity:val.trim()?1:0.35}}>{t.check}</button>}
+      {!checked && <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder={t.typeIn} style={{width:"100%",borderRadius:12,border:"1.5px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"12px 14px",fontFamily:"inherit",outline:"none",boxSizing:"border-box",marginBottom:10}}/>}
+      {!checked && <button disabled={!val.trim()} onClick={submit} style={{...Sb.btnPrimary,width:"100%",opacity:val.trim()?1:0.35}}>{instant?t.check:(isLast?t.finish:t.next)}</button>}
       {checked && (
         <div style={{borderRadius:10,padding:"12px 14px",background:isRight?"#f0fdf4":"#fef2f2",border:`0.5px solid ${isRight?"#86efac":"#fca5a5"}`,color:isRight?"#15803d":"#b91c1c",marginBottom:14}} className="slide-up">
           <strong>{isRight?t.correct:t.incorrect}</strong>
@@ -326,7 +345,7 @@ function FillBlank({ q, onNext, isLast, t }) {
           {q.explanation && <p style={{margin:"6px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p>}
         </div>
       )}
-      {checked && <button onClick={()=>onNext(isRight)} style={{...Sb.btnPrimary,width:"100%"}}>{isLast?t.finish:t.next}</button>}
+      {checked && !autoAdvance && <button onClick={()=>onNext(isRight)} style={{...Sb.btnPrimary,width:"100%"}}>{isLast?t.finish:t.next}</button>}
     </div>
   );
 }
@@ -352,6 +371,7 @@ function MatchQuiz({ questions, onDone, t }) {
   const pickTerm = i => { if(checked||matches[i]!==undefined)return; setSel(s=>s===i?null:i); };
   const pickDef  = i => {
     if(checked||defUsed[i]||sel===null)return;
+    Haptics.buzz();
     const n = Object.keys(matches).length + 1; // next free pair number
     setPairNo(p=>({...p,[sel]:n}));
     setMatches(m=>({...m,[sel]:i})); setDefUsed(d=>({...d,[i]:true})); setSel(null);
@@ -958,6 +978,7 @@ export default function StudyQuiz() {
 
   useEffect(()=>{ SoundEngine.setVolume(settings.volume); },[settings.volume]);
   useEffect(()=>{ setSoundOn(settings.sound); },[settings.sound]);
+  useEffect(()=>{ Haptics.on = settings.haptics; },[settings.haptics]);
 
   // ── Theme injection into document.head ──
   // "system" resolves to light/dark via prefers-color-scheme so the CSS
@@ -985,6 +1006,23 @@ export default function StudyQuiz() {
     if(settings.animations) document.body.classList.remove("no-anim");
     else document.body.classList.add("no-anim");
   },[settings.animations]);
+
+  // Auto-advance (normal MCQ quiz only — exam mode is separate): once an answer
+  // is picked, move to the next question after a short delay. The delay is a
+  // touch longer with instant feedback so the result is readable first.
+  useEffect(()=>{
+    if(screen!=="quiz"||!quiz||quiz.type!=="mcq") return;
+    if(!settings.autoAdvance||selected===null) return;
+    const isCorrect = selected===quiz.questions[qIdx]?.correct;
+    const delay = settings.feedback==="immediate" ? 1050 : 450;
+    const id=setTimeout(()=>{
+      setAnswers(a=>[...a,{isCorrect}]);
+      setSelected(null);
+      if(qIdx+1>=quiz.questions.length) setScreen("results");
+      else setQIdx(i=>i+1);
+    },delay);
+    return ()=>clearTimeout(id);
+  },[selected,screen,quiz,qIdx,settings.autoAdvance,settings.feedback]);
 
   const updateSetting = (key,val) => {
     setSettings(prev=>{
@@ -1389,9 +1427,7 @@ export default function StudyQuiz() {
   };
   const updateDraft = (key,val) => setSettingsDraft(prev=>({...prev,[key]:val}));
 
-  const haptic = (ms=40) => {
-    if (settings.haptics && navigator.vibrate) navigator.vibrate(ms);
-  };
+  const haptic = (ms=35) => Haptics.buzz(ms);
 
   const processFile = useCallback(async (f, limitMB) => {
     const isPdf=f.type==="application/pdf", isImg=f.type.startsWith("image/"), isTxt=f.type.startsWith("text/")||/\.(txt|md|csv)$/i.test(f.name);
@@ -1466,7 +1502,7 @@ export default function StudyQuiz() {
     }
   },[isPro,dailyUsed,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,adWatchedDate,adUnlocked,saveState,uploadFileToAnthropic]);
 
-  const pick    = i => { if(selected===null) setSelected(i); };
+  const pick    = i => { if(selected===null){ setSelected(i); haptic(); } };
   const nextQ   = isCorrect => {
     const upd=[...answers,{isCorrect}]; setAnswers(upd); setSelected(null);
     if (qIdx+1>=quiz.questions.length) setScreen("results");
@@ -1666,6 +1702,7 @@ export default function StudyQuiz() {
   // ── QUIZ ─────────────────────────────────────────────────────────
   if (screen==="quiz" && quiz) {
     const q=quiz.questions[qIdx], isLast=qIdx+1===quiz.questions.length;
+    const instant = settings.feedback==="immediate"; // false = reveal only at end
     if (quiz.type==="match") return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
@@ -1691,7 +1728,7 @@ export default function StudyQuiz() {
             <span style={{background:"#ede9fe",color:"#4f46e5",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.quizTypes[quiz.type]}</span>
           </div>
           {quiz.type==="cards"&&<Flashcard key={qIdx} q={q} isLast={isLast} t={t} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
-          {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
+          {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} feedback={settings.feedback} autoAdvance={settings.autoAdvance} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="mcq"  &&(
             <>
               <h3 style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}</h3>
@@ -1699,17 +1736,22 @@ export default function StudyQuiz() {
                 {q.options.map((opt,i)=>{
                   const isChosen=selected===i,isCorrect=q.correct===i;
                   let extra={};
-                  if(selected!==null){if(isCorrect)extra={border:"1.5px solid #22c55e",background:"#f0fdf4",color:"#15803d"};else if(isChosen)extra={border:"1.5px solid #ef4444",background:"#fef2f2",color:"#b91c1c"};else extra={opacity:0.45};}
-                  else if(isChosen)extra={border:"1.5px solid #4f46e5",background:"#ede9fe"};
+                  if(selected!==null){
+                    // Instant: reveal right/wrong. At-end: just mark the picked
+                    // option (no correctness shown until the results review).
+                    if(instant){if(isCorrect)extra={border:"1.5px solid #22c55e",background:"#f0fdf4",color:"#15803d"};else if(isChosen)extra={border:"1.5px solid #ef4444",background:"#fef2f2",color:"#b91c1c"};else extra={opacity:0.45};}
+                    else if(isChosen)extra={border:"1.5px solid #4f46e5",background:"var(--color-sel-tint)"};
+                    else extra={opacity:0.55};
+                  }
                   return <button key={i} onClick={()=>pick(i)} disabled={selected!==null} className={selected===null?"quiz-opt":""} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"13px 14px",cursor:selected!==null?"default":"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",transition:"all 0.18s",...extra}}>
                     <span style={{width:28,height:28,borderRadius:"50%",background:"var(--color-background-secondary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{LETTERS[i]}</span>
                     <span style={{flex:1,textAlign:"left",lineHeight:1.4}}>{opt}</span>
-                    {selected!==null&&isCorrect&&"✅"}{selected!==null&&isChosen&&!isCorrect&&"❌"}
+                    {instant&&selected!==null&&isCorrect&&"✅"}{instant&&selected!==null&&isChosen&&!isCorrect&&"❌"}
                   </button>;
                 })}
               </div>
-              {selected!==null&&settings.feedback==="immediate"&&<div style={{borderRadius:10,padding:"12px 14px",marginTop:14,...(selected===q.correct?{background:"#f0fdf4",border:"0.5px solid #86efac",color:"#15803d"}:{background:"#fef2f2",border:"0.5px solid #fca5a5",color:"#b91c1c"})}} className="slide-up"><strong style={{fontSize:14}}>{selected===q.correct?t.correct:t.incorrect}</strong><p style={{margin:"5px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p></div>}
-              <button style={{...Sb.btnPrimary,width:"100%",marginTop:20,opacity:selected===null?0.35:1,cursor:selected===null?"not-allowed":"pointer"}} onClick={nextMCQ} disabled={selected===null}>{isLast?t.finish:t.next}</button>
+              {selected!==null&&instant&&<div style={{borderRadius:10,padding:"12px 14px",marginTop:14,...(selected===q.correct?{background:"#f0fdf4",border:"0.5px solid #86efac",color:"#15803d"}:{background:"#fef2f2",border:"0.5px solid #fca5a5",color:"#b91c1c"})}} className="slide-up"><strong style={{fontSize:14}}>{selected===q.correct?t.correct:t.incorrect}</strong><p style={{margin:"5px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p></div>}
+              {!settings.autoAdvance && <button style={{...Sb.btnPrimary,width:"100%",marginTop:20,opacity:selected===null?0.35:1,cursor:selected===null?"not-allowed":"pointer"}} onClick={nextMCQ} disabled={selected===null}>{isLast?t.finish:t.next}</button>}
             </>
           )}
         </div>
