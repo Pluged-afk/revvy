@@ -1179,25 +1179,38 @@ export default function StudyQuiz() {
       return examQs.map((q,i)=>q.type==="mcq"?{score:answers[i]===q.correct?1:0,feedback:answers[i]===q.correct?"Correct!":"Incorrect."}:{score:0,feedback:""});
     }
     setScreen("exam_eval");
-    const writtenLines=examQs.map((q,i)=>q.type==="written"?"Q"+(i+1)+": "+q.question+"\nModel: "+(q.answer||"")+"\nStudent: \""+(answers[i]||"(no answer)")+"\"":null).filter(Boolean).join("\n\n");
-    const evalPrompt="Evaluate each student written answer. Return ONLY JSON: {\"evals\":[{\"idx\":0,\"score\":1.0,\"feedback\":\"brief\"}]}\nscore: 1=correct, 0.5=partial, 0=wrong\n\n"+writtenLines;
+    // Number the written answers 1..N in their own sequence (NOT the full
+    // question index, which counts MCQs too). A dedicated 1-based "n" keeps the
+    // model's mapping unambiguous so feedback can't land on the wrong question.
+    const writtenIdxs=examQs.map((q,i)=>q.type==="written"?i:null).filter(x=>x!==null);
+    const writtenLines=writtenIdxs.map((qi,k)=>
+      "Answer #"+(k+1)+"\nQuestion: "+examQs[qi].question+
+      "\nModel answer: "+(examQs[qi].answer||"(none provided)")+
+      "\nStudent answer: \""+(answers[qi]||"(no answer)")+"\""
+    ).join("\n\n");
+    const evalPrompt=
+      "Grade the "+writtenIdxs.length+" written answers below, numbered #1 to #"+writtenIdxs.length+". "+
+      "Grade each student answer ONLY against the question and model answer under the SAME number — never carry over or mix answers between numbers. "+
+      "Each feedback must refer to that one answer only.\n"+
+      "Return ONLY JSON: {\"evals\":[{\"n\":1,\"score\":1.0,\"feedback\":\"brief\"}]} with exactly one entry per number, in order.\n"+
+      "score: 1=correct, 0.5=partial, 0=wrong.\n\n"+writtenLines;
     // ~120 tokens of feedback per written answer; cap at 10k.
-    const writtenCount=examQs.filter(q=>q.type==="written").length;
-    const evalMaxTokens=Math.min(Math.max(writtenCount*120+1000,2000),10000);
+    const evalMaxTokens=Math.min(Math.max(writtenIdxs.length*120+1000,2000),10000);
     try{
       const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:AI_MODEL,max_tokens:evalMaxTokens,
           system:"Evaluate student exam answers. Return ONLY raw JSON.",
           messages:[{role:"user",content:[{type:"text",text:evalPrompt}]}]})});
       if(!res.ok) throw new Error("Eval error "+res.status);
-      const raw=stripFences(await readStream(res));
-      const parsed=JSON.parse(raw);
-      const writtenIdxs=examQs.map((q,i)=>q.type==="written"?i:null).filter(x=>x!==null);
+      const parsed=JSON.parse(stripFences(await readStream(res)));
+      const evals=Array.isArray(parsed.evals)?parsed.evals:[];
+      const clamp=s=>{const n=Number(s);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):0;};
       return examQs.map((q,i)=>{
         if(q.type==="mcq") return{score:answers[i]===q.correct?1:0,feedback:answers[i]===q.correct?"Correct!":"Incorrect."};
-        const rank=writtenIdxs.indexOf(i);
-        const ev=parsed.evals.find(e=>e.idx===i)||parsed.evals[rank];
-        return ev?{score:ev.score,feedback:ev.feedback}:{score:0,feedback:"Not evaluated"};
+        const rank=writtenIdxs.indexOf(i); // 0-based position among written answers
+        // Match on the answer's own 1-based number; fall back to positional order.
+        const ev=evals.find(e=>Number(e.n)===rank+1) ?? evals[rank];
+        return ev?{score:clamp(ev.score),feedback:ev.feedback||""}:{score:0,feedback:"Not evaluated"};
       });
     }catch{return examQs.map((q,i)=>({score:q.type==="mcq"?(answers[i]===q.correct?1:0):0,feedback:""}));}
   },[examQs]);
