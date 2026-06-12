@@ -184,6 +184,20 @@ function PBar({ v, max }) {
   return <div style={{height:4,background:"var(--color-border-tertiary)",borderRadius:2}}><div style={{height:"100%",borderRadius:2,background:"#4f46e5",width:`${(v/max)*100}%`,transition:"width 0.35s"}}/></div>;
 }
 
+// Sliding countdown bar shown while auto-advance waits before the next
+// question. Fills 0→100% over `sec` seconds via CSS animation. The `runId`
+// key restarts the animation cleanly on each new question.
+function AutoAdvanceBar({ sec, runId, t }) {
+  return (
+    <div style={{marginTop:16}}>
+      <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,textAlign:"center"}}>{t?.autoAdvancing||"Next question in a moment…"}</div>
+      <div style={{height:4,background:"var(--color-border-tertiary)",borderRadius:2,overflow:"hidden"}}>
+        <div key={runId} style={{height:"100%",background:"#4f46e5",borderRadius:2,animation:`rvAutoBar ${sec}s linear forwards`}}/>
+      </div>
+    </div>
+  );
+}
+
 function Chip({ label, active, onClick, locked, small }) {
   return (
     <button onClick={onClick} style={{
@@ -308,7 +322,7 @@ function Flashcard({ q, onNext, isLast, t }) {
 }
 
 // ── Fill in Blank ─────────────────────────────────────────────────────
-function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=false }) {
+function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=false, autoSec=5 }) {
   const [val,setVal]         = useState("");
   const [checked,setChecked] = useState(false);
   const correct = (q.answer||"").toLowerCase().trim();
@@ -321,10 +335,10 @@ function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=fal
     if(instant) setChecked(true);   // reveal right/wrong
     else onNext(isRight);           // "at end": record and move on, no reveal
   };
-  // Instant + auto-advance: once revealed, move on after a readable delay.
+  // Instant + auto-advance: once revealed, move on after the configured delay.
   useEffect(()=>{
     if(!checked||!autoAdvance) return;
-    const id=setTimeout(()=>onNext(isRight),1200);
+    const id=setTimeout(()=>onNext(isRight),autoSec*1000);
     return ()=>clearTimeout(id);
   },[checked]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
@@ -345,7 +359,8 @@ function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=fal
           {q.explanation && <p style={{margin:"6px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p>}
         </div>
       )}
-      {checked && !autoAdvance && <button onClick={()=>onNext(isRight)} style={{...Sb.btnPrimary,width:"100%"}}>{isLast?t.finish:t.next}</button>}
+      {checked && autoAdvance && <AutoAdvanceBar sec={autoSec} runId={q.question} t={t}/>}
+      {checked && <button onClick={()=>onNext(isRight)} style={{...Sb.btnPrimary,width:"100%",marginTop:autoAdvance?12:0}}>{autoAdvance?(t.skip||t.next):(isLast?t.finish:t.next)}</button>}
     </div>
   );
 }
@@ -519,7 +534,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
   };
   if (!draft) return null;
   const DEFAULTS = {theme:'system',fontSize:'medium',animations:true,sound:true,
-    volume:70,haptics:false,feedback:'immediate',autoAdvance:false,defaultDiff:1,defaultQCount:10};
+    volume:70,haptics:false,feedback:'immediate',autoAdvance:false,autoAdvanceSec:5,defaultDiff:1,defaultQCount:10};
   return (
     <div style={{position:"fixed",inset:0,zIndex:600,display:"flex",pointerEvents:"all"}}>
       <div onClick={onCancel} style={{flex:1,background:"rgba(0,0,0,0.45)",backdropFilter:"blur(1px)"}}/>
@@ -580,6 +595,17 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           <SettingRow label={s.autoAdvance} desc={s.autoAdvanceDesc}>
             <Toggle on={draft.autoAdvance} onChange={v=>update("autoAdvance",v)}/>
           </SettingRow>
+          {draft.autoAdvance && (
+            <SettingRow label={s.autoAdvanceTime+"  "+(draft.autoAdvanceSec||5)+"s"} desc={s.autoAdvanceTimeDesc}>
+              <div style={{display:"flex",alignItems:"center",gap:6,width:130}}>
+                <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>1s</span>
+                <input type="range" min={1} max={15} step={1} value={draft.autoAdvanceSec||5}
+                  onChange={e=>update("autoAdvanceSec",parseInt(e.target.value))}
+                  style={{flex:1,accentColor:"#4f46e5",cursor:"pointer"}}/>
+                <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>15s</span>
+              </div>
+            </SettingRow>
+          )}
           <SettingRow label={s.defaultDiff} desc={s.defaultDiffDesc}>
             <Seg options={[["0",s.segEasy],["1",s.segMed],["2",s.segHard]]} value={String(draft.defaultDiff)} onChange={v=>update("defaultDiff",parseInt(v))}/>
           </SettingRow>
@@ -942,6 +968,7 @@ export default function StudyQuiz() {
     haptics:false,
     feedback:'immediate',
     autoAdvance:false,
+    autoAdvanceSec:5,
     defaultDiff:1,
     defaultQCount:10,
   });
@@ -1007,14 +1034,17 @@ export default function StudyQuiz() {
     else document.body.classList.add("no-anim");
   },[settings.animations]);
 
+  const autoAdvanceSec = Math.min(Math.max(parseInt(settings.autoAdvanceSec)||5,1),15);
   // Auto-advance (normal MCQ quiz only — exam mode is separate): once an answer
-  // is picked, move to the next question after a short delay. The delay is a
-  // touch longer with instant feedback so the result is readable first.
+  // is picked, move to the next question. With instant feedback we wait the
+  // user-configured time (default 5s, up to 15s) so the result is readable and
+  // a progress bar can count down; "at end" mode has nothing to read, so it
+  // flips quickly.
   useEffect(()=>{
     if(screen!=="quiz"||!quiz||quiz.type!=="mcq") return;
     if(!settings.autoAdvance||selected===null) return;
     const isCorrect = selected===quiz.questions[qIdx]?.correct;
-    const delay = settings.feedback==="immediate" ? 1050 : 450;
+    const delay = settings.feedback==="immediate" ? autoAdvanceSec*1000 : 450;
     const id=setTimeout(()=>{
       setAnswers(a=>[...a,{isCorrect}]);
       setSelected(null);
@@ -1022,7 +1052,7 @@ export default function StudyQuiz() {
       else setQIdx(i=>i+1);
     },delay);
     return ()=>clearTimeout(id);
-  },[selected,screen,quiz,qIdx,settings.autoAdvance,settings.feedback]);
+  },[selected,screen,quiz,qIdx,settings.autoAdvance,settings.feedback,autoAdvanceSec]);
 
   const updateSetting = (key,val) => {
     setSettings(prev=>{
@@ -1728,7 +1758,7 @@ export default function StudyQuiz() {
             <span style={{background:"#ede9fe",color:"#4f46e5",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.quizTypes[quiz.type]}</span>
           </div>
           {quiz.type==="cards"&&<Flashcard key={qIdx} q={q} isLast={isLast} t={t} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
-          {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} feedback={settings.feedback} autoAdvance={settings.autoAdvance} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
+          {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} feedback={settings.feedback} autoAdvance={settings.autoAdvance} autoSec={autoAdvanceSec} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="mcq"  &&(
             <>
               <h3 style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}</h3>
@@ -1751,7 +1781,8 @@ export default function StudyQuiz() {
                 })}
               </div>
               {selected!==null&&instant&&<div style={{borderRadius:10,padding:"12px 14px",marginTop:14,...(selected===q.correct?{background:"#f0fdf4",border:"0.5px solid #86efac",color:"#15803d"}:{background:"#fef2f2",border:"0.5px solid #fca5a5",color:"#b91c1c"})}} className="slide-up"><strong style={{fontSize:14}}>{selected===q.correct?t.correct:t.incorrect}</strong><p style={{margin:"5px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p></div>}
-              {!settings.autoAdvance && <button style={{...Sb.btnPrimary,width:"100%",marginTop:20,opacity:selected===null?0.35:1,cursor:selected===null?"not-allowed":"pointer"}} onClick={nextMCQ} disabled={selected===null}>{isLast?t.finish:t.next}</button>}
+              {settings.autoAdvance && instant && selected!==null && <AutoAdvanceBar sec={autoAdvanceSec} runId={qIdx} t={t}/>}
+              {(!settings.autoAdvance || instant) && <button style={{...Sb.btnPrimary,width:"100%",marginTop:settings.autoAdvance?12:20,opacity:selected===null?0.35:1,cursor:selected===null?"not-allowed":"pointer"}} onClick={nextMCQ} disabled={selected===null}>{settings.autoAdvance?t.skip||t.next:(isLast?t.finish:t.next)}</button>}
             </>
           )}
         </div>
@@ -2213,6 +2244,7 @@ const CSS = `
   @keyframes slideFromRight{from{transform:translateX(100%)}to{transform:translateX(0)}}
   @keyframes rvTimerFlash{0%,100%{opacity:1}50%{opacity:0.25}}
   .rv-timer-flash{animation:rvTimerFlash 1s steps(1) infinite}
+  @keyframes rvAutoBar{from{width:0%}to{width:100%}}
   .settings-panel{animation:slideFromRight 0.22s ease}
   ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--color-border-secondary);border-radius:2px}
 

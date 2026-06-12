@@ -22,7 +22,7 @@ export const LANGS = {
 };
 
 const T_EN = {
-  appName:"Revyy", mainSite:"Main site", tagline:"Turn any material into a quiz",
+  appName:"Revyy", mainSite:"Main site", skip:"Skip →", autoAdvancing:"Next question in a moment…", tagline:"Turn any material into a quiz",
   sub:"Upload a PDF, paste notes, take a photo — Revyy builds your quiz in seconds.", start:"Get started →",
   whatUpload:"WHAT YOU CAN UPLOAD",
   features:[
@@ -118,7 +118,8 @@ const T_EN = {
     volume:"Volume", volumeNeedSound:"Enable sound first",
     vibration:"Vibration", vibrationDesc:"Android only — not available on iOS",
     feedback:"Answer Feedback", feedbackImmediate:"Correct/wrong shown immediately after each pick", feedbackEnd:"All answers revealed only at the final results screen", segInstant:"Instant", segAtEnd:"At End",
-    autoAdvance:"Auto-advance", autoAdvanceDesc:"Moves to next question 1 second after answering",
+    autoAdvance:"Auto-advance", autoAdvanceDesc:"Moves to the next question automatically after you answer",
+    autoAdvanceTime:"Auto-advance time", autoAdvanceTimeDesc:"How long to wait before the next question (instant feedback)",
     defaultDiff:"Default Difficulty", defaultDiffDesc:"Starting difficulty when opening a new quiz", segEasy:"Easy", segMed:"Med", segHard:"Hard",
     defaultQ:"Default Questions", defaultQDesc:"Starting question count for new quizzes",
     comingTitle:"💡 More settings coming", comingDesc:"Account sync, quiz history, and shared quizzes arrive when accounts go live.",
