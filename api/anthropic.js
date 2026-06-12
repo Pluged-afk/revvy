@@ -2,8 +2,11 @@
 //
 // The browser must NEVER hold the Anthropic key, and api.anthropic.com does
 // not allow direct browser calls (CORS). So the quiz-app sends its request
-// body here and this function adds the secret key + version header and
-// forwards it, returning Anthropic's JSON response unchanged.
+// body here, this function adds the secret key + version header, requests a
+// STREAM from Anthropic, and pipes the assembled text back to the client as it
+// arrives. Streaming keeps the connection alive on long generations (large
+// PDFs / high max_tokens) so the gateway doesn't 504. The client accumulates
+// the full text and only renders once it's complete — no partial UI.
 //
 // Requires ANTHROPIC_API_KEY in the server environment (Vercel → Settings →
 // Environment Variables — NOT prefixed with VITE_).
@@ -40,19 +43,51 @@ export default async function handler(req, res) {
         // Allows messages to reference uploaded files via source.type "file".
         "anthropic-beta": "files-api-2025-04-14",
       },
-      body: JSON.stringify({ model, max_tokens, system, messages }),
+      body: JSON.stringify({ model, max_tokens, system, messages, stream: true }),
     });
-    const data = await upstream.json().catch(() => ({}));
+
+    // Errors (bad model, auth, oversized, etc.) come back before the stream —
+    // return them as JSON so the client's !res.ok branch can read the message.
     if (!upstream.ok) {
-      // Surface the real Anthropic error in the server logs (Vercel → Logs).
-      console.error(
-        `[anthropic] ${upstream.status} for model "${model}":`,
-        JSON.stringify(data?.error || data)
-      );
+      const errJson = await upstream.json().catch(() => ({}));
+      console.error(`[anthropic] ${upstream.status} for model "${model}":`, JSON.stringify(errJson?.error || errJson));
+      return res.status(upstream.status).json(errJson?.error ? errJson : { error: { message: `Error ${upstream.status}` } });
     }
-    return res.status(upstream.status).json(data);
+
+    // Stream the assembled text (concatenated text deltas) to the client.
+    res.status(200);
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    const reader = upstream.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+        try {
+          const ev = JSON.parse(payload);
+          if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
+            res.write(ev.delta.text);
+          } else if (ev.type === "error") {
+            console.error("[anthropic] stream error:", JSON.stringify(ev.error));
+          }
+        } catch { /* ignore keep-alive / partial frames */ }
+      }
+    }
+    return res.end();
   } catch (err) {
     console.error("[anthropic] proxy request threw:", err?.message || err);
+    if (res.headersSent) return res.end();
     return res.status(502).json({ error: { message: err.message || "Upstream request failed." } });
   }
 }

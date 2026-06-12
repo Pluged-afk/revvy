@@ -125,10 +125,21 @@ async function callClaude({ blocks, numQ, diff, type }) {
       messages:[{ role:"user", content:[...blocks,{type:"text",text:prompt}] }] }),
   });
   if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`Error ${res.status}`); }
-  const data = await res.json();
-  const raw = data.content.map(b=>b.text||"").join("").trim()
-    .replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/\s*```$/i,"").trim();
+  const raw = stripFences(await readStream(res));
   return JSON.parse(raw);
+}
+
+// Read the streamed plain-text response from /api/anthropic into one string.
+async function readStream(res) {
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let out = "";
+  for (;;) { const { done, value } = await reader.read(); if (done) break; out += dec.decode(value, { stream: true }); }
+  out += dec.decode();
+  return out;
+}
+function stripFences(t) {
+  return (t||"").trim().replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/\s*```$/i,"").trim();
 }
 
 function readText(f)   { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error("Read failed")); r.readAsText(f); }); }
@@ -1122,8 +1133,7 @@ export default function StudyQuiz() {
           system:"You are an expert exam setter. Return ONLY valid raw JSON, no markdown.",
           messages:[{role:"user",content:[...blocks,{type:"text",text:prompt}]}]})});
       if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||"Error "+res.status);}
-      const data=await res.json();
-      const raw=data.content.map(b=>b.text||"").join("").trim().replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/\s*```$/i,"").trim();
+      const raw=stripFences(await readStream(res));
       const parsed=JSON.parse(raw);
       if(!parsed.questions?.length) throw new Error("No questions generated");
       const annotated = parsed.questions.map(q=>({
@@ -1151,8 +1161,8 @@ export default function StudyQuiz() {
         body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,
           system:"Evaluate student exam answers. Return ONLY raw JSON.",
           messages:[{role:"user",content:[{type:"text",text:evalPrompt}]}]})});
-      const data=await res.json();
-      const raw=data.content.map(b=>b.text||"").join("").trim().replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/\s*```$/i,"").trim();
+      if(!res.ok) throw new Error("Eval error "+res.status);
+      const raw=stripFences(await readStream(res));
       const parsed=JSON.parse(raw);
       const writtenIdxs=examQs.map((q,i)=>q.type==="written"?i:null).filter(x=>x!==null);
       return examQs.map((q,i)=>{
