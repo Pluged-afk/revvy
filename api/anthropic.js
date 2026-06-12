@@ -63,6 +63,7 @@ export default async function handler(req, res) {
     const reader = upstream.body.getReader();
     const decoder = new TextDecoder();
     let buf = "";
+    let inTok = 0, outTok = 0, stopReason = null;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -78,12 +79,20 @@ export default async function handler(req, res) {
           const ev = JSON.parse(payload);
           if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
             res.write(ev.delta.text);
+          } else if (ev.type === "message_start") {
+            inTok = ev.message?.usage?.input_tokens ?? inTok;
+          } else if (ev.type === "message_delta") {
+            if (ev.usage?.output_tokens != null) outTok = ev.usage.output_tokens;
+            if (ev.delta?.stop_reason) stopReason = ev.delta.stop_reason;
           } else if (ev.type === "error") {
             console.error("[anthropic] stream error:", JSON.stringify(ev.error));
           }
         } catch { /* ignore keep-alive / partial frames */ }
       }
     }
+    // Usage + cost (Sonnet 4.6: $3/1M in, $15/1M out). TRUNCATED = max_tokens hit.
+    const cost = (inTok * 3 + outTok * 15) / 1e6;
+    console.log(`[anthropic] usage · in=${inTok} out=${outTok} stop=${stopReason} ~$${cost.toFixed(4)}${stopReason === "max_tokens" ? " ⚠️ TRUNCATED (raise max_tokens / fewer questions)" : ""}`);
     return res.end();
   } catch (err) {
     console.error("[anthropic] proxy request threw:", err?.message || err);
