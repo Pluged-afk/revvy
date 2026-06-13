@@ -77,6 +77,24 @@ export default async function handler(req, res) {
     switch (event.type) {
       case "checkout.session.completed": {
         const s = event.data.object;
+        // One-time question-pack purchase → credit bonus, do NOT touch is_pro.
+        if (s.mode === "payment" || s.metadata?.type === "question_pack") {
+          const qty = parseInt(s.metadata?.questions, 10) || 0;
+          const uid = s.client_reference_id || s.metadata?.clerk_user_id || null;
+          if (qty > 0 && uid) {
+            try {
+              const rows = await sql`
+                UPDATE profiles SET bonus_questions_remaining = COALESCE(bonus_questions_remaining, 0) + ${qty}
+                WHERE clerk_user_id = ${uid} OR id = ${uid}
+                RETURNING id, bonus_questions_remaining`;
+              console.log(`[webhook] pack: +${qty} bonus for ${uid} → ${rows.length} row(s)`);
+            } catch (e) { console.error("[webhook] pack credit failed:", e.message); }
+          } else {
+            console.warn("[webhook] pack: missing qty/uid", JSON.stringify(s.metadata));
+          }
+          break;
+        }
+        // Subscription checkout → activate Pro.
         await apply({
           isPro: true,
           userId: s.client_reference_id || s.metadata?.clerk_user_id || null,

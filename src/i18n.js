@@ -23,7 +23,9 @@ export const LANGS = {
 
 const T_EN = {
   appName:"Revyy", mainSite:"Main site", skip:"Skip →", autoAdvancing:"Next question in a moment…",
-  customAmount:"Custom amount", customAmountHint:"Type any number from 1 to 100", tagline:"Turn any material into a quiz",
+  customAmount:"Custom amount", customAmountHint:"Type any number from 1 to 100",
+  questionsLeftToday:"questions left today", used:"used", bonusWord:"bonus", maxPerQuiz:"Max {n}/quiz", loadingAd:"Loading ad…", watchAdForQuestions:"Watch ad for +{n} questions",
+  tagline:"Turn any material into a quiz",
   sub:"Upload a PDF, paste notes, take a photo — Revyy builds your quiz in seconds.", start:"Get started →",
   whatUpload:"WHAT YOU CAN UPLOAD",
   features:[
@@ -123,6 +125,8 @@ const T_EN = {
     autoAdvanceTime:"Auto-advance time", autoAdvanceTimeDesc:"How long to wait before the next question (instant feedback)",
     defaultDiff:"Default Difficulty", defaultDiffDesc:"Starting difficulty when opening a new quiz", segEasy:"Easy", segMed:"Med", segHard:"Hard",
     defaultQ:"Default Questions", defaultQDesc:"Starting question count for new quizzes",
+    secUsage:"USAGE", usageToday:"Questions today", leftWord:"left", usageBonus:"Bonus questions", usageAdWatches:"Ad watches today",
+    loadingAd:"Loading ad…", watchAdForQuestions:"Watch ad for +{n} questions", upgradeForMore:"Upgrade to Pro — 250 questions/day", buyPacks:"Question packs", questionsWord:"questions", buyBtn:"Buy",
     comingTitle:"💡 More settings coming", comingDesc:"Account sync, quiz history, and shared quizzes arrive when accounts go live.",
     resetAll:"Reset all to defaults",
     proActive:"ACTIVE", planWord:"Plan", nextBilling:"Next billing date",

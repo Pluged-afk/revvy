@@ -7,6 +7,12 @@ const AuthContext = createContext(null);
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);
 
+// Placeholder ad — stands in for a real rewarded-ad SDK. Resolves after a
+// short simulated "watch"; swap this out when a real ad provider is wired in.
+function simulateAdWatch() {
+  return new Promise((resolve) => setTimeout(resolve, 1200));
+}
+
 export function AuthProvider({ children }) {
   const { isLoaded, isSignedIn, user: clerkUser } = useUser();
   const { signOut: clerkSignOut, getToken } = useClerkAuth();
@@ -18,6 +24,7 @@ export function AuthProvider({ children }) {
   const [periodEnd, setPeriodEnd] = useState(null);
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [usage, setUsage] = useState(null); // question-limit state from /api/usage
 
   // Normalized user object the rest of the app expects ({ id, email }).
   const user = useMemo(() => {
@@ -57,6 +64,19 @@ export function AuthProvider({ children }) {
     }
   }, [getToken]);
 
+  // Read question-usage state (token-verified server-side).
+  const refreshUsage = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token) return null;
+      const res = await fetch("/api/usage", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return null;
+      const u = await res.json();
+      setUsage(u);
+      return u;
+    } catch { return null; }
+  }, [getToken]);
+
   // On sign-in: ensure a profile row exists, then load it.
   useEffect(() => {
     if (!isLoaded) return;
@@ -75,10 +95,11 @@ export function AuthProvider({ children }) {
         });
       } catch { /* non-fatal */ }
       await loadProfile();
+      await refreshUsage();
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [isLoaded, isSignedIn, clerkUser, loadProfile]);
+  }, [isLoaded, isSignedIn, clerkUser, loadProfile, refreshUsage]);
 
   const signOut = useCallback(() => clerkSignOut(), [clerkSignOut]);
 
@@ -87,6 +108,56 @@ export function AuthProvider({ children }) {
     if (!clerkUser?.id) return false;
     return await loadProfile();
   }, [clerkUser, loadProfile]);
+
+  // Consume N questions before a quiz is generated. Returns {allowed, ...usage}.
+  const consumeQuestions = useCallback(async (count) => {
+    try {
+      const token = await getToken();
+      if (!token) return { allowed: false, error: "Not signed in." };
+      const res = await fetch("/api/usage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "consume", count }),
+      });
+      const u = await res.json().catch(() => ({}));
+      if (u && typeof u.remaining === "number") setUsage(u);
+      return u;
+    } catch (e) { return { allowed: true, error: e.message }; } // fail-open on infra error
+  }, [getToken]);
+
+  // Free users: watch a (placeholder) ad to add to today's allowance.
+  const watchAd = useCallback(async () => {
+    await simulateAdWatch();
+    try {
+      const token = await getToken();
+      if (!token) return { allowed: false };
+      const res = await fetch("/api/usage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "watch-ad" }),
+      });
+      const u = await res.json().catch(() => ({}));
+      if (u && typeof u.remaining === "number") setUsage(u);
+      return u;
+    } catch (e) { return { allowed: false, error: e.message }; }
+  }, [getToken]);
+
+  // Pro users: buy a question pack (one-time). Redirects to Stripe Checkout.
+  const buyPack = useCallback(async (pack) => {
+    try {
+      const token = await getToken();
+      if (!token) return { error: "Please sign in first." };
+      const res = await fetch("/api/buy-pack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ pack }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) return { error: data.error || "Could not start checkout." };
+      window.location.href = data.url;
+      return {};
+    } catch (e) { return { error: e.message || "Network error." }; }
+  }, [getToken]);
 
   // Local-only optimistic toggle (dev / immediate UI); the webhook is the
   // source of truth in Neon.
@@ -152,6 +223,7 @@ export function AuthProvider({ children }) {
     user, isPro: effIsPro, loading: loading || !isLoaded,
     subStatus, subPlan, periodEnd, cancelAtPeriodEnd, getToken,
     signOut, deleteAccount, reauthenticate, setProStatus, refreshProfile, startCheckout, openPortal,
+    usage, refreshUsage, consumeQuestions, watchAd, buyPack,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

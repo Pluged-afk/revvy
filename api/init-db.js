@@ -21,6 +21,12 @@ export default async function handler(req, res) {
     // Backfill for tables created before clerk_user_id existed.
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS clerk_user_id TEXT UNIQUE`;
     await sql`UPDATE profiles SET clerk_user_id = id WHERE clerk_user_id IS NULL`;
+    // Question-limit / monetization columns.
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS questions_used_today INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_reset_date DATE`;
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bonus_questions_remaining INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ad_watches_today INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_ad_reset_date DATE`;
     await sql`CREATE INDEX IF NOT EXISTS profiles_clerk_idx ON profiles (clerk_user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS profiles_email_idx ON profiles (email)`;
     await sql`CREATE INDEX IF NOT EXISTS profiles_stripe_cust_idx ON profiles (stripe_customer_id)`;

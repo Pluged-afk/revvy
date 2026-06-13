@@ -494,7 +494,12 @@ function SectionLabel({ label }) {
 
 function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, t }) {
   const s = t.set || {};
-  const { subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile } = useAuth();
+  const { subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
+  const [adBusy, setAdBusy] = useState(false);
+  const [packBusy, setPackBusy] = useState("");
+  useEffect(() => { refreshUsage?.(); }, [refreshUsage]);
+  const onWatchAd = async () => { if (adBusy) return; setAdBusy(true); await watchAd?.(); setAdBusy(false); };
+  const onBuyPack = async (pack) => { if (packBusy) return; setPackBusy(pack); const r = await buyPack?.(pack); if (r?.error) setPackBusy(""); };
   const [checkingSub, setCheckingSub] = useState(false);
   const doRefreshSub = async () => { setCheckingSub(true); try { await refreshProfile?.(); } finally { setCheckingSub(false); } };
   const [confirmDel, setConfirmDel] = useState(false);
@@ -588,6 +593,54 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           <SettingRow label={s.vibration} desc={s.vibrationDesc}>
             <Toggle on={draft.haptics} onChange={v=>update("haptics",v)}/>
           </SettingRow>
+
+          <SectionLabel label={s.secUsage || "USAGE"}/>
+          <div style={{padding:"4px 18px 14px"}}>
+            {(() => {
+              const u = usage || {};
+              const used = u.questions_used_today ?? 0;
+              const limit = u.daily_limit ?? (isPro ? 250 : 50);
+              const pct = Math.min(100, Math.round((used / Math.max(1, limit)) * 100));
+              const adsLeft = (u.max_ad_watches ?? 2) - (u.ad_watches_today ?? 0);
+              return (
+                <>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,color:"var(--color-text-primary)",marginBottom:6}}>
+                    <span>{s.usageToday || "Questions today"}</span>
+                    <span style={{fontWeight:700}}>{used} / {limit}{u.remaining != null ? ` · ${u.remaining} ${s.leftWord || "left"}` : ""}</span>
+                  </div>
+                  <div style={{height:8,background:"var(--color-background-tertiary)",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:pct + "%",background:pct >= 100 ? "#ef4444" : "#4f46e5",borderRadius:4,transition:"width .3s"}}/>
+                  </div>
+                  {isPro && (u.bonus_questions_remaining > 0) &&
+                    <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageBonus || "Bonus questions"}: <strong style={{color:"var(--color-text-primary)"}}>{u.bonus_questions_remaining}</strong></div>}
+                  {!isPro &&
+                    <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageAdWatches || "Ad watches today"}: <strong style={{color:"var(--color-text-primary)"}}>{u.ad_watches_today ?? 0} / {u.max_ad_watches ?? 2}</strong></div>}
+
+                  {!isPro && <>
+                    {adsLeft > 0 &&
+                      <button disabled={adBusy} onClick={onWatchAd} style={{marginTop:10,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:adBusy ? "default" : "pointer",fontFamily:"inherit",opacity:adBusy ? 0.6 : 1}}>
+                        {adBusy ? (s.loadingAd || "Loading ad…") : `📺 ${(s.watchAdForQuestions || "Watch ad for +{n} questions").replace("{n}", u.ad_question_bonus ?? 10)}`}
+                      </button>}
+                    <button onClick={() => startCheckout?.(STRIPE_MONTHLY_PRICE)} style={{marginTop:8,width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                      ⭐ {s.upgradeForMore || "Upgrade to Pro — 250 questions/day"}
+                    </button>
+                  </>}
+
+                  {isPro && <>
+                    <div style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)",margin:"14px 0 6px"}}>{s.buyPacks || "Question packs"}</div>
+                    {[["A","500","€1.99"],["B","1,500","€4.99"],["C","3,000","€8.99"]].map(([id,q,price]) => (
+                      <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:6}}>
+                        <span style={{fontSize:13,color:"var(--color-text-primary)"}}><strong>{q}</strong> {s.questionsWord || "questions"} · {price}</span>
+                        <button disabled={!!packBusy} onClick={() => onBuyPack(id)} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:packBusy ? "default" : "pointer",fontFamily:"inherit",opacity:(packBusy && packBusy !== id) ? 0.5 : 1}}>
+                          {packBusy === id ? (s.opening || "…") : (s.buyBtn || "Buy")}
+                        </button>
+                      </div>
+                    ))}
+                  </>}
+                </>
+              );
+            })()}
+          </div>
 
           <SectionLabel label={s.secBehaviour}/>
           <SettingRow label={s.feedback}
@@ -897,7 +950,7 @@ export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const { lang, setLang, t } = useLang();
   const dev = useDev();
-  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken } = useAuth();
+  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions } = useAuth();
   const navigate = useNavigate();
   const [coBusy, setCoBusy] = useState("");   // "monthly" | "yearly" while redirecting to Stripe
   const [coErr,  setCoErr]  = useState("");
@@ -908,6 +961,17 @@ export default function StudyQuiz() {
     const { error } = await startCheckout(priceId);
     if (error) { setCoBusy(""); setCoErr(error); }
   };
+  const [adBusy, setAdBusy] = useState(false); // watching the (placeholder) ad
+  const handleWatchAd = async () => {
+    if (adBusy) return;
+    setAdBusy(true);
+    const r = await watchAdQuestions();
+    setAdBusy(false);
+    if (r && r.allowed === false) setError("You've used all of today's ad watches.");
+    else setError("");
+  };
+  // Keep usage fresh when landing on the home / quiz-setup screens.
+  useEffect(()=>{ if(screen==="home"||screen==="upload") refreshUsage?.(); },[screen,refreshUsage]);
   // Email/password accounts must re-enter their password to delete; OAuth-only
   // (e.g. Google) accounts have no password to verify.
   const requiresPassword = !!user?.identities?.some(i => i.provider === "email");
@@ -1093,8 +1157,9 @@ export default function StudyQuiz() {
   const canUseQType = useCallback((type) => type==="mcq" || isPro || adActive(`quizType:${type}`), [isPro,adActive]);
   const canExtraQ   = useCallback(() => isPro || adActive("questions"), [isPro,adActive]);
   const canCustomQ  = useCallback(() => isPro || adActive("questions"), [isPro,adActive]);
-  // Max questions the current user may pick: 100 (Pro) / 50 (ad unlock) / 20 (free).
-  const qCap        = useCallback(() => isPro ? PRO_MAX_Q : adActive("questions") ? AD_MAX_Q : FREE_MAX_Q, [isPro,adActive]);
+  // Max questions per quiz: 100 (Pro) / 20 (free). Daily totals & ad bonuses
+  // are tracked server-side via the usage system, not the per-quiz cap.
+  const qCap        = useCallback(() => isPro ? PRO_MAX_Q : FREE_MAX_Q, [isPro]);
   const fileLimitMB = useCallback(() => isPro?PRO_FILE_MB : adActive("files")?AD_FILE_MB : FREE_FILE_MB, [isPro,adActive]);
   // Dev: reset the daily quiz counter when the panel asks.
   useEffect(()=>{ if(dev.devMode && dev.resetDailySignal>0){ setDailyUsed(0); } },[dev.resetDailySignal, dev.devMode]);
@@ -1489,13 +1554,26 @@ export default function StudyQuiz() {
   },[fileLimitMB, processFile]);
 
   const generate = useCallback(async () => {
-    if (!isPro && dailyUsed>=FREE_DAILY) { setError(`Daily limit: ${FREE_DAILY} quizzes/day on free plan. Upgrade to Pro for unlimited.`); return; }
     setError("");
     const finalType = canUseQType(qType)?qType:"mcq";
     const finalNumQ = effectiveNumQ();
     if (tab==="file"||tab==="photo") {
       if (!file) { setError("Please upload a file first."); return; }
     } else if (!textVal.trim()) { setError("Please paste study text first."); return; }
+
+    // Enforce the daily question limit (server-side; reserves the questions).
+    const consumed = await consumeQuestions(finalNumQ);
+    if (consumed && consumed.allowed === false) {
+      const left = consumed.remaining ?? 0;
+      setError(
+        isPro
+          ? `Daily limit reached (${consumed.daily_limit}/day). You have ${left} questions left — buy a question pack in Settings for more.`
+          : left > 0
+            ? `That's ${finalNumQ} questions but you only have ${left} left today. Lower the count, watch an ad for +10, or go Pro.`
+            : `Daily question limit reached. Watch an ad for +10 questions, or upgrade to Pro.`
+      );
+      return;
+    }
 
     setScreen("loading");
     try {
@@ -1530,14 +1608,12 @@ export default function StudyQuiz() {
       if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
       setQuiz({...res, type:finalType});
       setQIdx(0); setAnswers([]); setSelected(null);
-      const newUsed = dailyUsed+1;
-      if (!isPro) { setDailyUsed(newUsed); saveState(adWatchedDate, adUnlocked?.feature, adUnlocked?.until, newUsed); }
       setScreen("quiz");
     } catch(err) {
       setError(err.message.includes("parse")?"AI returned unexpected format. Please try again.":err.message);
       setScreen("upload");
     }
-  },[isPro,dailyUsed,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,adWatchedDate,adUnlocked,saveState,uploadFileToAnthropic]);
+  },[isPro,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic]);
 
   const pick    = i => { if(selected===null){ setSelected(i); haptic(); } };
   const nextQ   = isCorrect => {
@@ -1722,7 +1798,17 @@ export default function StudyQuiz() {
             </div>
           </div>
         </div>
-        {!isPro&&<div style={{background:"#fffbeb",border:"1px solid #f59e0b44",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#92400e",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span>🆓 {t.dailyLeft(Math.max(0,FREE_DAILY-dailyUsed))} · Max {FREE_MAX_Q}Q · {FREE_FILE_MB}MB</span><span style={{color:"#f59e0b",fontWeight:700,cursor:"pointer",flexShrink:0,fontSize:11,textDecoration:"underline"}} onClick={()=>setShowProModal(true)}>Go Pro →</span></div>}
+        {/* Usage strip — questions remaining today (server-tracked). */}
+        <div style={{background:isPro?"var(--color-background-secondary)":"#fffbeb",border:isPro?"0.5px solid var(--color-border-tertiary)":"1px solid #f59e0b44",borderRadius:10,padding:"10px 14px",fontSize:12,color:isPro?"var(--color-text-secondary)":"#92400e",marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+            <span><strong>{usage?.remaining ?? (isPro?250:50)}</strong> {t.questionsLeftToday} · {usage?.questions_used_today ?? 0}/{usage?.daily_limit ?? (isPro?250:50)} {t.used}{isPro&&(usage?.bonus_questions_remaining>0)?` · +${usage.bonus_questions_remaining} ${t.bonusWord}`:""} · {t.maxPerQuiz.replace("{n}",isPro?PRO_MAX_Q:FREE_MAX_Q)}</span>
+            {!isPro&&<span onClick={()=>setShowProModal(true)} style={{color:"#f59e0b",fontWeight:700,cursor:"pointer",flexShrink:0,fontSize:11,textDecoration:"underline"}}>Go Pro →</span>}
+          </div>
+          {!isPro&&(usage?.remaining??99)<=10&&((usage?.max_ad_watches??2)-(usage?.ad_watches_today??0))>0&&
+            <button disabled={adBusy} onClick={handleWatchAd} style={{marginTop:8,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:8,padding:"9px",fontSize:12,fontWeight:700,cursor:adBusy?"default":"pointer",fontFamily:"inherit",opacity:adBusy?0.6:1}}>
+              {adBusy?t.loadingAd:`📺 ${t.watchAdForQuestions.replace("{n}",usage?.ad_question_bonus??10)}`}
+            </button>}
+        </div>
         {!isPro&&adTimeLeft&&<div style={{background:"#f5f3ff",border:"0.5px solid #c4b5fd",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#5b21b6",marginBottom:14}}>📺 Ad active: <strong>{t.lockedTitles[adUnlocked.feature]}</strong> — {adTimeLeft} left</div>}
         {isPro&&<button style={{width:"100%",marginBottom:14,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span>{t.examModeLabel}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>PRO ONLY</span></button>}
         {!isPro&&<div style={{background:"#f5f3ff",border:"1.5px solid #f59e0b55",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}} onClick={()=>setShowProModal(true)}><div style={{flex:1}}><div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.examModeLabel}</div><div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:2}}>{t.examProOnly}</div></div><span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0}}>PRO</span></div>}
