@@ -6,13 +6,14 @@ import { useDev, DevBadge } from "./context/DevContext.jsx";
 import { UserButton } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { upload as blobUpload } from "@vercel/blob/client";
+import { useAdUnlocks } from "./lib/adUnlocks.js";
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
 const AD_MAX_Q     = 50;
 const PRO_MAX_Q    = 100;
 const FREE_FILE_MB = 5;
-const AD_FILE_MB   = 20;
+const AD_FILE_MB   = 10;
 const PRO_FILE_MB  = 999;
 const AD_HOURS     = 1;
 const FREE_DAILY   = 3;
@@ -255,46 +256,54 @@ function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
   );
 }
 
-// ── Locked Feature Modal ──────────────────────────────────────────────
-function LockedModal({ info, adWatchedToday, adUnlocked, adsOn, onClose, onUpgrade, onWatchAd, t }) {
-  if (!info) return null;
-  const adLabelKey = info.featureKey.startsWith("quizType:")
-    ? info.featureKey.replace("quizType:", "")
-    : info.featureKey;
-  const adLabel = (t.lockedAdLabels || {})[adLabelKey] || null;
-  const adStillActive = adUnlocked && adUnlocked.until > Date.now();
-  const timeLeft = adStillActive ? msUntil(adUnlocked.until) : null;
+// ── Per-feature ad-unlock modal ───────────────────────────────────────
+// One modal per feature; watching a (placeholder) ad starts a 1-hour window.
+const UNLOCK_META = {
+  flashcard:   { icon:"🃏", title:"Flashcards",        gives:"the Flashcards quiz type",        daily:false },
+  fillinblank: { icon:"✏️", title:"Fill in the blank", gives:"the Fill-in-the-blank quiz type", daily:true  },
+  matchterms:  { icon:"🔗", title:"Match terms",        gives:"the Match-terms quiz type",        daily:true  },
+  questions:   { icon:"🔢", title:"50 questions",       gives:"up to 50 questions per quiz",      daily:true  },
+  filesize:    { icon:"📦", title:"10 MB uploads",      gives:"file uploads up to 10 MB",         daily:true  },
+};
+
+function UnlockModal({ feature, unlocks, onClose, onUpgrade, t }) {
+  const [busy, setBusy] = useState(false);
+  if (!feature) return null;
+  const m = UNLOCK_META[feature];
+  const active = unlocks.isUnlocked(feature);
+  const canU = unlocks.canUnlock(feature);
+  const usedUp = !active && !canU; // once-daily already used today
+  const doWatch = async () => { if (busy) return; setBusy(true); await unlocks.unlock(feature); setBusy(false); };
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:300,display:"flex",alignItems:"flex-end"}} onClick={onClose}>
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"24px 20px 36px",width:"100%",maxHeight:"80vh",overflowY:"auto",boxSizing:"border-box"}}>
-        <div style={{textAlign:"center",marginBottom:20}}>
-          <div style={{fontSize:38,marginBottom:8}}>🔒</div>
-          <h3 style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{t.proFeature}</h3>
+        <div style={{textAlign:"center",marginBottom:18}}>
+          <div style={{fontSize:38,marginBottom:8}}>{active ? "🔓" : "🔒"}</div>
+          <h3 style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{m.title}</h3>
           <p style={{margin:0,fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>
-            <strong style={{color:"#f59e0b"}}>{t.lockedTitles && t.lockedTitles[info.featureKey]}</strong>
+            Watch a short ad to unlock <strong style={{color:"var(--color-text-primary)"}}>{m.gives}</strong> for <strong>1 hour</strong>.{m.daily ? " Once per day." : " Unlimited times per day."}
           </p>
         </div>
-        {adStillActive && (
-          <div style={{background:"#f5f3ff",border:"0.5px solid #c4b5fd",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:"#5b21b6"}}>
-            {t.adCurrently} <strong>{t.lockedTitles && t.lockedTitles[adUnlocked.feature]}</strong><br/>
-            {t.adExpires}: <strong>{timeLeft}</strong>
+        {active && (
+          <div style={{background:"var(--color-background-success)",border:"0.5px solid var(--color-border-success)",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,color:"var(--color-text-success)",textAlign:"center"}}>
+            ✓ Unlocked — <strong>{unlocks.remainingLabel(feature)}</strong> left
+          </div>
+        )}
+        {!active && canU && (
+          <button onClick={doWatch} disabled={busy} style={{width:"100%",marginBottom:10,background:"#fefce8",border:"1.5px solid #f59e0b",color:"#92400e",borderRadius:12,padding:"13px 14px",fontSize:13.5,fontWeight:700,cursor:busy?"default":"pointer",fontFamily:"inherit",lineHeight:1.5,textAlign:"center",opacity:busy?0.6:1}}>
+            {busy ? "Loading ad…" : "📺 Watch ad to unlock"}<br/>
+            <span style={{fontSize:11,fontWeight:500,opacity:0.85}}>Unlocks {m.gives} for 1 hour</span>
+          </button>
+        )}
+        {usedUp && (
+          <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:"var(--color-text-secondary)",textAlign:"center",lineHeight:1.5}}>
+            📵 You've used today's free unlock for this. It's back tomorrow — or go Pro for unlimited access.
           </div>
         )}
         <button onClick={onUpgrade} style={{...Sb.btnPrimary,width:"100%",marginBottom:10,fontFamily:"inherit",fontSize:14,background:"#4f46e5"}}>
           ✦ {t.upgradeToPro}
         </button>
-        {adsOn && adLabel && !adWatchedToday && (
-          <button onClick={()=>onWatchAd(info.featureKey)} style={{width:"100%",marginBottom:10,background:"#fefce8",border:"1.5px solid #f59e0b",color:"#92400e",borderRadius:12,padding:"12px 14px",fontSize:13,cursor:"pointer",fontFamily:"inherit",lineHeight:1.6,textAlign:"center"}}>
-            {t.watchAdBtn}<br/>
-            <span style={{fontSize:11,opacity:0.8}}>Unlocks: {adLabel} for {AD_HOURS} hour{AD_HOURS!==1?"s":""}</span>
-          </button>
-        )}
-        {adsOn && adLabel && adWatchedToday && (
-          <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:12,color:"var(--color-text-secondary)",textAlign:"center"}}>
-            📵 {t.adUsedToday} — {t.adUsedDesc}
-          </div>
-        )}
-        <button onClick={onClose} style={{...Sb.btnGhost,width:"100%",fontSize:13}}>{t.notNow}</button>
+        <button onClick={onClose} style={{...Sb.btnGhost,width:"100%",fontSize:13}}>{t.notNow || "Not now"}</button>
       </div>
     </div>
   );
@@ -989,12 +998,9 @@ export default function StudyQuiz() {
   const [selected,     setSelected]     = useState(null);
   const [error,        setError]        = useState("");
   const [drag,         setDrag]         = useState(false);
-  const [dailyUsed,    setDailyUsed]    = useState(0);
-  const [adWatchedDate,setAdWatchedDate]= useState(null);
-  const [adUnlocked,   setAdUnlocked]   = useState(null);
-  const [lockedModal,  setLockedModal]  = useState(null);
   const [showProModal, setShowProModal] = useState(false);
-  const [pendingFile,  setPendingFile]  = useState(null);
+  const [unlockFeature, setUnlockFeature] = useState(null); // which feature's unlock modal is open
+  const unlocks = useAdUnlocks(isPro);
   const fileRef  = useRef();
   const photoRef = useRef();
   const examFileRef0=useRef(),examFileRef1=useRef(),examFileRef2=useRef(),examFileRef3=useRef(),examFileRef4=useRef();
@@ -1131,38 +1137,14 @@ export default function StudyQuiz() {
     });
   };
 
-  useEffect(()=>{
-    (async()=>{
-      try {
-        const s = await window.storage.get("sq_v3");
-        if (s) {
-          const d = JSON.parse(s.value);
-          const today = getTodayStr();
-          if (d.adDate === today) {
-            setAdWatchedDate(today);
-            if (d.adUntil > Date.now()) setAdUnlocked({ feature:d.adFeature, until:d.adUntil });
-          }
-          if (d.dailyDate === today) setDailyUsed(d.dailyUsed||0);
-        }
-      } catch {}
-    })();
-  },[]);
-
-  const saveState = useCallback((adDate, adFeature, adUntil, used) => {
-    window.storage.set("sq_v3", JSON.stringify({ adDate, adFeature, adUntil, dailyDate:getTodayStr(), dailyUsed:used })).catch(()=>{});
-  },[]);
-
-  // ── Feature access ───────────────────────────────────────────────
-  const adActive    = useCallback((key) => (dev.devMode && dev.adUnlocked===true) ? true : !!(adUnlocked && adUnlocked.feature===key && adUnlocked.until>Date.now()), [adUnlocked, dev.devMode, dev.adUnlocked]);
-  const canUseQType = useCallback((type) => type==="mcq" || isPro || adActive(`quizType:${type}`), [isPro,adActive]);
-  const canExtraQ   = useCallback(() => isPro || adActive("questions"), [isPro,adActive]);
-  const canCustomQ  = useCallback(() => isPro || adActive("questions"), [isPro,adActive]);
-  // Max questions per quiz: 100 (Pro) / 20 (free). Daily totals & ad bonuses
-  // are tracked server-side via the usage system, not the per-quiz cap.
-  const qCap        = useCallback(() => isPro ? PRO_MAX_Q : FREE_MAX_Q, [isPro]);
-  const fileLimitMB = useCallback(() => isPro?PRO_FILE_MB : adActive("files")?AD_FILE_MB : FREE_FILE_MB, [isPro,adActive]);
-  // Dev: reset the daily quiz counter when the panel asks.
-  useEffect(()=>{ if(dev.devMode && dev.resetDailySignal>0){ setDailyUsed(0); } },[dev.resetDailySignal, dev.devMode]);
+  // ── Feature access (free users unlock via 1-hour ad windows) ─────────
+  const QTYPE_FEATURE = { cards:"flashcard", fill:"fillinblank", match:"matchterms" };
+  const canUseQType = useCallback((type) => type==="mcq" || isPro || unlocks.isUnlocked(QTYPE_FEATURE[type]), [isPro, unlocks]);
+  const canCustomQ  = useCallback(() => isPro, [isPro]);
+  // Max questions per quiz: 100 (Pro) / 50 (ad-unlocked) / 20 (free).
+  const qCap        = useCallback(() => isPro ? PRO_MAX_Q : (unlocks.isUnlocked("questions") ? AD_MAX_Q : FREE_MAX_Q), [isPro, unlocks]);
+  // File size: 999 (Pro) / 10 (ad-unlocked) / 5 (free) MB.
+  const fileLimitMB = useCallback(() => isPro ? PRO_FILE_MB : (unlocks.isUnlocked("filesize") ? AD_FILE_MB : FREE_FILE_MB), [isPro, unlocks]);
 
   const effectiveNumQ = useCallback(()=>{
     // Custom box value takes precedence when on; otherwise the slider's numQ.
@@ -1171,26 +1153,9 @@ export default function StudyQuiz() {
     return Math.min(Math.max(n,1), qCap());
   },[useCustomQ,canCustomQ,numQ,customQ,qCap]);
 
-  const adWatchedToday = adWatchedDate === getTodayStr();
-  const adTimeLeft     = adUnlocked&&adUnlocked.until>Date.now() ? msUntil(adUnlocked.until) : null;
-  // Whether the ad system is live at all (mirrors AdBanners). When false the
-  // "watch ad" path is completely disabled — no ad UI of any kind is shown.
-  const adsOn          = dev.devMode && dev.ads!==null ? dev.ads : ADS_ENABLED;
-
-  const watchAd = useCallback((featureKey) => {
-    const until = Date.now() + AD_HOURS*3600000;
-    const today = getTodayStr();
-    setAdWatchedDate(today);
-    setAdUnlocked({ feature:featureKey, until });
-    setLockedModal(null);
-    saveState(today, featureKey, until, dailyUsed);
-    if (featureKey==="files" && pendingFile) {
-      processFile(pendingFile, AD_FILE_MB);
-      setPendingFile(null);
-    }
-  },[pendingFile, dailyUsed, saveState]);
-
-  const openUpgrade = () => { setLockedModal(null); setShowProModal(true); };
+  // Banner-ads master switch (mirrors AdBanners) — separate from feature unlocks.
+  const adsOn = dev.devMode && dev.ads!==null ? dev.ads : ADS_ENABLED;
+  const openUpgrade = () => { setUnlockFeature(null); setShowProModal(true); };
 
   const addExamFile=useCallback(async(f,idx)=>{
     if(!f)return;
@@ -1546,12 +1511,18 @@ export default function StudyQuiz() {
     const limitMB = fileLimitMB();
     if (fileMB > PRO_FILE_MB) { setError(`File is ${fmtMB(f.size)} — exceeds the maximum ${PRO_FILE_MB}MB even for Pro.`); return; }
     if (fileMB > limitMB) {
-      setPendingFile(f);
-      setLockedModal({ featureKey:"files", extraInfo:`${fmtMB(f.size)}` });
+      // Too big for the current limit. Pro can't exceed 999MB; free users can
+      // watch an ad to raise the limit to 10MB for an hour.
+      if (!isPro && fileMB <= AD_FILE_MB) {
+        setError(`File is ${fmtMB(f.size)} — over the ${limitMB}MB free limit. Watch an ad to unlock ${AD_FILE_MB}MB uploads for 1 hour.`);
+        setUnlockFeature("filesize");
+      } else {
+        setError(`File is ${fmtMB(f.size)} — over your ${limitMB}MB limit.${isPro?"":" Upgrade to Pro for unlimited size."}`);
+      }
       return;
     }
     await processFile(f, limitMB);
-  },[fileLimitMB, processFile]);
+  },[fileLimitMB, processFile, isPro]);
 
   const generate = useCallback(async () => {
     setError("");
@@ -1706,7 +1677,6 @@ export default function StudyQuiz() {
         <span style={Sb.brand}>{t.appName}</span>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           {isPro && <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"2px 7px",fontWeight:700}}>PRO</span>}
-          {adTimeLeft && !isPro && <span style={{fontSize:10,background:"#7c3aed",color:"#fff",borderRadius:8,padding:"2px 7px",fontWeight:700}}>AD·{adTimeLeft}</span>}
           <button onClick={()=>setSoundOn(s=>!s)} title={soundOn?t.soundOn:t.soundOff} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",opacity:soundOn?1:0.4}}>{soundOn?"🔊":"🔇"}</button>
           <button onClick={()=>openSettings()} title="Settings" style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",color:"var(--color-text-secondary)"}}>⚙️</button>
         </div>
@@ -1726,6 +1696,13 @@ export default function StudyQuiz() {
             {file?(<><div style={{fontSize:32}}>{file.type==="pdf"?"📄":file.type==="image"?"🖼️":"📝"}</div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(file.sizeMB*1024*1024)} · {t.tapChange}</div></>):(<><div style={{fontSize:32}}>📂</div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.dropTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.dropSub}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{isPro?"Unlimited":("Max "+fileLimitMB()+"MB (free)")}</div></>)}
           </div>
         )}
+        {tab==="file" && !isPro && (
+          unlocks.isUnlocked("filesize")
+            ? <div style={{fontSize:11,color:"var(--color-text-success)",marginTop:8,fontWeight:600}}>🔓 {AD_FILE_MB}MB uploads unlocked · {unlocks.remainingLabel("filesize")} left</div>
+            : <button onClick={()=>setUnlockFeature("filesize")} style={{fontSize:11,color:"#f59e0b",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:"6px 0 0",textAlign:"left",display:"block"}}>
+                {unlocks.canUnlock("filesize") ? `📺 Watch ad — ${AD_FILE_MB}MB uploads (1 hr)` : `🔒 ${AD_FILE_MB}MB unlock used today`}
+              </button>
+        )}
         {tab==="photo" && (
           <div style={{...Sb.dropzone,...(file&&file.type==="image"?{borderStyle:"solid",borderColor:"#4f46e5"}:{})}} onClick={()=>photoRef.current.click()}>
             <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>loadFile(e.target.files[0])}/>
@@ -1741,12 +1718,14 @@ export default function StudyQuiz() {
             <span style={Sb.settingLabel}>{t.quizType}</span>
             <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
               {QUIZ_TYPES.map(type=>{
-                const unlocked=canUseQType(type), isAd=!isPro&&adActive(`quizType:${type}`);
+                const feat = QTYPE_FEATURE[type];
+                const unlocked = canUseQType(type);
+                const active = !isPro && feat && unlocks.isUnlocked(feat); // ad-unlocked window
                 return (
                   <div key={type} style={{position:"relative"}}>
                     <Chip small label={t.quizTypes[type]} active={qType===type} locked={!unlocked}
-                      onClick={()=>{ if(unlocked) setQType(type); else setLockedModal({featureKey:`quizType:${type}`}); }}/>
-                    {isAd&&<span style={{position:"absolute",top:-5,right:-3,background:"#7c3aed",color:"#fff",fontSize:7,borderRadius:8,padding:"1px 4px",fontWeight:700,lineHeight:1.4,pointerEvents:"none"}}>AD</span>}
+                      onClick={()=>{ if(unlocked) setQType(type); else setUnlockFeature(feat); }}/>
+                    {active&&<span style={{position:"absolute",top:-6,right:-4,background:"#16a34a",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 4px",fontWeight:700,lineHeight:1.4,pointerEvents:"none"}}>{unlocks.remainingLabel(feat)}</span>}
                   </div>
                 );
               })}
@@ -1781,13 +1760,15 @@ export default function StudyQuiz() {
               </div>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>
                 <span>{useCustomQ&&canCustomQ()?1:5}</span>
-                <span style={{color:canExtraQ()?"var(--color-text-tertiary)":"#f59e0b"}}>{qCap()}{!canExtraQ()&&" (free max)"}</span>
+                <span style={{color:(!isPro&&!unlocks.isUnlocked("questions"))?"#f59e0b":"var(--color-text-tertiary)"}}>
+                  {qCap()}{!isPro&&!unlocks.isUnlocked("questions")?" (free max)":""}{!isPro&&unlocks.isUnlocked("questions")?` · ${unlocks.remainingLabel("questions")}`:""}
+                </span>
               </div>
               {useCustomQ&&canCustomQ()&&<div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:3}}>{t.customAmountHint}</div>}
             </div>
-            {!canExtraQ()&&(
-              <button onClick={()=>setLockedModal({featureKey:"questions"})} style={{fontSize:11,color:"#f59e0b",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0,textAlign:"left"}}>
-                🔒 Unlock up to {PRO_MAX_Q} questions (Pro/Ad)
+            {!isPro&&!unlocks.isUnlocked("questions")&&(
+              <button onClick={()=>setUnlockFeature("questions")} style={{fontSize:11,color:"#f59e0b",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0,textAlign:"left"}}>
+                {unlocks.canUnlock("questions") ? `📺 Watch ad — up to ${AD_MAX_Q} questions/quiz (1 hr)` : `🔒 ${AD_MAX_Q}-question unlock used today`}
               </button>
             )}
           </div>
@@ -1809,14 +1790,13 @@ export default function StudyQuiz() {
               {adBusy?t.loadingAd:`📺 ${t.watchAdForQuestions.replace("{n}",usage?.ad_question_bonus??10)}`}
             </button>}
         </div>
-        {!isPro&&adTimeLeft&&<div style={{background:"#f5f3ff",border:"0.5px solid #c4b5fd",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#5b21b6",marginBottom:14}}>📺 Ad active: <strong>{t.lockedTitles[adUnlocked.feature]}</strong> — {adTimeLeft} left</div>}
         {isPro&&<button style={{width:"100%",marginBottom:14,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span>{t.examModeLabel}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>PRO ONLY</span></button>}
         {!isPro&&<div style={{background:"#f5f3ff",border:"1.5px solid #f59e0b55",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}} onClick={()=>setShowProModal(true)}><div style={{flex:1}}><div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.examModeLabel}</div><div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:2}}>{t.examProOnly}</div></div><span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0}}>PRO</span></div>}
         <button style={{...Sb.btnPrimary,width:"100%"}} onClick={generate}>{t.generate}</button>
         </div>
       </div>
-      <LockedModal info={lockedModal} adWatchedToday={adWatchedToday} adUnlocked={adUnlocked} adsOn={adsOn} t={t}
-        onClose={()=>{setLockedModal(null);setPendingFile(null);}} onUpgrade={openUpgrade} onWatchAd={watchAd}/>
+      <UnlockModal feature={unlockFeature} unlocks={unlocks} t={t}
+        onClose={()=>setUnlockFeature(null)} onUpgrade={openUpgrade}/>
       {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
       {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
     </div>
