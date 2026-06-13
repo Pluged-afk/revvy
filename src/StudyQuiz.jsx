@@ -256,6 +256,48 @@ function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
   );
 }
 
+// ── Question Packs popup (Pro) ────────────────────────────────────────
+// One-time top-ups added to the bonus balance (never expire, used after the
+// daily allowance). Shown from the "limit reached" message and from Settings.
+const QUESTION_PACKS = [
+  { id:"A", q:"500",   price:"€1.99", blurb:"A few extra study sessions" },
+  { id:"B", q:"1,500", price:"€4.99", blurb:"Best value — a month of heavy use", best:true },
+  { id:"C", q:"3,000", price:"€8.99", blurb:"For power users & exam crunch" },
+];
+function PacksModal({ onClose, buyPack, t }) {
+  const [busy, setBusy] = useState("");
+  const buy = async (id) => { if (busy) return; setBusy(id); const r = await buyPack?.(id); if (r?.error) setBusy(""); };
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>!busy&&onClose()}>
+      <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"26px 20px 36px",width:"100%",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box"}}>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:36,marginBottom:6}}>💎</div>
+          <h3 style={{margin:"0 0 6px",fontSize:20,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{t.questionPacks || "Question packs"}</h3>
+          <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55}}>{t.questionPacksDesc || "One-time top-ups added to your bonus balance. They never expire and are used once your daily allowance runs out."}</p>
+        </div>
+        {QUESTION_PACKS.map((p) => (
+          <div key={p.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,
+            border:p.best?"2px solid #f59e0b":"0.5px solid var(--color-border-tertiary)",
+            background:p.best?"#fffbeb":"var(--color-background-secondary)",
+            borderRadius:14,padding:"13px 14px",marginBottom:10}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:15,fontWeight:800,color:p.best?"#92400e":"var(--color-text-primary)"}}>
+                {p.q} {t.questionsWord || "questions"}
+                {p.best && <span style={{marginLeft:8,fontSize:9,fontWeight:800,letterSpacing:0.6,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"2px 7px",verticalAlign:"middle"}}>{t.bestValue || "BEST VALUE"}</span>}
+              </div>
+              <div style={{fontSize:11.5,color:p.best?"#b45309":"var(--color-text-secondary)",marginTop:2}}>{p.blurb}</div>
+            </div>
+            <button onClick={()=>buy(p.id)} disabled={!!busy} style={{...Sb.btnPrimary,margin:0,padding:"10px 16px",fontSize:14,minWidth:78,background:p.best?"#f59e0b":"#4f46e5",opacity:(busy&&busy!==p.id)?0.5:1}}>
+              {busy===p.id ? "…" : p.price}
+            </button>
+          </div>
+        ))}
+        <button onClick={()=>!busy&&onClose()} disabled={!!busy} style={{...Sb.btnGhost,width:"100%",fontSize:13,marginTop:4}}>{t.notNow || "Not now"}</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Per-feature ad-unlock modal ───────────────────────────────────────
 // One modal per feature; watching a (placeholder) ad starts a 1-hour window.
 const UNLOCK_META = {
@@ -501,11 +543,64 @@ function SectionLabel({ label }) {
   );
 }
 
+// Usage + question packs (rendered next to the Subscription section).
+function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy, startCheckout, onOpenPacks }) {
+  const u = usage || {};
+  const used = u.questions_used_today ?? 0;
+  const limit = u.daily_limit ?? (isPro ? 250 : 50);
+  const pct = Math.min(100, Math.round((used / Math.max(1, limit)) * 100));
+  const adsLeft = (u.max_ad_watches ?? 2) - (u.ad_watches_today ?? 0);
+  return (
+    <>
+      <SectionLabel label={s.secUsage || "USAGE"}/>
+      <div style={{padding:"4px 18px 14px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,color:"var(--color-text-primary)",marginBottom:6}}>
+          <span>{s.usageToday || "Questions today"}</span>
+          <span style={{fontWeight:700}}>{used} / {limit}{u.remaining != null ? ` · ${u.remaining} ${s.leftWord || "left"}` : ""}</span>
+        </div>
+        <div style={{height:8,background:"var(--color-background-tertiary)",borderRadius:4,overflow:"hidden"}}>
+          <div style={{height:"100%",width:pct + "%",background:pct >= 100 ? "#ef4444" : "#4f46e5",borderRadius:4,transition:"width .3s"}}/>
+        </div>
+        {isPro && (u.bonus_questions_remaining > 0) &&
+          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageBonus || "Bonus questions"}: <strong style={{color:"var(--color-text-primary)"}}>{u.bonus_questions_remaining}</strong></div>}
+        {!isPro &&
+          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageAdWatches || "Ad watches today"}: <strong style={{color:"var(--color-text-primary)"}}>{u.ad_watches_today ?? 0} / {u.max_ad_watches ?? 2}</strong></div>}
+
+        {!isPro && <>
+          {adsLeft > 0 &&
+            <button disabled={adBusy} onClick={onWatchAd} style={{marginTop:10,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:adBusy ? "default" : "pointer",fontFamily:"inherit",opacity:adBusy ? 0.6 : 1}}>
+              {adBusy ? (s.loadingAd || "Loading ad…") : `📺 ${(s.watchAdForQuestions || "Watch ad for +{n} questions").replace("{n}", u.ad_question_bonus ?? 10)}`}
+            </button>}
+          <button onClick={() => startCheckout?.(STRIPE_MONTHLY_PRICE)} style={{marginTop:8,width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+            ⭐ {s.upgradeForMore || "Upgrade to Pro — 250 questions/day"}
+          </button>
+        </>}
+
+        {isPro && <>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"14px 0 6px"}}>
+            <span style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)"}}>{s.buyPacks || "Question packs"}</span>
+            {onOpenPacks && <button onClick={onOpenPacks} style={{fontSize:11,color:"#4f46e5",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:700,padding:0}}>{s.comparePacks || "View all →"}</button>}
+          </div>
+          {QUESTION_PACKS.map((p) => (
+            <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:6}}>
+              <span style={{fontSize:13,color:"var(--color-text-primary)"}}><strong>{p.q}</strong> {s.questionsWord || "questions"} · {p.price}</span>
+              <button disabled={!!packBusy} onClick={() => onBuyPack(p.id)} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:packBusy ? "default" : "pointer",fontFamily:"inherit",opacity:(packBusy && packBusy !== p.id) ? 0.5 : 1}}>
+                {packBusy === p.id ? (s.opening || "…") : (s.buyBtn || "Buy")}
+              </button>
+            </div>
+          ))}
+        </>}
+      </div>
+    </>
+  );
+}
+
 function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, t }) {
   const s = t.set || {};
   const { subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
   const [adBusy, setAdBusy] = useState(false);
   const [packBusy, setPackBusy] = useState("");
+  const [showPacks, setShowPacks] = useState(false);
   useEffect(() => { refreshUsage?.(); }, [refreshUsage]);
   const onWatchAd = async () => { if (adBusy) return; setAdBusy(true); await watchAd?.(); setAdBusy(false); };
   const onBuyPack = async (pack) => { if (packBusy) return; setPackBusy(pack); const r = await buyPack?.(pack); if (r?.error) setPackBusy(""); };
@@ -603,54 +698,6 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             <Toggle on={draft.haptics} onChange={v=>update("haptics",v)}/>
           </SettingRow>
 
-          <SectionLabel label={s.secUsage || "USAGE"}/>
-          <div style={{padding:"4px 18px 14px"}}>
-            {(() => {
-              const u = usage || {};
-              const used = u.questions_used_today ?? 0;
-              const limit = u.daily_limit ?? (isPro ? 250 : 50);
-              const pct = Math.min(100, Math.round((used / Math.max(1, limit)) * 100));
-              const adsLeft = (u.max_ad_watches ?? 2) - (u.ad_watches_today ?? 0);
-              return (
-                <>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,color:"var(--color-text-primary)",marginBottom:6}}>
-                    <span>{s.usageToday || "Questions today"}</span>
-                    <span style={{fontWeight:700}}>{used} / {limit}{u.remaining != null ? ` · ${u.remaining} ${s.leftWord || "left"}` : ""}</span>
-                  </div>
-                  <div style={{height:8,background:"var(--color-background-tertiary)",borderRadius:4,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:pct + "%",background:pct >= 100 ? "#ef4444" : "#4f46e5",borderRadius:4,transition:"width .3s"}}/>
-                  </div>
-                  {isPro && (u.bonus_questions_remaining > 0) &&
-                    <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageBonus || "Bonus questions"}: <strong style={{color:"var(--color-text-primary)"}}>{u.bonus_questions_remaining}</strong></div>}
-                  {!isPro &&
-                    <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageAdWatches || "Ad watches today"}: <strong style={{color:"var(--color-text-primary)"}}>{u.ad_watches_today ?? 0} / {u.max_ad_watches ?? 2}</strong></div>}
-
-                  {!isPro && <>
-                    {adsLeft > 0 &&
-                      <button disabled={adBusy} onClick={onWatchAd} style={{marginTop:10,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:adBusy ? "default" : "pointer",fontFamily:"inherit",opacity:adBusy ? 0.6 : 1}}>
-                        {adBusy ? (s.loadingAd || "Loading ad…") : `📺 ${(s.watchAdForQuestions || "Watch ad for +{n} questions").replace("{n}", u.ad_question_bonus ?? 10)}`}
-                      </button>}
-                    <button onClick={() => startCheckout?.(STRIPE_MONTHLY_PRICE)} style={{marginTop:8,width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                      ⭐ {s.upgradeForMore || "Upgrade to Pro — 250 questions/day"}
-                    </button>
-                  </>}
-
-                  {isPro && <>
-                    <div style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)",margin:"14px 0 6px"}}>{s.buyPacks || "Question packs"}</div>
-                    {[["A","500","€1.99"],["B","1,500","€4.99"],["C","3,000","€8.99"]].map(([id,q,price]) => (
-                      <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:6}}>
-                        <span style={{fontSize:13,color:"var(--color-text-primary)"}}><strong>{q}</strong> {s.questionsWord || "questions"} · {price}</span>
-                        <button disabled={!!packBusy} onClick={() => onBuyPack(id)} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:packBusy ? "default" : "pointer",fontFamily:"inherit",opacity:(packBusy && packBusy !== id) ? 0.5 : 1}}>
-                          {packBusy === id ? (s.opening || "…") : (s.buyBtn || "Buy")}
-                        </button>
-                      </div>
-                    ))}
-                  </>}
-                </>
-              );
-            })()}
-          </div>
-
           <SectionLabel label={s.secBehaviour}/>
           <SettingRow label={s.feedback}
             desc={draft.feedback==="immediate"?s.feedbackImmediate:s.feedbackEnd}>
@@ -689,6 +736,8 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
               fontSize:12,color:"var(--color-text-tertiary)",cursor:"pointer",fontFamily:"inherit",display:"block"}}>
             {s.resetAll}
           </button>
+
+          <UsageSection isPro={isPro} usage={usage} s={s} adBusy={adBusy} onWatchAd={onWatchAd} onBuyPack={onBuyPack} packBusy={packBusy} startCheckout={startCheckout} onOpenPacks={isPro ? ()=>setShowPacks(true) : null}/>
 
           <SectionLabel label={s.secSubscription}/>
           <div style={{margin:"4px 18px 6px",padding:"14px 16px",borderRadius:12,
@@ -835,6 +884,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           busy={coBusy} error={coErr} t={t}
         />
       )}
+      {showPacks && <PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
     </div>
   );
 }
@@ -959,7 +1009,7 @@ export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const { lang, setLang, t } = useLang();
   const dev = useDev();
-  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions } = useAuth();
+  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack } = useAuth();
   const navigate = useNavigate();
   const [coBusy, setCoBusy] = useState("");   // "monthly" | "yearly" while redirecting to Stripe
   const [coErr,  setCoErr]  = useState("");
@@ -971,6 +1021,8 @@ export default function StudyQuiz() {
     if (error) { setCoBusy(""); setCoErr(error); }
   };
   const [adBusy, setAdBusy] = useState(false); // watching the (placeholder) ad
+  const [showPacks, setShowPacks] = useState(false); // question-packs popup
+  const [limitHit, setLimitHit] = useState(false);   // last generate blocked by the daily limit
   const handleWatchAd = async () => {
     if (adBusy) return;
     setAdBusy(true);
@@ -1241,7 +1293,8 @@ export default function StudyQuiz() {
     const consumed = await consumeQuestions(totalQ);
     if (consumed && consumed.allowed === false) {
       const left = consumed.remaining ?? 0;
-      setError(`This exam is ${totalQ} questions but you have ${left} left today (limit ${consumed.daily_limit}/day). Lower the count or buy a question pack in Settings.`);
+      setLimitHit(true); // Pro-only screen → offer the question-pack button
+      setError(`This exam is ${totalQ} questions but you have ${left} left today (limit ${consumed.daily_limit}/day). Lower the count or grab a question pack.`);
       setScreen("exam_setup");
       return;
     }
@@ -1535,7 +1588,7 @@ export default function StudyQuiz() {
   },[fileLimitMB, processFile, isPro]);
 
   const generate = useCallback(async () => {
-    setError("");
+    setError(""); setLimitHit(false);
     const finalType = canUseQType(qType)?qType:"mcq";
     const finalNumQ = effectiveNumQ();
     if (tab==="file"||tab==="photo") {
@@ -1546,9 +1599,10 @@ export default function StudyQuiz() {
     const consumed = await consumeQuestions(finalNumQ);
     if (consumed && consumed.allowed === false) {
       const left = consumed.remaining ?? 0;
+      setLimitHit(isPro); // Pro → offer a question-pack button under the error
       setError(
         isPro
-          ? `Daily limit reached (${consumed.daily_limit}/day). You have ${left} questions left — buy a question pack in Settings for more.`
+          ? `Daily limit reached (${consumed.daily_limit}/day). You have ${left} questions left — grab a question pack for more.`
           : left > 0
             ? `That's ${finalNumQ} questions but you only have ${left} left today. Lower the count, watch an ad for +10, or go Pro.`
             : `Daily question limit reached. Watch an ad for +10 questions, or upgrade to Pro.`
@@ -1721,6 +1775,7 @@ export default function StudyQuiz() {
         )}
         {tab==="text" && <textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>}
         {error && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,lineHeight:1.5}}>⚠️ {error}</div>}
+        {limitHit && isPro && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions || "Get more questions"}</button>}
         </div>
         <div className="rv-ul-right">
         <div style={Sb.settingsBox}>
@@ -1808,6 +1863,7 @@ export default function StudyQuiz() {
       <UnlockModal feature={unlockFeature} unlocks={unlocks} t={t}
         onClose={()=>setUnlockFeature(null)} onUpgrade={openUpgrade}/>
       {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
+      {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
       {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
     </div>
   );
@@ -2080,8 +2136,10 @@ export default function StudyQuiz() {
           })}
         </div>
         {error&&<div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {error}</div>}
+        {limitHit && isPro && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions || "Get more questions"}</button>}
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#312e81,#4f46e5)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
+      {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
       {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
     </div>
   );
