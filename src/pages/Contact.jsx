@@ -1,12 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import emailjs from "@emailjs/browser";
 import usePageMeta from "../lib/usePageMeta.js";
-
-// EmailJS config (public by design — the public key is safe in client code).
-const EMAILJS_SERVICE_ID = "service_nxh1vpu";
-const EMAILJS_TEMPLATE_ID = "template_6cwrm14";
-const EMAILJS_PUBLIC_KEY = "RHMZNoZuyGsSenMXI";
 
 export default function Contact() {
   usePageMeta("Contact — Revyy", "Questions, feedback, or feature ideas? Get in touch with the Revyy team.");
@@ -21,26 +15,20 @@ export default function Contact() {
     setStatus("sending");
     setErrMsg("");
     try {
-      await emailjs.send(
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        {
-          // Sent with several common aliases so the template fields resolve
-          // regardless of which variable names it uses.
-          name: form.name,
-          from_name: form.name,
-          email: form.email,
-          from_email: form.email,
-          reply_to: form.email,
-          message: form.message,
-        },
-        { publicKey: EMAILJS_PUBLIC_KEY }
-      );
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Something went wrong.");
+      }
       setStatus("sent");
       setForm({ name: "", email: "", message: "" }); // clear after sending
     } catch (err) {
       setStatus("error");
-      setErrMsg(err?.text || "Something went wrong. Please try again or email us directly.");
+      setErrMsg(err?.message || "Something went wrong. Please try again or email us directly.");
     }
   };
 
@@ -90,7 +78,7 @@ export default function Contact() {
             <div className="contact-card" style={{ marginBottom: 18 }}>
               <h3>Email us</h3>
               <p>Prefer email? Reach us directly:</p>
-              <a className="maillink" href="mailto:revyyapp@outlook.com">revyyapp@outlook.com</a>
+              <a className="maillink" href="mailto:support@revyy.app">support@revyy.app</a>
             </div>
             <div className="contact-card" style={{ marginBottom: 18 }}>
               <h3>Response time</h3>

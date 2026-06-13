@@ -65,7 +65,7 @@ export default function TermsOfService() {
         <h2>7. Contact</h2>
         <p>
           Questions about these Terms? Email{" "}
-          <a href="mailto:revyyapp@outlook.com">revyyapp@outlook.com</a> or visit our{" "}
+          <a href="mailto:support@revyy.app">support@revyy.app</a> or visit our{" "}
           <Link to="/contact">Contact page</Link>.
         </p>
       </div>

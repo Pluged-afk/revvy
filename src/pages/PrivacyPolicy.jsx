@@ -68,7 +68,7 @@ export default function PrivacyPolicy() {
         <h2>7. Contact</h2>
         <p>
           For any privacy questions or requests, email us at{" "}
-          <a href="mailto:revyyapp@outlook.com">revyyapp@outlook.com</a> or visit our{" "}
+          <a href="mailto:support@revyy.app">support@revyy.app</a> or visit our{" "}
           <Link to="/contact">Contact page</Link>.
         </p>
       </div>
