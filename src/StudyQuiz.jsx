@@ -1236,6 +1236,16 @@ export default function StudyQuiz() {
     setError("");
     const diffLabel=t.diffOpts[diff];
     const totalQ = examMode==="custom" ? sectionTotalQs : Math.min(Math.max(parseInt(examTotalQ)||5,1),100);
+
+    // Exam questions count toward the daily question limit (reserve them first).
+    const consumed = await consumeQuestions(totalQ);
+    if (consumed && consumed.allowed === false) {
+      const left = consumed.remaining ?? 0;
+      setError(`This exam is ${totalQ} questions but you have ${left} left today (limit ${consumed.daily_limit}/day). Lower the count or buy a question pack in Settings.`);
+      setScreen("exam_setup");
+      return;
+    }
+
     // Exams carry model answers/explanations → ~200 tokens/Q. Cap at 20k.
     const maxTokens = Math.min(Math.max(Math.round(totalQ*200)+2000, 6000), 20000);
 
@@ -1298,7 +1308,7 @@ export default function StudyQuiz() {
       setExamPaused(false); setExamTimeUp(false); setExamReview(false); setShowSubmitPrompt(false); setExamTimeExpired(false);
       setScreen("exam_run");
     }catch(err){setError(err.message.includes("parse")?"Unexpected format — please try again.":err.message);setScreen("exam_setup");}
-  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic]);
+  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions]);
 
   const evaluateExam=useCallback(async(answers)=>{
     const hasWritten=examQs.some(q=>q.type==="written");
