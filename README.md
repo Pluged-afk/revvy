@@ -8,7 +8,7 @@ photo and Revyy builds a study quiz in seconds using AI.
 - **React 19 + Vite** — SPA, React Router
 - **Supabase** — auth (email/password + Google) and the `profiles` table
 - **Stripe** — subscriptions (monthly/yearly, 7-day trial), webhook, customer portal
-- **EmailJS** — contact form
+- **Resend** — contact form + inbound email forwarding (`/api/contact`, `/api/inbound-email`)
 - Vercel serverless functions under `/api`
 
 ## Local development
