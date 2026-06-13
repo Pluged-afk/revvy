@@ -1555,25 +1555,25 @@ export default function StudyQuiz() {
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
-        <button onClick={()=>navigate("/")} title={t.mainSite} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.8)",fontFamily:"inherit",padding:0,fontWeight:500,marginBottom:16,display:"inline-flex",alignItems:"center",gap:5}}>← {t.mainSite}</button>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}}>
-          <span style={Sb.brand}><Logo/>{t.appName}
-            {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
-            <DevBadge/></span>
-          <div style={{display:"flex",gap:10,alignItems:"center",marginLeft:"auto"}}>
-            <select value={lang} onChange={e=>setLang(e.target.value)} title="Language"
-              style={{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,fontSize:12,padding:"3px 6px",cursor:"pointer",fontFamily:"inherit",outline:"none"}}>
-              {Object.entries(LANGS).map(([code,l])=>(
-                <option key={code} value={code} style={{color:"#1e293b"}}>{l.flag} {l.name}</option>
-              ))}
-            </select>
-            <button onClick={()=>openSettings()} title="Settings" style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:"2px 4px",color:"rgba(255,255,255,0.7)"}}>⚙️</button>
-            <UserButton afterSignOutUrl="/" />
+          <button onClick={()=>navigate("/")} title={t.mainSite} className="rv-hero-back" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.78)",fontFamily:"inherit",padding:0,fontWeight:500,marginBottom:18,display:"inline-flex",alignItems:"center",gap:5}}>← {t.mainSite}</button>
+          <div className="rv-hero-bar">
+            <span style={{...Sb.brand,color:"#fff"}}><Logo/>{t.appName}
+              {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
+              <DevBadge/></span>
+            <div className="rv-hero-tools">
+              <select value={lang} onChange={e=>setLang(e.target.value)} title="Language"
+                style={{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,fontSize:12,padding:"3px 6px",cursor:"pointer",fontFamily:"inherit",outline:"none"}}>
+                {Object.entries(LANGS).map(([code,l])=>(
+                  <option key={code} value={code} style={{color:"#1e293b"}}>{l.flag} {l.name}</option>
+                ))}
+              </select>
+              <button onClick={()=>openSettings()} title="Settings" style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:"2px 4px",color:"rgba(255,255,255,0.7)"}}>⚙️</button>
+              <UserButton afterSignOutUrl="/" />
+            </div>
           </div>
-        </div>
-        <h1 style={Sb.h1}>{t.tagline}</h1>
-        <p style={{fontSize:14,color:"#bfdbfe",lineHeight:1.65,margin:"0 auto 26px",maxWidth:300}}>{t.sub}</p>
-        <button style={Sb.btnHero} onClick={()=>setScreen("upload")}>{t.start}</button>
+          <h1 className="rv-hero-head" style={Sb.h1}>{t.tagline}</h1>
+          <p className="rv-hero-sub" style={{fontSize:14,color:"#c7d2fe",lineHeight:1.6,margin:0,maxWidth:300}}>{t.sub}</p>
+          <button className="rv-hero-cta" style={Sb.btnHero} onClick={()=>setScreen("upload")}>{t.start}</button>
         </div>
       </div>
 
@@ -2265,14 +2265,30 @@ const CSS = `
   .settings-panel{animation:slideFromRight 0.22s ease}
   ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--color-border-secondary);border-radius:2px}
 
+  /* Hero (mobile base — stacks: back, brand bar, headline, sub, CTA) */
+  .rv-hero-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .rv-hero-tools{display:flex;align-items:center;gap:10px;}
+  .rv-hero-sub{margin-top:14px!important;}
+  .rv-hero-cta{margin-top:22px;}
+
   /* ── Desktop layout ────────────────────────────────────────────── */
   @media(min-width:768px){
     /* Root: wider centered card */
     .rv-root-inner{max-width:900px;margin:0 auto;width:100%;}
 
-    /* Hero: wider, side-by-side text and CTA */
-    .rv-hero-inner{max-width:860px;margin:0 auto;display:grid;grid-template-columns:1fr auto;gap:40px;align-items:center;}
-    .rv-hero-inner h1{font-size:40px!important;}
+    /* Hero: two-column editorial layout — brand+sub on the left, headline+CTA
+       on the right (back link spans the top). */
+    .rv-hero-inner{
+      max-width:900px;margin:0 auto;
+      display:grid;grid-template-columns:1fr 1.05fr;
+      grid-template-areas:"back back" "bar head" "sub cta";
+      column-gap:48px;row-gap:20px;align-items:start;
+    }
+    .rv-hero-back{grid-area:back;margin-bottom:0!important;}
+    .rv-hero-bar{grid-area:bar;}
+    .rv-hero-head{grid-area:head;align-self:start;font-size:40px!important;margin:0!important;}
+    .rv-hero-sub{grid-area:sub;align-self:end;}
+    .rv-hero-cta{grid-area:cta;align-self:end;justify-self:start;}
 
     /* Home body: wider, 3-col features grid */
     .rv-home-body{max-width:900px;margin:0 auto;padding:40px 48px!important;}
