@@ -79,6 +79,8 @@ export default function Contact() {
               <h3>Email us</h3>
               <p>Prefer email? Reach us directly:</p>
               <a className="maillink" href="mailto:support@revyy.app">support@revyy.app</a>
+              <p style={{ margin: "4px 0", color: "var(--muted)", fontSize: 13 }}>or</p>
+              <a className="maillink" href="mailto:revyy.support@gmail.com">revyy.support@gmail.com</a>
             </div>
             <div className="contact-card" style={{ marginBottom: 18 }}>
               <h3>Response time</h3>
