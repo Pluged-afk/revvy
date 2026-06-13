@@ -130,12 +130,14 @@ async function callClaude({ blocks, numQ, diff, type }) {
     fill:  `Fill in the blank: each "question" has exactly one blank written as ___. "answer" = the missing word or phrase. Set options:[] correct:0.`,
     match: `Matching pairs: "question" = term, "answer" = definition. Set options:[] correct:0.`,
   };
-  const prompt = `Generate exactly ${numQ} study questions from the material.\nQuiz type: ${typeMap[type]}\nDifficulty: ${diff}.\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence"}]}\nMake all 4 options plausible. Vary question styles across the set.`;
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material — not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDifficulty: ${diff}.\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence"}]}\nMake all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
 
   // Scale output budget with the question count so big sets aren't truncated
-  // (each Q ≈ 130 tokens). Capped at 16k. max_tokens is a ceiling, not a
-  // charge — you're only billed for tokens actually generated.
-  const maxTokens = Math.min(Math.max(Math.round(numQ * 160) + 1200, 4000), 16000);
+  // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
+  // output and the proxy streams, so a high ceiling is safe; capped at 32k.
+  // max_tokens is a ceiling, not a charge — you're billed only for tokens
+  // actually generated.
+  const maxTokens = Math.min(Math.max(Math.round(numQ * 220) + 2000, 4000), 32000);
 
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json"},
@@ -1509,19 +1511,23 @@ export default function StudyQuiz() {
       } else {
         blocks=[{type:"text",text:`Study material:\n\n${textVal.trim()}`}];
       }
-      let res;
-      try {
-        res = await callClaude({blocks, numQ:finalNumQ, diff:t.diffOpts[diff], type:finalType});
-      } catch (e1) {
-        // A truncated response yields invalid/unterminated JSON. Retry once
-        // with fewer questions so the output fits the token budget.
-        const truncated = /JSON|Unexpected end|Unterminated|parse/i.test(e1.message||"");
-        if (truncated && finalNumQ > 25) {
-          const fewer = Math.max(20, Math.min(50, Math.floor(finalNumQ/2)));
-          res = await callClaude({blocks, numQ:fewer, diff:t.diffOpts[diff], type:finalType});
-        } else throw e1;
+      // Generate, then validate the count. The model sometimes returns fewer
+      // questions than asked — if so, regenerate (up to 2 extra tries) and keep
+      // whichever attempt produced the most questions. A parse error (usually a
+      // truncated response) counts as a failed attempt rather than aborting.
+      let res = null, lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let r = null;
+        try {
+          r = await callClaude({blocks, numQ:finalNumQ, diff:t.diffOpts[diff], type:finalType});
+        } catch (e1) { lastErr = e1; }
+        if (r?.questions?.length) {
+          // Keep the best-so-far (most questions).
+          if (!res || r.questions.length > res.questions.length) res = r;
+          if (res.questions.length >= finalNumQ) break; // got the full set
+        }
       }
-      if (!res.questions?.length) throw new Error("No questions returned");
+      if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
       setQuiz({...res, type:finalType});
       setQIdx(0); setAnswers([]); setSelected(null);
       const newUsed = dailyUsed+1;
