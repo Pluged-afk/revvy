@@ -14,7 +14,7 @@ const FEATURES = [
 ];
 
 const ROWS = [
-  ["Daily quizzes", "3 / day", "Unlimited"],
+  ["Daily questions", "50 / day", "250 / day"],
   ["Multiple choice", true, true],
   ["Flashcards · Fill-in · Match", false, true],
   ["Questions per quiz", "Up to 20", "Up to 100"],

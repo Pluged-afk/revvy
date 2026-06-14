@@ -9,20 +9,21 @@ const MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const YEARLY_PRICE = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
 
 const FREE = [
-  "3 quizzes per day",
+  "50 questions per day",
   "Multiple choice only",
-  "Up to 20 questions",
+  "Up to 20 per quiz",
   "Files up to 5MB",
   "Ads displayed",
 ];
 
 const PRO_MONTHLY = [
-  "Unlimited quizzes",
+  "250 questions per day",
   "All 4 quiz types",
-  "Up to 100 questions",
+  "Up to 100 per quiz",
   "No ads",
   "Unlimited files",
   "Exam Mode with AI grading",
+  "Buy extra question packs",
   "Cancel anytime",
 ];
 
