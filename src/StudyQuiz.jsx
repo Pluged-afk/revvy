@@ -1132,6 +1132,11 @@ export default function StudyQuiz() {
   useEffect(()=>{ SoundEngine.setVolume(settings.volume); },[settings.volume]);
   useEffect(()=>{ setSoundOn(settings.sound); },[settings.sound]);
   useEffect(()=>{ Haptics.on = settings.haptics; },[settings.haptics]);
+  // Apply the saved "default difficulty / questions" to the quiz-setup controls
+  // on load (and whenever the default changes) so they persist across reloads
+  // and logout/login — not only when Apply is pressed.
+  useEffect(()=>{ setDiff(settings.defaultDiff); },[settings.defaultDiff]);
+  useEffect(()=>{ setNumQ(settings.defaultQCount); },[settings.defaultQCount]);
 
   // ── Theme injection into document.head ──
   // "system" resolves to light/dark via prefers-color-scheme so the CSS
