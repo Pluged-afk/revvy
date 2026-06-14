@@ -58,6 +58,7 @@ const T_EN = {
   photoTitle:"Take a photo of your notes",
   generating:"Building your quiz…",
   genSteps:["Reading your material","Identifying key concepts","Writing questions","Verifying answers"],
+  genNotice:"Bigger files or a high question count can make generation take a little longer — hang tight.",
   exit:"✕ Exit", exitConfirm:"Exit quiz? Your progress will be lost.",
   next:"Next →", finish:"See results →", flip:"Tap card to reveal answer", flipBack:"Tap to flip back",
   typeIn:"Type your answer…", check:"Check answer", correct:"Correct!", incorrect:"Incorrect",

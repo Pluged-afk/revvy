@@ -1900,6 +1900,9 @@ export default function StudyQuiz() {
           </div>
         ))}
       </div>
+      <p style={{marginTop:28,maxWidth:300,fontSize:12,lineHeight:1.55,color:"var(--color-text-tertiary)"}}>
+        ⏳ {t.genNotice || "Bigger files or a high question count can make generation take a little longer — hang tight."}
+      </p>
     </div>
   );
 
