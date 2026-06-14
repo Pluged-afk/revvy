@@ -273,7 +273,7 @@ function PacksModal({ onClose, buyPack, t }) {
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{fontSize:36,marginBottom:6}}>💎</div>
           <h3 style={{margin:"0 0 6px",fontSize:20,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{t.questionPacks || "Question packs"}</h3>
-          <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55}}>{t.questionPacksDesc || "One-time top-ups added to your bonus balance. They never expire and are used once your daily allowance runs out."}</p>
+          <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55}}>{t.questionPacksDesc || "One-time top-ups for everyone. They never expire and are used once your daily allowance runs out. Your other plan limits (quiz types, per-quiz max, file size) still apply."}</p>
         </div>
         {QUESTION_PACKS.map((p) => (
           <div key={p.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,
@@ -561,10 +561,10 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
         <div style={{height:8,background:"var(--color-background-tertiary)",borderRadius:4,overflow:"hidden"}}>
           <div style={{height:"100%",width:pct + "%",background:pct >= 100 ? "#ef4444" : "#4f46e5",borderRadius:4,transition:"width .3s"}}/>
         </div>
-        {isPro && (u.bonus_questions_remaining > 0) &&
-          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageBonus || "Bonus questions"}: <strong style={{color:"var(--color-text-primary)"}}>{u.bonus_questions_remaining}</strong></div>}
+        {/* Additional (pack) questions — shown to everyone who has any. */}
+        <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageBonus || "Extra questions (packs)"}: <strong style={{color:(u.bonus_questions_remaining > 0) ? "#16a34a" : "var(--color-text-primary)"}}>{u.bonus_questions_remaining ?? 0}</strong></div>
         {!isPro &&
-          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageAdWatches || "Ad watches today"}: <strong style={{color:"var(--color-text-primary)"}}>{u.ad_watches_today ?? 0} / {u.max_ad_watches ?? 2}</strong></div>}
+          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:4}}>{s.usageAdWatches || "Ad watches today"}: <strong style={{color:"var(--color-text-primary)"}}>{u.ad_watches_today ?? 0} / {u.max_ad_watches ?? 2}</strong></div>}
 
         {!isPro && <>
           {adsLeft > 0 &&
@@ -576,20 +576,19 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
           </button>
         </>}
 
-        {isPro && <>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"14px 0 6px"}}>
-            <span style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)"}}>{s.buyPacks || "Question packs"}</span>
-            {onOpenPacks && <button onClick={onOpenPacks} style={{fontSize:11,color:"#4f46e5",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:700,padding:0}}>{s.comparePacks || "View all →"}</button>}
+        {/* Question packs — available to all users; other limits still apply. */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"14px 0 6px"}}>
+          <span style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)"}}>{s.buyPacks || "Question packs"}</span>
+          {onOpenPacks && <button onClick={onOpenPacks} style={{fontSize:11,color:"#4f46e5",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:700,padding:0}}>{s.comparePacks || "View all →"}</button>}
+        </div>
+        {QUESTION_PACKS.map((p) => (
+          <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:6}}>
+            <span style={{fontSize:13,color:"var(--color-text-primary)"}}><strong>{p.q}</strong> {s.questionsWord || "questions"} · {p.price}</span>
+            <button disabled={!!packBusy} onClick={() => onBuyPack(p.id)} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:packBusy ? "default" : "pointer",fontFamily:"inherit",opacity:(packBusy && packBusy !== p.id) ? 0.5 : 1}}>
+              {packBusy === p.id ? (s.opening || "…") : (s.buyBtn || "Buy")}
+            </button>
           </div>
-          {QUESTION_PACKS.map((p) => (
-            <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:6}}>
-              <span style={{fontSize:13,color:"var(--color-text-primary)"}}><strong>{p.q}</strong> {s.questionsWord || "questions"} · {p.price}</span>
-              <button disabled={!!packBusy} onClick={() => onBuyPack(p.id)} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:packBusy ? "default" : "pointer",fontFamily:"inherit",opacity:(packBusy && packBusy !== p.id) ? 0.5 : 1}}>
-                {packBusy === p.id ? (s.opening || "…") : (s.buyBtn || "Buy")}
-              </button>
-            </div>
-          ))}
-        </>}
+        ))}
       </div>
     </>
   );
@@ -737,7 +736,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             {s.resetAll}
           </button>
 
-          <UsageSection isPro={isPro} usage={usage} s={s} adBusy={adBusy} onWatchAd={onWatchAd} onBuyPack={onBuyPack} packBusy={packBusy} startCheckout={startCheckout} onOpenPacks={isPro ? ()=>setShowPacks(true) : null}/>
+          <UsageSection isPro={isPro} usage={usage} s={s} adBusy={adBusy} onWatchAd={onWatchAd} onBuyPack={onBuyPack} packBusy={packBusy} startCheckout={startCheckout} onOpenPacks={()=>setShowPacks(true)}/>
 
           <SectionLabel label={s.secSubscription}/>
           <div style={{margin:"4px 18px 6px",padding:"14px 16px",borderRadius:12,
@@ -1599,13 +1598,13 @@ export default function StudyQuiz() {
     const consumed = await consumeQuestions(finalNumQ);
     if (consumed && consumed.allowed === false) {
       const left = consumed.remaining ?? 0;
-      setLimitHit(isPro); // Pro → offer a question-pack button under the error
+      setLimitHit(true); // offer the question-pack button under the error (all users)
       setError(
         isPro
           ? `Daily limit reached (${consumed.daily_limit}/day). You have ${left} questions left — grab a question pack for more.`
           : left > 0
-            ? `That's ${finalNumQ} questions but you only have ${left} left today. Lower the count, watch an ad for +10, or go Pro.`
-            : `Daily question limit reached. Watch an ad for +10 questions, or upgrade to Pro.`
+            ? `That's ${finalNumQ} questions but you only have ${left} left today. Lower the count, watch an ad for +10, buy a question pack, or go Pro.`
+            : `Daily question limit reached. Watch an ad for +10, buy a question pack, or upgrade to Pro.`
       );
       return;
     }
@@ -1781,7 +1780,7 @@ export default function StudyQuiz() {
         )}
         {tab==="text" && <textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>}
         {error && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,lineHeight:1.5}}>⚠️ {error}</div>}
-        {limitHit && isPro && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions || "Get more questions"}</button>}
+        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions || "Get more questions"}</button>}
         </div>
         <div className="rv-ul-right">
         <div style={Sb.settingsBox}>
@@ -1853,7 +1852,7 @@ export default function StudyQuiz() {
         {/* Usage strip — questions remaining today (server-tracked). */}
         <div style={{background:isPro?"var(--color-background-secondary)":"#fffbeb",border:isPro?"0.5px solid var(--color-border-tertiary)":"1px solid #f59e0b44",borderRadius:10,padding:"10px 14px",fontSize:12,color:isPro?"var(--color-text-secondary)":"#92400e",marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-            <span><strong>{usage?.remaining ?? (isPro?250:50)}</strong> {t.questionsLeftToday} · {usage?.questions_used_today ?? 0}/{usage?.daily_limit ?? (isPro?250:50)} {t.used}{isPro&&(usage?.bonus_questions_remaining>0)?` · +${usage.bonus_questions_remaining} ${t.bonusWord}`:""} · {t.maxPerQuiz.replace("{n}",isPro?PRO_MAX_Q:FREE_MAX_Q)}</span>
+            <span><strong>{usage?.remaining ?? (isPro?250:50)}</strong> {t.questionsLeftToday} · {usage?.questions_used_today ?? 0}/{usage?.daily_limit ?? (isPro?250:50)} {t.used}{(usage?.bonus_questions_remaining>0)?` · +${usage.bonus_questions_remaining} ${t.bonusWord}`:""} · {t.maxPerQuiz.replace("{n}",isPro?PRO_MAX_Q:FREE_MAX_Q)}</span>
             {!isPro&&<span onClick={()=>setShowProModal(true)} style={{color:"#f59e0b",fontWeight:700,cursor:"pointer",flexShrink:0,fontSize:11,textDecoration:"underline"}}>Go Pro →</span>}
           </div>
           {!isPro&&(usage?.remaining??99)<=10&&((usage?.max_ad_watches??2)-(usage?.ad_watches_today??0))>0&&
@@ -2142,7 +2141,7 @@ export default function StudyQuiz() {
           })}
         </div>
         {error&&<div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {error}</div>}
-        {limitHit && isPro && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions || "Get more questions"}</button>}
+        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions || "Get more questions"}</button>}
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#312e81,#4f46e5)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}

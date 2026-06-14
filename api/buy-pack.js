@@ -45,16 +45,15 @@ export default async function handler(req, res) {
   const p = PACKS[pack];
   if (!p) return res.status(400).json({ error: "Unknown pack." });
 
-  // Packs are Pro-only. Confirm against Neon (not the client).
-  let row;
+  // Packs are available to all users (free or Pro). Look up the profile only to
+  // reuse the saved Stripe customer / email — no Pro gate.
+  let row = {};
   try {
-    const rows = await sql`SELECT is_pro, email, stripe_customer_id FROM profiles WHERE clerk_user_id = ${userId} OR id = ${userId} LIMIT 1`;
-    row = rows[0];
+    const rows = await sql`SELECT email, stripe_customer_id FROM profiles WHERE clerk_user_id = ${userId} OR id = ${userId} LIMIT 1`;
+    row = rows[0] || {};
   } catch (e) {
     console.error("[buy-pack] lookup failed:", e.message);
-    return res.status(500).json({ error: "Lookup failed." });
   }
-  if (!row?.is_pro) return res.status(403).json({ error: "Question packs are a Pro feature." });
 
   const stripe = new Stripe(STRIPE_SECRET_KEY);
   const baseUrl = getBaseUrl(req);
