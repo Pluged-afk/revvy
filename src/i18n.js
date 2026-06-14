@@ -50,7 +50,7 @@ const T_EN = {
   startFree:"Start free", upgrade:"Upgrade →",
   proLabel:"Pro", proPrice:"€4.99/mo",
   proDesc:"250 questions/day · All 4 quiz types · Up to 100 per quiz · Unlimited files · No ads",
-  proFeatures:["250 questions per day","All quiz types: Flashcards, Fill-in-Blank, Match Terms","Up to 100 questions per quiz","Unlimited file uploads (PDFs, images, any size)","No ads — clean studying experience","Buy question packs for more","Generate quizzes in multiple languages","🎓 Full Exam Mode — MCQ, Written & Custom (AI-graded)"],
+  proFeatures:["250 questions per day","All quiz types: Flashcards, Fill-in-Blank, Match Terms","Up to 100 questions per quiz","Unlimited file uploads (PDFs, images, any size)","No ads — clean studying experience","Generate quizzes in multiple languages","🎓 Full Exam Mode — MCQ, Written & Custom (AI-graded)"],
   dropHint:"Drop your file here or tap to browse",
   urlHint:"💡 Tip: paste the page text in the Text tab for best results.",
   pasteHint:"Paste your notes, textbook content, lecture transcript…",

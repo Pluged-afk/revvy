@@ -25,8 +25,8 @@ export default function TermsOfService() {
 
         <h2>2. Free and Pro plans</h2>
         <ul>
-          <li><strong>Free plan</strong> — includes a limited number of quizzes per day and a subset of features, available at no cost.</li>
-          <li><strong>Pro plan</strong> — a paid subscription unlocking unlimited quizzes, all quiz types, Exam Mode and an ad-free experience.</li>
+          <li><strong>Free plan</strong> — includes a limited number of questions per day and a subset of features, available at no cost.</li>
+          <li><strong>Pro plan</strong> — a paid subscription with a higher daily question allowance, all quiz types, Exam Mode and an ad-free experience.</li>
           <li>We may adjust plan limits or features over time, with notice of material changes where reasonable.</li>
         </ul>
 

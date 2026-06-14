@@ -17,7 +17,7 @@ const STEPS = [
 ];
 
 const FREE_PERKS = ["50 questions per day", "Multiple choice quizzes", "Up to 20 per quiz", "Files up to 5MB"];
-const PRO_PERKS = ["250 questions per day", "All 4 quiz types", "Up to 100 per quiz", "Exam Mode (AI-graded)", "No ads + question packs"];
+const PRO_PERKS = ["250 questions per day", "All 4 quiz types", "Up to 100 per quiz", "Exam Mode (AI-graded)", "No ads"];
 
 export default function Home() {
   const { user, isPro } = useAuth();

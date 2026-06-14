@@ -23,7 +23,6 @@ const PRO_MONTHLY = [
   "No ads",
   "Unlimited files",
   "Exam Mode with AI grading",
-  "Buy extra question packs",
   "Cancel anytime",
 ];
 
