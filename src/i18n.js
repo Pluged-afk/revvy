@@ -46,7 +46,7 @@ const T_EN = {
   tapChange:"Tap to change file",
   quizType:"Quiz type", questions:"Questions", difficulty:"Difficulty",
   diffOpts:["Easy","Medium","Hard"], generate:"✦ Generate quiz",
-  freeLabel:"Free", freeDesc:"3 quizzes/day · MCQ only · Up to 20 questions · Files up to 5MB",
+  freeLabel:"Free", freeDesc:"50 questions/day · MCQ only · Up to 20 per quiz · Files up to 5MB",
   startFree:"Start free", upgrade:"Upgrade →",
   proLabel:"Pro", proPrice:"€4.99/mo",
   proDesc:"Unlimited quizzes · All 4 quiz types · Up to 100 questions · Unlimited files · No ads",

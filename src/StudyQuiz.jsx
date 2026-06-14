@@ -1707,18 +1707,24 @@ export default function StudyQuiz() {
         </div>
 
         <div className="rv-plans-row" style={{display:"flex",gap:10,marginBottom:18}}>
-          <div style={Sb.planCard}>
-            <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{t.freeLabel}</div>
-            <div style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.7}}>{t.freeDesc}</div>
-            <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13}} onClick={()=>setScreen("upload")}>{isPro ? "Make a quiz" : t.startFree}</button>
-          </div>
+          {/* Free card only shown to free users — hidden once Pro. */}
+          {!isPro && (
+            <div style={Sb.planCard}>
+              <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{t.freeLabel}</div>
+              <div style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.7}}>{t.freeDesc}</div>
+              <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13}} onClick={()=>setScreen("upload")}>{t.startFree}</button>
+            </div>
+          )}
           <div style={{...Sb.planCard,border:"2px solid #f59e0b",background:"#fffbeb",position:"relative",overflow:"hidden"}}>
             <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,#f59e0b,#fbbf24)"}}/>
             <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:"#92400e"}}>✦ {t.proLabel}</div>
             <div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:4}}>{t.proPrice}</div>
             <div style={{fontSize:11,color:"#78350f",lineHeight:1.7}}>{t.proDesc}</div>
             {isPro ? (
-              <div style={{width:"100%",marginTop:10,fontSize:13,fontWeight:700,color:"#fff",textAlign:"center",padding:"10px",borderRadius:10,background:"linear-gradient(135deg,#16a34a,#15803d)",boxShadow:"0 2px 10px rgba(22,163,74,0.3)"}}>✓ You're Pro</div>
+              <>
+                <div style={{width:"100%",marginTop:10,fontSize:13,fontWeight:700,color:"#fff",textAlign:"center",padding:"10px",borderRadius:10,background:"linear-gradient(135deg,#16a34a,#15803d)",boxShadow:"0 2px 10px rgba(22,163,74,0.3)"}}>✓ You're Pro</div>
+                <button style={{...Sb.btnPrimary,width:"100%",marginTop:8,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>setScreen("upload")}>{t.makeQuiz || "Make a quiz"}</button>
+              </>
             ) : (
               <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>{setCoErr("");setShowProModal(true);}}>{t.upgrade}</button>
             )}
