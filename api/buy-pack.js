@@ -7,9 +7,9 @@ import sql, { readBody } from "./db.js";
 // bonus_questions_remaining. Clerk token verified server-side.
 
 const PACKS = {
-  A: { questions: 500,  amount: 199, label: "500 questions" },
-  B: { questions: 1500, amount: 499, label: "1,500 questions" },
-  C: { questions: 3000, amount: 899, label: "3,000 questions" },
+  A: { questions: 500,  priceId: "price_1TiAaMGXyNWRBegivLyWO6So" },
+  B: { questions: 1500, priceId: "price_1TiAbpGXyNWRBegi8Hdv9GGB" },
+  C: { questions: 3000, priceId: "price_1TiAcbGXyNWRBegioXFNLBKW" },
 };
 
 function getBaseUrl(req) {
@@ -62,14 +62,7 @@ export default async function handler(req, res) {
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      line_items: [{
-        quantity: 1,
-        price_data: {
-          currency: "eur",
-          unit_amount: p.amount,
-          product_data: { name: `Revyy — ${p.label}` },
-        },
-      }],
+      line_items: [{ price: p.priceId, quantity: 1 }],
       payment_intent_data: { metadata: meta },
       client_reference_id: userId,
       metadata: meta,
