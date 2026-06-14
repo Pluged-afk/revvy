@@ -24,6 +24,13 @@ const LETTERS      = ["A","B","C","D"];
 // Model for all generation/grading. Haiku 4.5: cheap + fast, plenty for
 // question writing. ($0.80/1M in, $4/1M out vs Sonnet's $3/$15.)
 const AI_MODEL     = "claude-haiku-4-5-20251001";
+// Difficulty rubric (index 0/1/2 = Easy/Medium/Hard). The label alone barely
+// moves the model — the per-level guidance is what actually changes output.
+const DIFFICULTY = [
+  { name:"Easy",   guide:"Test basic recall and core definitions. Single concept per question, plain wording. For multiple choice, distractors should be clearly wrong." },
+  { name:"Medium", guide:"Test understanding and application. Require connecting ideas or one reasoning step. For multiple choice, distractors should be plausible and require thought." },
+  { name:"Hard",   guide:"Test analysis, synthesis, and edge cases. Require multi-step reasoning or distinguishing subtle differences. For multiple choice, distractors should be very close and tricky. Avoid trivially-recalled facts." },
+];
 const STRIPE_MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const STRIPE_YEARLY_PRICE  = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
 
@@ -131,7 +138,9 @@ async function callClaude({ blocks, numQ, diff, type }) {
     fill:  `Fill in the blank: each "question" has exactly one blank written as ___. "answer" = the missing word or phrase. Set options:[] correct:0.`,
     match: `Matching pairs: "question" = term, "answer" = definition. Set options:[] correct:0.`,
   };
-  const prompt = `Generate EXACTLY ${numQ} study questions from the material — not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDifficulty: ${diff}.\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence"}]}\nMake all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
+  // `diff` is the 0/1/2 index; map to the difficulty rubric.
+  const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material — not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence"}]}\nMake all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
@@ -1290,7 +1299,7 @@ export default function StudyQuiz() {
     if(examFiles.length===0){setError("Upload at least one study file.");return;}
     if(examMode==="custom" && sectionTotalQs===0){setError("Please add at least one question to your sections.");return;}
     setError("");
-    const diffLabel=t.diffOpts[diff];
+    const dg = DIFFICULTY[diff] || DIFFICULTY[1];
     const totalQ = examMode==="custom" ? sectionTotalQs : Math.min(Math.max(parseInt(examTotalQ)||5,1),100);
 
     // Exam questions count toward the daily question limit (reserve them first).
@@ -1324,7 +1333,7 @@ export default function StudyQuiz() {
           return "Section "+(i+1)+": generate exactly "+desc+". Set \"section\":" +(i+1)+" on EVERY question in this section.";
         }).join("\n");
       }
-      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDifficulty: "+diffLabel+".\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\"}]}\nFor written/fill: options:[], correct:0. Keep questions in section order.";
+      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\"}]}\nFor written/fill: options:[], correct:0. Keep questions in section order.";
       return { prompt, marksMap };
     };
 
@@ -1636,7 +1645,7 @@ export default function StudyQuiz() {
       for (let attempt = 0; attempt < 3; attempt++) {
         let r = null;
         try {
-          r = await callClaude({blocks, numQ:finalNumQ, diff:t.diffOpts[diff], type:finalType});
+          r = await callClaude({blocks, numQ:finalNumQ, diff, type:finalType});
         } catch (e1) { lastErr = e1; }
         if (r?.questions?.length) {
           // Keep the best-so-far (most questions).
