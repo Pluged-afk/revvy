@@ -210,7 +210,7 @@ function AutoAdvanceBar({ sec, runId, t }) {
   );
 }
 
-function Chip({ label, active, onClick, locked, small }) {
+function Chip({ label, active, onClick, locked, small, hideBadge }) {
   return (
     <button onClick={onClick} style={{
       padding:small?"4px 10px":"6px 14px", borderRadius:20,
@@ -223,7 +223,7 @@ function Chip({ label, active, onClick, locked, small }) {
       boxShadow:locked?"0 0 0 1px #f59e0b33, inset 0 0 0 1px #f59e0b22":undefined,
     }}>
       {label}
-      {locked && <span style={{marginLeft:4,fontSize:7,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"1px 4px",fontWeight:700,verticalAlign:"middle"}}>PRO</span>}
+      {locked && !hideBadge && <span style={{marginLeft:4,fontSize:7,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"1px 4px",fontWeight:700,verticalAlign:"middle"}}>PRO</span>}
     </button>
   );
 }
@@ -1805,10 +1805,12 @@ export default function StudyQuiz() {
                 const feat = QTYPE_FEATURE[type];
                 const unlocked = canUseQType(type);
                 const active = !isPro && feat && unlocks.isUnlocked(feat); // ad-unlocked window
+                const adLockable = !isPro && feat && !unlocked;            // free, locked, ad-unlockable
                 return (
                   <div key={type} style={{position:"relative"}}>
-                    <Chip small label={t.quizTypes[type]} active={qType===type} locked={!unlocked}
+                    <Chip small hideBadge label={t.quizTypes[type]} active={qType===type} locked={!unlocked}
                       onClick={()=>{ if(unlocked) setQType(type); else setUnlockFeature(feat); }}/>
+                    {adLockable&&<span style={{position:"absolute",top:-6,right:-4,background:"#7c3aed",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 5px",fontWeight:800,letterSpacing:0.3,lineHeight:1.4,pointerEvents:"none"}}>AD</span>}
                     {active&&<span style={{position:"absolute",top:-6,right:-4,background:"#16a34a",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 4px",fontWeight:700,lineHeight:1.4,pointerEvents:"none"}}>{unlocks.remainingLabel(feat)}</span>}
                   </div>
                 );
