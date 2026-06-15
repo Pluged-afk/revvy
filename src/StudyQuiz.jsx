@@ -572,14 +572,16 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
         </div>
         {/* Additional (pack) questions — shown to everyone who has any. */}
         <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageBonus || "Extra questions (packs)"}: <strong style={{color:(u.bonus_questions_remaining > 0) ? "#16a34a" : "var(--color-text-primary)"}}>{u.bonus_questions_remaining ?? 0}</strong></div>
-        {!isPro &&
-          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:4}}>{s.usageAdWatches || "Ad watches today"}: <strong style={{color:"var(--color-text-primary)"}}>{u.ad_watches_today ?? 0} / {u.max_ad_watches ?? 2}</strong></div>}
 
         {!isPro && <>
-          {adsLeft > 0 &&
-            <button disabled={adBusy} onClick={onWatchAd} style={{marginTop:10,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:adBusy ? "default" : "pointer",fontFamily:"inherit",opacity:adBusy ? 0.6 : 1}}>
-              {adBusy ? (s.loadingAd || "Loading ad…") : `📺 ${(s.watchAdForQuestions || "Watch ad for +{n} questions").replace("{n}", u.ad_question_bonus ?? 10)}`}
-            </button>}
+          {/* The X/2 here is scoped to the +questions ad — it's not all ads. */}
+          {adsLeft > 0
+            ? <button disabled={adBusy} onClick={onWatchAd} style={{marginTop:10,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:adBusy ? "default" : "pointer",fontFamily:"inherit",opacity:adBusy ? 0.6 : 1}}>
+                {adBusy ? (s.loadingAd || "Loading ad…") : `📺 ${(s.watchAdForQuestions || "Watch ad for +{n} questions").replace("{n}", u.ad_question_bonus ?? 10)} · ${u.ad_watches_today ?? 0}/${u.max_ad_watches ?? 2}`}
+              </button>
+            : <div style={{marginTop:10,width:"100%",background:"var(--color-background-tertiary)",color:"var(--color-text-tertiary)",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:600,textAlign:"center",boxSizing:"border-box"}}>
+                📵 {(s.adLimitReached || "Daily ad limit reached")} · {u.max_ad_watches ?? 2}/{u.max_ad_watches ?? 2}
+              </div>}
           <button onClick={() => startCheckout?.(STRIPE_MONTHLY_PRICE)} style={{marginTop:8,width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
             ⭐ {s.upgradeForMore || "Upgrade to Pro — 250 questions/day"}
           </button>
@@ -1873,7 +1875,7 @@ export default function StudyQuiz() {
           </div>
           {!isPro&&(usage?.remaining??99)<=10&&((usage?.max_ad_watches??2)-(usage?.ad_watches_today??0))>0&&
             <button disabled={adBusy} onClick={handleWatchAd} style={{marginTop:8,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:8,padding:"9px",fontSize:12,fontWeight:700,cursor:adBusy?"default":"pointer",fontFamily:"inherit",opacity:adBusy?0.6:1}}>
-              {adBusy?t.loadingAd:`📺 ${t.watchAdForQuestions.replace("{n}",usage?.ad_question_bonus??10)}`}
+              {adBusy?t.loadingAd:`📺 ${t.watchAdForQuestions.replace("{n}",usage?.ad_question_bonus??10)} · ${usage?.ad_watches_today??0}/${usage?.max_ad_watches??2}`}
             </button>}
         </div>
         {isPro&&<button style={{width:"100%",marginBottom:14,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span>{t.examModeLabel}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>PRO ONLY</span></button>}

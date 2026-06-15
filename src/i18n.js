@@ -126,7 +126,7 @@ const T_EN = {
     autoAdvanceTime:"Auto-advance time", autoAdvanceTimeDesc:"How long to wait before the next question (instant feedback)",
     defaultDiff:"Default Difficulty", defaultDiffDesc:"Starting difficulty when opening a new quiz", segEasy:"Easy", segMed:"Med", segHard:"Hard",
     defaultQ:"Default Questions", defaultQDesc:"Starting question count for new quizzes",
-    secUsage:"USAGE", usageToday:"Questions today", leftWord:"left", usageBonus:"Extra questions (packs)", usageAdWatches:"Ad watches today",
+    secUsage:"USAGE", usageToday:"Questions today", leftWord:"left", usageBonus:"Extra questions (packs)", usageAdWatches:"Ad watches today", adLimitReached:"Daily ad limit reached",
     loadingAd:"Loading ad…", watchAdForQuestions:"Watch ad for +{n} questions", upgradeForMore:"Upgrade to Pro — 250 questions/day", buyPacks:"Question packs", questionsWord:"questions", buyBtn:"Buy",
     comingTitle:"💡 More settings coming", comingDesc:"Account sync, quiz history, and shared quizzes arrive when accounts go live.",
     resetAll:"Reset all to defaults",
