@@ -33,7 +33,7 @@ export default function Footer() {
         </div>
 
         <div className="footer-bottom">
-          <span>© 2025 Revyy. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Revyy. All rights reserved.</span>
           <div className="legal-links">
             <Link to="/privacy">Privacy Policy</Link>
             <Link to="/terms">Terms of Service</Link>

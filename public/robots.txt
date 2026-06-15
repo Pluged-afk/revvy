@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Signed-in app and auth pages aren't useful to crawlers
+Disallow: /app
+Disallow: /login
+Disallow: /signup
+
+Sitemap: https://revyy.app/sitemap.xml
