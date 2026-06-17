@@ -15,6 +15,7 @@ import TermsOfService from './pages/TermsOfService.jsx'
 import Login from './pages/Login.jsx'
 import Signup from './pages/Signup.jsx'
 import NotFound from './pages/NotFound.jsx'
+import LogoExport from './pages/LogoExport.jsx'
 import StudyQuiz from './StudyQuiz.jsx'
 import './site.css'
 
@@ -49,6 +50,9 @@ function ClerkRoutes() {
           {/* Clerk auth pages (path routing needs the splat) */}
           <Route path="/login/*" element={<Login />} />
           <Route path="/signup/*" element={<Signup />} />
+
+          {/* Standalone logo export (no navbar/footer) — for screenshotting */}
+          <Route path="/logo-export" element={<LogoExport />} />
 
           {/* The quiz app — Clerk-gated */}
           <Route
