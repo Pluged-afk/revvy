@@ -35,12 +35,12 @@ export default function PrivacyPolicy() {
           files after your quiz has been generated.
         </p>
 
-        <h2>3. Google AdSense</h2>
+        <h2>3. Advertising</h2>
         <p>
-          Free-plan pages may display ads served through Google AdSense. Google and its partners
-          may use cookies to serve ads based on your prior visits to this and other websites. You
-          can opt out of personalised advertising through{" "}
-          <a href="https://adssettings.google.com" target="_blank" rel="noreferrer">Google Ads Settings</a>.
+          Free-plan pages may display ads from third-party advertising partners. These partners
+          may use cookies to show ads based on your prior visits to this and other websites. You
+          can manage or opt out of personalised advertising through your browser settings or your
+          device's ad-personalisation controls.
         </p>
 
         <h2>4. Anthropic AI API</h2>

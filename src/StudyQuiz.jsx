@@ -983,8 +983,8 @@ function Confetti() {
 // ── Ad placeholders (free users only) ─────────────────────────────────
 // Side 160x600 banners on desktop (where there's empty margin), a 320x50
 // bottom banner on mobile. Visibility is controlled by CSS media queries.
-// Ads are master-switched by VITE_ADS_ENABLED — set it to "true" once
-// AdSense is approved and redeploy; nothing renders until then.
+// Ads are master-switched by VITE_ADS_ENABLED — set it to "true" once an ad
+// network is integrated and redeploy; nothing renders until then.
 const ADS_ENABLED = import.meta.env.VITE_ADS_ENABLED === "true";
 // Side 160x600 banners (desktop margins) + a 320x50 bottom anchor (mobile).
 // `bottom` can be turned off on screens that already have an in-content banner
@@ -1997,7 +1997,7 @@ export default function StudyQuiz() {
           <button style={{...Sb.btnPrimary,flex:1,margin:0}} onClick={retry}>{t.retry}</button>
           <button style={{...Sb.btnOutline,flex:1}} onClick={newMat}>{t.newMat}</button>
         </div>
-        {!isPro&&adsOn&&<div style={{background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",textAlign:"center",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}>📣 Banner ad — connect Google AdSense here</div>}
+        {!isPro&&adsOn&&<div style={{background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",textAlign:"center",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}>📣 Advertisement</div>}
         <p style={Sb.secLabel}>{t.review}</p>
         {quiz.type==="match"?
           quiz.questions.map((q,i)=>{
