@@ -3,8 +3,19 @@
   <url><loc>https://revyy.app/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>https://revyy.app/features</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://revyy.app/pricing</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://revyy.app/blog</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://revyy.app/about</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://revyy.app/contact</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://revyy.app/blog/active-recall-study-technique</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://revyy.app/blog/spaced-repetition-remember-more</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://revyy.app/blog/why-rereading-highlighting-dont-work</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://revyy.app/blog/turn-lecture-notes-into-practice-questions</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://revyy.app/blog/how-to-study-for-exams-complete-guide</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://revyy.app/blog/beat-procrastination-when-studying</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://revyy.app/blog/how-to-study-from-a-pdf-or-textbook</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://revyy.app/blog/flashcards-vs-practice-tests</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://revyy.app/blog/create-a-revision-timetable</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://revyy.app/blog/memory-techniques-every-student-should-know</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://revyy.app/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
   <url><loc>https://revyy.app/terms</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
 </urlset>
