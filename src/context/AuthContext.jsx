@@ -48,7 +48,7 @@ export function AuthProvider({ children }) {
         setIsPro(false); setSubStatus(null); setSubPlan(null); setPeriodEnd(null); setCancelAtPeriodEnd(false);
         return false;
       }
-      const res = await fetch("/api/get-profile", {
+      const res = await fetch("/api/profile", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return null;
@@ -88,10 +88,10 @@ export function AuthProvider({ children }) {
       }
       const email = clerkUser.primaryEmailAddress?.emailAddress || "";
       try {
-        await fetch("/api/create-profile", {
+        await fetch("/api/profile", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: clerkUser.id, email }),
+          body: JSON.stringify({ action: "create", userId: clerkUser.id, email }),
         });
       } catch { /* non-fatal */ }
       await loadProfile();
@@ -147,10 +147,10 @@ export function AuthProvider({ children }) {
     try {
       const token = await getToken();
       if (!token) return { error: "Please sign in first." };
-      const res = await fetch("/api/buy-pack", {
+      const res = await fetch("/api/billing", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ pack }),
+        body: JSON.stringify({ action: "pack", pack }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) return { error: data.error || "Could not start checkout." };
@@ -170,10 +170,10 @@ export function AuthProvider({ children }) {
   const deleteAccount = useCallback(async () => {
     if (!clerkUser) return { error: "You are not signed in." };
     try {
-      await fetch("/api/delete-account", {
+      await fetch("/api/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: clerkUser.id }),
+        body: JSON.stringify({ action: "delete", userId: clerkUser.id }),
       });
       await clerkUser.delete();   // ends the session
       return {};
@@ -185,10 +185,10 @@ export function AuthProvider({ children }) {
   const startCheckout = useCallback(async (priceId) => {
     if (!user) return { error: "Please sign in first." };
     try {
-      const res = await fetch("/api/create-checkout", {
+      const res = await fetch("/api/billing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId, userId: user.id, userEmail: user.email }),
+        body: JSON.stringify({ action: "checkout", priceId, userId: user.id, userEmail: user.email }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) return { error: data.error || "Could not start checkout." };
@@ -202,10 +202,10 @@ export function AuthProvider({ children }) {
   const openPortal = useCallback(async (flow) => {
     if (!user) return { error: "Please sign in first." };
     try {
-      const res = await fetch("/api/create-portal", {
+      const res = await fetch("/api/billing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, flow }),
+        body: JSON.stringify({ action: "portal", userId: user.id, flow }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) return { error: data.error || "Could not open billing portal." };
