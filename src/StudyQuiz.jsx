@@ -605,7 +605,7 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
   );
 }
 
-function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, t }) {
+function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, t }) {
   const s = t.set || {};
   const { subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
   const [adBusy, setAdBusy] = useState(false);
@@ -747,6 +747,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             {s.resetAll}
           </button>
 
+          {signedIn ? (<>
           <UsageSection isPro={isPro} usage={usage} s={s} adBusy={adBusy} onWatchAd={onWatchAd} onBuyPack={onBuyPack} packBusy={packBusy} startCheckout={startCheckout} onOpenPacks={()=>setShowPacks(true)}/>
 
           <SectionLabel label={s.secSubscription}/>
@@ -839,6 +840,17 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
               {s.deleteAccount}
             </button>
           </div>
+          </>) : (
+          <div style={{padding:"18px"}}>
+            <div style={{padding:"16px",borderRadius:12,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-secondary)",textAlign:"center"}}>
+              <div style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.6,marginBottom:12}}>Log in to save your quizzes, track your daily questions and upgrade to Pro.</div>
+              <button onClick={()=>window.location.assign("/login")}
+                style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",boxShadow:"0 2px 12px #4f46e544"}}>
+                Log in or sign up →
+              </button>
+            </div>
+          </div>
+          )}
         </div>
 
         <div style={{padding:"12px 18px 18px",borderTop:"0.5px solid var(--color-border-tertiary)",
@@ -1021,6 +1033,14 @@ export default function StudyQuiz() {
   const dev = useDev();
   const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack } = useAuth();
   const navigate = useNavigate();
+  // Approach B: the quiz app is browsable without an account, but generating a
+  // quiz requires sign-in. Returns true (and sends the visitor to sign-up) when
+  // they're logged out, so callers can bail early.
+  const requireLogin = useCallback(() => {
+    if (user) return false;
+    navigate("/signup");
+    return true;
+  }, [user, navigate]);
   const [coBusy, setCoBusy] = useState("");   // "monthly" | "yearly" while redirecting to Stripe
   const [coErr,  setCoErr]  = useState("");
   const [upgraded, setUpgraded] = useState(false); // "Welcome to Pro!" banner after checkout
@@ -1298,6 +1318,7 @@ export default function StudyQuiz() {
   }, [isPro, getToken]);
 
   const generateExam=useCallback(async()=>{
+    if (requireLogin()) return;   // logged-out visitors are sent to sign-up
     if(examFiles.length===0){setError("Upload at least one study file.");return;}
     if(examMode==="custom" && sectionTotalQs===0){setError("Please add at least one question to your sections.");return;}
     setError("");
@@ -1376,7 +1397,7 @@ export default function StudyQuiz() {
       setExamPaused(false); setExamTimeUp(false); setExamReview(false); setShowSubmitPrompt(false); setExamTimeExpired(false);
       setScreen("exam_run");
     }catch(err){setError(err.message.includes("parse")?"Unexpected format — please try again.":err.message);setScreen("exam_setup");}
-  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions]);
+  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin]);
 
   const evaluateExam=useCallback(async(answers)=>{
     const hasWritten=examQs.some(q=>q.type==="written");
@@ -1603,6 +1624,7 @@ export default function StudyQuiz() {
   },[fileLimitMB, processFile, isPro]);
 
   const generate = useCallback(async () => {
+    if (requireLogin()) return;   // logged-out visitors are sent to sign-up
     setError(""); setLimitHit(false);
     const finalType = canUseQType(qType)?qType:"mcq";
     const finalNumQ = effectiveNumQ();
@@ -1663,7 +1685,7 @@ export default function StudyQuiz() {
       setError(err.message.includes("parse")?"AI returned unexpected format. Please try again.":err.message);
       setScreen("upload");
     }
-  },[isPro,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic]);
+  },[isPro,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,requireLogin]);
 
   const pick    = i => { if(selected===null){ setSelected(i); haptic(); } };
   const nextQ   = isCorrect => {
@@ -1700,7 +1722,9 @@ export default function StudyQuiz() {
                 ))}
               </select>
               <button onClick={()=>openSettings()} title="Settings" style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:"2px 4px",color:"rgba(255,255,255,0.7)"}}>⚙️</button>
-              <UserButton afterSignOutUrl="/" />
+              {user ? <UserButton afterSignOutUrl="/" /> : (
+                <button onClick={()=>navigate("/login")} style={{background:"rgba(255,255,255,0.16)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,fontSize:12,fontWeight:600,padding:"5px 12px",cursor:"pointer",fontFamily:"inherit"}}>{t.logIn || "Log in"}</button>
+              )}
             </div>
           </div>
           <h1 className="rv-hero-head" style={Sb.h1}>{t.tagline}</h1>
@@ -1741,13 +1765,13 @@ export default function StudyQuiz() {
                 <button style={{...Sb.btnPrimary,width:"100%",marginTop:8,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>setScreen("upload")}>{t.makeQuiz || "Make a quiz"}</button>
               </>
             ) : (
-              <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>{setCoErr("");setShowProModal(true);}}>{t.upgrade}</button>
+              <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>{if(requireLogin())return;setCoErr("");setShowProModal(true);}}>{t.upgrade}</button>
             )}
           </div>
         </div>
       </div>
       {showProModal && <ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
-      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
+      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
       <ResumeModal info={examResume} onResume={resumeExam} onDiscard={discardResume} fmtClock={fmtClock}/>
     </div>
   );
@@ -1887,7 +1911,7 @@ export default function StudyQuiz() {
         onClose={()=>setUnlockFeature(null)} onUpgrade={openUpgrade}/>
       {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
     </div>
   );
 
@@ -2166,7 +2190,7 @@ export default function StudyQuiz() {
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#312e81,#4f46e5)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
     </div>
   );
 
@@ -2379,7 +2403,7 @@ export default function StudyQuiz() {
     );
   }
 
-  return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} t={t}/>;
+  return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>;
 }
 
 const Sb = {

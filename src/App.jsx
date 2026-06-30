@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
-import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react'
+import { ClerkProvider } from '@clerk/clerk-react'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { LanguageProvider } from './context/LanguageContext.jsx'
 import { DevProvider } from './context/DevContext.jsx'
@@ -58,16 +58,9 @@ function ClerkRoutes() {
           {/* Standalone logo export (no navbar/footer) — for screenshotting */}
           <Route path="/logo-export" element={<LogoExport />} />
 
-          {/* The quiz app — Clerk-gated */}
-          <Route
-            path="/app"
-            element={
-              <>
-                <SignedIn><StudyQuiz /></SignedIn>
-                <SignedOut><RedirectToSignIn /></SignedOut>
-              </>
-            }
-          />
+          {/* The quiz app — browsable by everyone. Generating a quiz requires
+              an account; that gate lives in StudyQuiz's generate handlers. */}
+          <Route path="/app" element={<StudyQuiz />} />
 
           {/* Unknown routes → 404 inside the site chrome */}
           <Route path="*" element={<SiteLayout />}>
