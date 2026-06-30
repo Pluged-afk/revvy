@@ -50,7 +50,7 @@ export default function Blog() {
             <p>Turn your own notes into active-recall quizzes in seconds with Revyy.</p>
           </div>
           <div style={{ textAlign: "center" }}>
-            <Link to="/signup" className="btn btn-primary btn-lg">Try Revyy Free →</Link>
+            <Link to="/app" className="btn btn-primary btn-lg">Try Revyy Free →</Link>
           </div>
         </div>
       </section>

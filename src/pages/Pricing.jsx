@@ -79,7 +79,7 @@ export default function Pricing() {
               <ul className="price-list">
                 {FREE.map((f) => <li key={f}>{f}</li>)}
               </ul>
-              <Link to="/signup" className="btn btn-ghost btn-block">Get Started Free</Link>
+              <Link to="/app" className="btn btn-ghost btn-block">Get Started Free</Link>
             </div>
 
             {/* Pro Monthly */}

@@ -41,7 +41,7 @@ export default function Home() {
             {user ? (
               <Link to="/app" className="btn btn-light btn-lg">Start a Quiz →</Link>
             ) : (
-              <Link to="/signup" className="btn btn-light btn-lg">Start Studying Free →</Link>
+              <Link to="/app" className="btn btn-light btn-lg">Start Studying Free →</Link>
             )}
             <a href="#how-it-works" className="btn btn-ghost-light btn-lg">See How It Works</a>
           </div>
@@ -108,7 +108,7 @@ export default function Home() {
               {user ? (
                 <Link to="/app" className="btn btn-ghost btn-block">Open App →</Link>
               ) : (
-                <Link to="/signup" className="btn btn-ghost btn-block">Start Free</Link>
+                <Link to="/app" className="btn btn-ghost btn-block">Start Free</Link>
               )}
             </div>
 
@@ -145,7 +145,7 @@ export default function Home() {
             {user ? (
               <Link to="/app" className="btn btn-light btn-lg">Start a Quiz →</Link>
             ) : (
-              <Link to="/signup" className="btn btn-light btn-lg">Sign Up Free →</Link>
+              <Link to="/app" className="btn btn-light btn-lg">Sign Up Free →</Link>
             )}
           </div>
         </div>

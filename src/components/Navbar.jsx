@@ -44,7 +44,7 @@ export default function Navbar() {
           {user ? (
             <Link to="/app" className="btn btn-primary">Open App →</Link>
           ) : (
-            <Link to="/signup" className="btn btn-primary">Try Revyy Free</Link>
+            <Link to="/app" className="btn btn-primary">Try Revyy Free</Link>
           )}
           <button
             className="nav-toggle"

@@ -61,7 +61,7 @@ export default function BlogPost() {
           ))}
 
           <div style={{ marginTop: 44, textAlign: "center" }}>
-            <Link to="/signup" className="btn btn-primary btn-lg">Turn your notes into a quiz →</Link>
+            <Link to="/app" className="btn btn-primary btn-lg">Turn your notes into a quiz →</Link>
           </div>
         </div>
       </article>

@@ -86,7 +86,7 @@ export default function About() {
             </div>
           </div>
           <div style={{ textAlign: "center", marginTop: 40 }}>
-            <Link to="/signup" className="btn btn-primary btn-lg">Try Revyy Free →</Link>
+            <Link to="/app" className="btn btn-primary btn-lg">Try Revyy Free →</Link>
           </div>
         </div>
       </section>
