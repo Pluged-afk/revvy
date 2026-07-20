@@ -44,7 +44,7 @@ export default function Pricing() {
   const { user, isPro, startCheckout, loading } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
-  usePageMeta("Pricing — Revyy", "Start free forever, or go Pro for €4.99/month. Cancel anytime.");
+  usePageMeta("Revyy Pricing — Free AI Quiz Generator, or Pro €4.99/mo", "Use Revyy's AI quiz generator free forever, or go Pro for €4.99/month for exam mode, all quiz types and no ads. Cancel anytime.");
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
 

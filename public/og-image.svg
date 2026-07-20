@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Revyy — AI quiz generator for students">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#312e81"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="150" cy="120" r="14" fill="#a5b4fc" opacity="0.6"/>
+  <circle cx="1060" cy="510" r="20" fill="#c7d2fe" opacity="0.4"/>
+  <text x="600" y="250" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="800" fill="#ffffff">Revyy</text>
+  <text x="600" y="340" text-anchor="middle" font-family="system-ui, Arial, sans-serif" font-size="42" font-weight="700" fill="#e0e7ff">Turn any material into a quiz</text>
+  <text x="600" y="410" text-anchor="middle" font-family="system-ui, Arial, sans-serif" font-size="28" font-weight="400" fill="#c7d2fe">AI study quizzes, flashcards &amp; practice exams — in seconds</text>
+  <rect x="470" y="470" width="260" height="66" rx="33" fill="#ffffff"/>
+  <text x="600" y="513" text-anchor="middle" font-family="system-ui, Arial, sans-serif" font-size="26" font-weight="700" fill="#4f46e5">revyy.app</text>
+</svg>

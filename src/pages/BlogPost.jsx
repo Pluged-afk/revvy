@@ -1,7 +1,56 @@
+import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
 import AdSlot from "../components/AdSlot.jsx";
 import { getPost, POSTS } from "../data/posts.js";
+
+const SITE = "https://revyy.app";
+
+// Inject (and keep updated) Article + Breadcrumb structured data for the post
+// so Google can show it as a rich result. Removed when leaving the page.
+function useArticleJsonLd(post) {
+  useEffect(() => {
+    if (!post) return;
+    const url = `${SITE}/blog/${post.slug}`;
+    const data = {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "BlogPosting",
+          "headline": post.title,
+          "description": post.description,
+          "url": url,
+          "mainEntityOfPage": url,
+          "datePublished": post.date,
+          "dateModified": post.date,
+          "image": `${SITE}/og-image.svg`,
+          "author": { "@type": "Organization", "name": "Revyy", "url": SITE },
+          "publisher": {
+            "@type": "Organization",
+            "name": "Revyy",
+            "logo": { "@type": "ImageObject", "url": `${SITE}/favicon.svg` },
+          },
+        },
+        {
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            { "@type": "ListItem", "position": 1, "name": "Blog", "item": `${SITE}/blog` },
+            { "@type": "ListItem", "position": 2, "name": post.title, "item": url },
+          ],
+        },
+      ],
+    };
+    let tag = document.getElementById("article-jsonld");
+    if (!tag) {
+      tag = document.createElement("script");
+      tag.type = "application/ld+json";
+      tag.id = "article-jsonld";
+      document.head.appendChild(tag);
+    }
+    tag.textContent = JSON.stringify(data);
+    return () => { document.getElementById("article-jsonld")?.remove(); };
+  }, [post]);
+}
 
 const fmtDate = (iso) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -27,6 +76,7 @@ export default function BlogPost() {
     post ? `${post.title} — Revyy` : "Article not found — Revyy",
     post ? post.description : "The article you're looking for could not be found."
   );
+  useArticleJsonLd(post);
 
   if (!post) {
     return (

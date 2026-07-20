@@ -4,17 +4,110 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Upload a PDF, paste notes or take a photo. Revyy builds your perfect study quiz in seconds using AI." />
+
+    <!-- Primary SEO -->
+    <title>Revyy — AI Quiz Generator: Turn Notes & PDFs Into Study Quizzes</title>
+    <meta name="description" content="Revyy is a free AI quiz generator for students. Upload a PDF, paste your notes or snap a photo and get study quizzes, flashcards and practice exams in seconds. Turn any material into a quiz." />
+    <meta name="keywords" content="quiz generator, AI quiz maker, study quiz, turn notes into quiz, flashcard maker, practice exam generator, study guide, quiz from PDF, revision tool, exam practice questions" />
+    <meta name="author" content="Revyy" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://revyy.app/" />
+    <meta name="theme-color" content="#4f46e5" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Revyy" />
+    <meta property="og:title" content="Revyy — AI Quiz Generator: Turn Notes & PDFs Into Study Quizzes" />
+    <meta property="og:description" content="Upload a PDF, paste your notes or snap a photo and get study quizzes, flashcards and practice exams in seconds. Free AI quiz generator for students." />
+    <meta property="og:url" content="https://revyy.app/" />
+    <meta property="og:image" content="https://revyy.app/og-image.svg" />
+    <meta property="og:locale" content="en_GB" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Revyy — AI Quiz Generator for Students" />
+    <meta name="twitter:description" content="Turn any PDF, notes or photo into study quizzes, flashcards and practice exams in seconds with AI." />
+    <meta name="twitter:image" content="https://revyy.app/og-image.svg" />
+
     <!-- Google AdSense -->
     <meta name="google-adsense-account" content="ca-pub-7771463873865547" />
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7771463873865547" crossorigin="anonymous"></script>
+
+    <!-- Structured data: helps Google understand the site -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://revyy.app/#organization",
+          "name": "Revyy",
+          "url": "https://revyy.app/",
+          "logo": "https://revyy.app/favicon.svg",
+          "description": "AI-powered study quiz generator for students."
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://revyy.app/#website",
+          "url": "https://revyy.app/",
+          "name": "Revyy",
+          "description": "Turn any material into a study quiz with AI.",
+          "publisher": { "@id": "https://revyy.app/#organization" },
+          "inLanguage": "en"
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "Revyy",
+          "operatingSystem": "Web",
+          "applicationCategory": "EducationalApplication",
+          "url": "https://revyy.app/",
+          "description": "Revyy turns PDFs, notes and photos into AI-generated study quizzes, flashcards and practice exams.",
+          "offers": [
+            { "@type": "Offer", "price": "0", "priceCurrency": "EUR", "name": "Free" },
+            { "@type": "Offer", "price": "4.99", "priceCurrency": "EUR", "name": "Pro" }
+          ]
+        }
+      ]
+    }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet" />
-    <title>Revyy — Turn Any Material Into a Quiz</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Crawler-visible fallback content. React replaces this on load, but
+           search engines that don't run JavaScript still get real, indexable
+           text and internal links. Keep it in sync with the site's key pages. -->
+      <main style="max-width:760px;margin:0 auto;padding:48px 20px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1e293b;line-height:1.6">
+        <h1>Revyy — Turn Any Material Into a Study Quiz, Instantly</h1>
+        <p><strong>Revyy is a free AI quiz generator for students.</strong> Upload a PDF, paste your notes or snap a photo of your textbook, and Revyy builds a tailored study quiz in seconds using AI — with multiple-choice questions, flashcards, fill-in-the-blank, match-the-term exercises and AI-graded practice exams.</p>
+        <h2>Study smarter, not longer</h2>
+        <ul>
+          <li>AI reads your material and writes accurate, exam-quality questions.</li>
+          <li>Four quiz types plus a full Exam Mode with AI feedback.</li>
+          <li>Turn lecture notes, slides and textbooks into practice questions.</li>
+          <li>Works in 20+ languages on any device — no install needed.</li>
+        </ul>
+        <h2>Explore Revyy</h2>
+        <ul>
+          <li><a href="/features">Features</a> — quiz types, exam mode and AI explanations</li>
+          <li><a href="/pricing">Pricing</a> — free forever, or Pro for €4.99/month</li>
+          <li><a href="/blog">Study blog</a> — evidence-based revision and exam tips</li>
+          <li><a href="/about">About Revyy</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+        <h2>Popular study guides</h2>
+        <ul>
+          <li><a href="/blog/active-recall-study-technique">Active Recall: The Study Technique That Actually Works</a></li>
+          <li><a href="/blog/spaced-repetition-remember-more">Spaced Repetition: Remember More by Studying Less</a></li>
+          <li><a href="/blog/how-to-study-for-exams-complete-guide">How to Study for Exams: A Complete Guide</a></li>
+          <li><a href="/blog/turn-lecture-notes-into-practice-questions">How to Turn Lecture Notes Into Practice Questions</a></li>
+        </ul>
+        <p><a href="/app">Try Revyy free →</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

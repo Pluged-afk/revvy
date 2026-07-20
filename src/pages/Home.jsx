@@ -22,8 +22,8 @@ const PRO_PERKS = ["250 questions per day", "All 4 quiz types", "Up to 100 per q
 export default function Home() {
   const { user, isPro } = useAuth();
   usePageMeta(
-    "Revyy — Turn Any Material Into a Quiz",
-    "Upload a PDF, paste notes or take a photo. Revyy builds your perfect study quiz in seconds using AI."
+    "Revyy — AI Quiz Generator: Turn Notes & PDFs Into Study Quizzes",
+    "Free AI quiz generator for students. Upload a PDF, paste notes or snap a photo and turn any material into study quizzes, flashcards and practice exams in seconds."
   );
 
   return (

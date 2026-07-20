@@ -31,7 +31,7 @@ function Cell({ v, pro }) {
 }
 
 export default function Features() {
-  usePageMeta("Features — Revyy", "Four quiz types, full exam simulation, and AI that understands your study material.");
+  usePageMeta("Revyy Features — AI Quiz Maker, Flashcards & Exam Mode", "Four quiz types, AI-graded exam simulation, PDF & image upload, and 20+ languages. See how Revyy turns your study material into quizzes.");
   return (
     <>
       <section className="hero" style={{ padding: "84px 0 90px" }}>
