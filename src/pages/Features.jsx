@@ -7,7 +7,7 @@ const FEATURES = [
   { icon: "🃏", title: "Flashcards", desc: "Flip cards to test recall and mark what you know — perfect for memorisation." },
   { icon: "✏️", title: "Fill in the Blank", desc: "Type the missing term to actively retrieve key facts instead of just recognising them." },
   { icon: "🔗", title: "Match Terms", desc: "Pair terms with their definitions in a fast, interactive matching grid." },
-  { icon: "🎓", title: "Exam Mode", pro: true, desc: "Full mock exams with MCQ and written questions, graded by AI with feedback." },
+  { icon: "🎓", title: "Exam Mode", desc: "AI-graded mock exams with MCQ and written questions. One free exam a day; Pro is unlimited with custom papers." },
   { icon: "💡", title: "AI Explanations", desc: "Every question comes with a concise reason why the correct answer is correct." },
   { icon: "📄", title: "PDF & Image Upload", desc: "Lecture slides, textbooks, handwritten notes or whiteboard photos — all supported." },
   { icon: "🌍", title: "Works in 20+ Languages", desc: "Generate and take quizzes in your language, from Spanish to Japanese to Arabic." },
@@ -15,11 +15,11 @@ const FEATURES = [
 
 const ROWS = [
   ["Daily questions", "50 / day", "250 / day"],
-  ["Multiple choice", true, true],
-  ["Flashcards · Fill-in · Match", false, true],
-  ["Questions per quiz", "Up to 20", "Up to 100"],
-  ["File upload size", "5 MB", "Unlimited"],
-  ["Exam Mode (AI-graded)", "1 / day", true],
+  ["Multiple choice quizzes", true, true],
+  ["Flashcards, fill-in & match", "With ads", true],
+  ["Questions per quiz", "20 (50 with ad)", "Up to 100"],
+  ["Exam Mode (AI-graded)", "1 / day (ad)", "Unlimited + custom"],
+  ["File uploads", "5 MB (10 MB with ad)", "Unlimited"],
   ["Ad-free experience", false, true],
   ["Multi-language quizzes", true, true],
 ];
