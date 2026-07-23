@@ -19,7 +19,7 @@ const ROWS = [
   ["Flashcards · Fill-in · Match", false, true],
   ["Questions per quiz", "Up to 20", "Up to 100"],
   ["File upload size", "5 MB", "Unlimited"],
-  ["Exam Mode (AI-graded)", false, true],
+  ["Exam Mode (AI-graded)", "1 / day", true],
   ["Ad-free experience", false, true],
   ["Multi-language quizzes", true, true],
 ];

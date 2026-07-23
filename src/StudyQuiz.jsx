@@ -1083,6 +1083,19 @@ export default function StudyQuiz() {
   const [showProModal, setShowProModal] = useState(false);
   const [unlockFeature, setUnlockFeature] = useState(null); // which feature's unlock modal is open
   const unlocks = useAdUnlocks(isPro);
+  // Free exam mode: watch one ad to unlock a single 20-question exam for the
+  // day. Pro users enter straight away; free users who've used today's exam
+  // (or can't watch again) are blocked until tomorrow.
+  const [examAdBusy, setExamAdBusy] = useState(false);
+  const enterExamMode = async () => {
+    if (requireLogin()) return;
+    if (isPro || unlocks.examUnlocked()) { setScreen("exam_setup"); return; }
+    if (!unlocks.examCanWatch()) return;   // already used today's free exam
+    setExamAdBusy(true);
+    await unlocks.unlockExam();
+    setExamAdBusy(false);
+    setScreen("exam_setup");
+  };
   const fileRef  = useRef();
   const photoRef = useRef();
   const examFileRef0=useRef(),examFileRef1=useRef(),examFileRef2=useRef(),examFileRef3=useRef(),examFileRef4=useRef();
@@ -1320,10 +1333,16 @@ export default function StudyQuiz() {
   const generateExam=useCallback(async()=>{
     if (requireLogin()) return;   // logged-out visitors are sent to sign-up
     if(examFiles.length===0){setError("Upload at least one study file.");return;}
+    // Free users: exam is ad-unlocked, single-use per day, capped to a
+    // 20-question all-MCQ or all-written paper (no custom sections).
+    if(!isPro){
+      if(!unlocks.examUnlocked()){setError("You've used today's free exam. Come back tomorrow, or upgrade to Pro for unlimited exams.");return;}
+      if(examMode==="custom"){setError("Custom exams are a Pro feature — pick all multiple-choice or all written.");return;}
+    }
     if(examMode==="custom" && sectionTotalQs===0){setError("Please add at least one question to your sections.");return;}
     setError("");
     const dg = DIFFICULTY[diff] || DIFFICULTY[1];
-    const totalQ = examMode==="custom" ? sectionTotalQs : Math.min(Math.max(parseInt(examTotalQ)||5,1),100);
+    const totalQ = examMode==="custom" ? sectionTotalQs : (isPro ? Math.min(Math.max(parseInt(examTotalQ)||5,1),100) : 20);
 
     // Exam questions count toward the daily question limit (reserve them first).
     const consumed = await consumeQuestions(totalQ);
@@ -1340,7 +1359,8 @@ export default function StudyQuiz() {
 
     // Build the prompt; `scale` (≤1) shrinks the question counts for a retry.
     const buildPrompt=(scale)=>{
-      const totN=Math.max(1,Math.round(Math.min(Math.max(parseInt(examTotalQ)||5,1),100)*scale));
+      const base=isPro?Math.min(Math.max(parseInt(examTotalQ)||5,1),100):20;
+      const totN=Math.max(1,Math.round(base*scale));
       let typeInst=""; const marksMap={};
       if(examMode==="mcq") typeInst="Generate exactly "+totN+" multiple choice questions. 4 options each. Set type:\"mcq\" for all. Set \"section\":1 on every question.";
       else if(examMode==="written") typeInst="Generate exactly "+totN+" open-ended short-answer questions. Include a model answer. Set type:\"written\", options:[] for all. Set \"section\":1 on every question.";
@@ -1396,8 +1416,9 @@ export default function StudyQuiz() {
       setExamTotalSec(tSec); setExamTimeLeft(examTimerOn ? tSec : null);
       setExamPaused(false); setExamTimeUp(false); setExamReview(false); setShowSubmitPrompt(false); setExamTimeExpired(false);
       setScreen("exam_run");
+      if(!isPro) unlocks.consumeExam();   // free daily exam is now used up
     }catch(err){setError(err.message.includes("parse")?"Unexpected format — please try again.":err.message);setScreen("exam_setup");}
-  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin]);
+  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks]);
 
   const evaluateExam=useCallback(async(answers)=>{
     const hasWritten=examQs.some(q=>q.type==="written");
@@ -1902,8 +1923,23 @@ export default function StudyQuiz() {
               {adBusy?t.loadingAd:`📺 ${t.watchAdForQuestions.replace("{n}",usage?.ad_question_bonus??10)} · ${usage?.ad_watches_today??0}/${usage?.max_ad_watches??2}`}
             </button>}
         </div>
-        {isPro&&<button style={{width:"100%",marginBottom:14,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span>{t.examModeLabel}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>PRO ONLY</span></button>}
-        {!isPro&&<div style={{background:"#f5f3ff",border:"1.5px solid #f59e0b55",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}} onClick={()=>setShowProModal(true)}><div style={{flex:1}}><div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.examModeLabel}</div><div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:2}}>{t.examProOnly}</div></div><span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0}}>PRO</span></div>}
+        {isPro&&<button style={{width:"100%",marginBottom:14,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span>{t.examModeLabel}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>UNLIMITED</span></button>}
+        {!isPro&&(
+          <div
+            onClick={unlocks.examUsedToday()?undefined:enterExamMode}
+            style={{background:"#f5f3ff",border:"1.5px solid "+(unlocks.examUnlocked()?"#4f46e5":"#f59e0b55"),borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:unlocks.examUsedToday()?"default":"pointer",opacity:unlocks.examUsedToday()?0.65:1}}>
+            <span style={{fontSize:22,flexShrink:0}}>🎓</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.examModeLabel}</div>
+              <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.45}}>
+                {examAdBusy?"Loading ad…":unlocks.examUsedToday()?"Used today — come back tomorrow, or go Pro for unlimited exams.":unlocks.examUnlocked()?"Unlocked! Tap to start your free exam (20 questions).":"Watch a short ad to unlock 1 free exam today (20 questions, MCQ or written)."}
+              </div>
+            </div>
+            <span style={{fontSize:10,background:unlocks.examUsedToday()?"#94a3b8":unlocks.examUnlocked()?"#4f46e5":"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>
+              {unlocks.examUsedToday()?"USED":unlocks.examUnlocked()?"READY":"📺 FREE"}
+            </span>
+          </div>
+        )}
         <button style={{...Sb.btnPrimary,width:"100%"}} onClick={generate}>{t.generate}</button>
         </div>
       </div>
@@ -2055,13 +2091,13 @@ export default function StudyQuiz() {
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← Back</button>
         <span style={{...Sb.brand,color:"#4f46e5"}}>{t.examModeLabel}</span>
-        <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"2px 8px",fontWeight:700}}>PRO</span>
+        <span style={{fontSize:10,background:isPro?"#f59e0b":"#4f46e5",color:"#fff",borderRadius:8,padding:"2px 8px",fontWeight:700,whiteSpace:"nowrap"}}>{isPro?"PRO":"1 FREE / DAY"}</span>
       </div>
       <div className="rv-exam-body" style={{padding:"20px 16px 40px"}}>
         <p style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:20,lineHeight:1.6}}>{t.examModeSub}</p>
         <p style={Sb.secLabel}>EXAM TYPE</p>
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:22}}>
-          {[{id:"mcq",icon:"📋",title:t.fullMCQ,desc:t.fullMCQDesc},{id:"written",icon:"✍️",title:t.fullWritten,desc:t.fullWrittenDesc},{id:"custom",icon:"🎛️",title:t.customMix,desc:t.customMixDesc}].map(m=>(
+          {[{id:"mcq",icon:"📋",title:t.fullMCQ,desc:t.fullMCQDesc},{id:"written",icon:"✍️",title:t.fullWritten,desc:t.fullWrittenDesc},{id:"custom",icon:"🎛️",title:t.customMix,desc:t.customMixDesc}].filter(m=>isPro||m.id!=="custom").map(m=>(
             <div key={m.id} onClick={()=>setExamMode(m.id)} className="exam-type-card" style={{display:"flex",alignItems:"center",gap:14,borderRadius:12,padding:"14px 16px",cursor:"pointer",border:"1.5px solid "+(examMode===m.id?"#4f46e5":"var(--color-border-tertiary)"),background:examMode===m.id?"#ede9fe":"var(--color-background-primary)",transition:"all 0.18s",boxShadow:examMode===m.id?"0 4px 16px #4f46e533":"none"}}>
               <span style={{fontSize:26,flexShrink:0}}>{m.icon}</span>
               <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{m.title}</div><div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:2}}>{m.desc}</div></div>
@@ -2072,14 +2108,24 @@ export default function StudyQuiz() {
         {examMode&&examMode!=="custom"&&(
           <div style={{marginBottom:20}}>
             <p style={Sb.secLabel}>{t.totalQ.toUpperCase()}</p>
-            <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>questions</span>
-                <span style={{fontWeight:700,fontSize:18,color:"#4f46e5"}}>{Math.min(Math.max(parseInt(examTotalQ)||1,1),100)}</span>
+            {isPro ? (
+              <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>questions</span>
+                  <span style={{fontWeight:700,fontSize:18,color:"#4f46e5"}}>{Math.min(Math.max(parseInt(examTotalQ)||1,1),100)}</span>
+                </div>
+                <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(examTotalQ)||1,1),100)} onChange={e=>setExamTotalQ(e.target.value)} style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}/>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>100</span></div>
               </div>
-              <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(examTotalQ)||1,1),100)} onChange={e=>setExamTotalQ(e.target.value)} style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}/>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>100</span></div>
-            </div>
+            ) : (
+              <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>Free daily exam</span>
+                  <span style={{fontWeight:700,fontSize:18,color:"#4f46e5"}}>20 questions</span>
+                </div>
+                <p style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.5,margin:"8px 0 0"}}>Upgrade to Pro for up to 100 questions, custom sections and unlimited exams.</p>
+              </div>
+            )}
           </div>
         )}
         {examMode==="custom"&&(

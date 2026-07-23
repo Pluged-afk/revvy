@@ -13,6 +13,12 @@ import { simulateAdWatch } from "./ads.jsx";
 //   filesize    — 10MB uploads, once/day, 1h
 const HOUR = 3600 * 1000;
 
+// Exam mode is a special case: watching one ad unlocks a SINGLE exam for the
+// day (not a 1-hour window). Once that exam is generated it's used up, and the
+// user must watch again the next day. Pro users skip all of this.
+const EXAM_AD_DATE = "exam_ad_date";     // date the unlock ad was watched
+const EXAM_USED_DATE = "exam_used_date"; // date the free exam was generated
+
 export const UNLOCK_FEATURES = {
   flashcard:   { until: "flashcard_unlocked_until",   daily: false },
   fillinblank: { until: "fillinblank_unlocked_until", dateKey: "fillinblank_ad_used_date", daily: true },
@@ -87,5 +93,35 @@ export function useAdUnlocks(isPro) {
     return true;
   }, [now]);
 
-  return { isUnlocked, canUnlock, usedToday, remainingMs, remainingLabel, unlock };
+  // ── Exam mode (free users): one ad → one exam, once per day ──
+  // These read localStorage fresh on every call, so they stay correct even from
+  // stale closures. `now` only drives re-render/countdown elsewhere.
+  const examWatchedToday = useCallback(() => getStr(EXAM_AD_DATE) === today(), []);
+  const examUsedToday = useCallback(() => getStr(EXAM_USED_DATE) === today(), []);
+  // Ready to start a free exam right now (Pro = always).
+  const examUnlocked = useCallback(
+    () => isPro || (getStr(EXAM_AD_DATE) === today() && getStr(EXAM_USED_DATE) !== today()),
+    [isPro]
+  );
+  // May watch the unlock ad now (haven't watched yet today).
+  const examCanWatch = useCallback(() => !isPro && getStr(EXAM_AD_DATE) !== today(), [isPro]);
+  // Watch the (placeholder) ad to unlock today's single exam.
+  const unlockExam = useCallback(async () => {
+    if (isPro) return true;
+    if (getStr(EXAM_AD_DATE) === today()) return getStr(EXAM_USED_DATE) !== today();
+    await simulateAdWatch();
+    try { localStorage.setItem(EXAM_AD_DATE, today()); } catch { /* ignore */ }
+    setNow(Date.now());
+    return true;
+  }, [isPro]);
+  // Mark the free daily exam as used (call after a successful generation).
+  const consumeExam = useCallback(() => {
+    try { localStorage.setItem(EXAM_USED_DATE, today()); } catch { /* ignore */ }
+    setNow(Date.now());
+  }, []);
+
+  return {
+    isUnlocked, canUnlock, usedToday, remainingMs, remainingLabel, unlock,
+    examUnlocked, examCanWatch, examUsedToday, examWatchedToday, unlockExam, consumeExam,
+  };
 }
