@@ -76,38 +76,10 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <div id="root">
-      <!-- Crawler-visible fallback content. React replaces this on load, but
-           search engines that don't run JavaScript still get real, indexable
-           text and internal links. Keep it in sync with the site's key pages. -->
-      <main style="max-width:760px;margin:0 auto;padding:48px 20px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1e293b;line-height:1.6">
-        <h1>Revyy — Turn Any Material Into a Study Quiz, Instantly</h1>
-        <p><strong>Revyy is a free AI quiz generator for students.</strong> Upload a PDF, paste your notes or snap a photo of your textbook, and Revyy builds a tailored study quiz in seconds using AI — with multiple-choice questions, flashcards, fill-in-the-blank, match-the-term exercises and AI-graded practice exams.</p>
-        <h2>Study smarter, not longer</h2>
-        <ul>
-          <li>AI reads your material and writes accurate, exam-quality questions.</li>
-          <li>Four quiz types plus a full Exam Mode with AI feedback.</li>
-          <li>Turn lecture notes, slides and textbooks into practice questions.</li>
-          <li>Works in 20+ languages on any device — no install needed.</li>
-        </ul>
-        <h2>Explore Revyy</h2>
-        <ul>
-          <li><a href="/features">Features</a> — quiz types, exam mode and AI explanations</li>
-          <li><a href="/pricing">Pricing</a> — free forever, or Pro for €4.99/month</li>
-          <li><a href="/blog">Study blog</a> — evidence-based revision and exam tips</li>
-          <li><a href="/about">About Revyy</a></li>
-          <li><a href="/contact">Contact</a></li>
-        </ul>
-        <h2>Popular study guides</h2>
-        <ul>
-          <li><a href="/blog/active-recall-study-technique">Active Recall: The Study Technique That Actually Works</a></li>
-          <li><a href="/blog/spaced-repetition-remember-more">Spaced Repetition: Remember More by Studying Less</a></li>
-          <li><a href="/blog/how-to-study-for-exams-complete-guide">How to Study for Exams: A Complete Guide</a></li>
-          <li><a href="/blog/turn-lecture-notes-into-practice-questions">How to Turn Lecture Notes Into Practice Questions</a></li>
-        </ul>
-        <p><a href="/app">Try Revyy free →</a></p>
-      </main>
-    </div>
+    <!-- The build-time prerenderer (scripts/prerender.mjs) injects real,
+         crawlable per-route HTML in place of this marker. React then mounts
+         into #root on load. -->
+    <div id="root"><!--ssr-outlet--></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

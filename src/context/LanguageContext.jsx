@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getTranslations } from "../i18n.js";
 
-const LangContext = createContext(null);
+// Exported so the build-time prerenderer can supply an English mock value.
+export const LangContext = createContext(null);
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const useLang = () => useContext(LangContext);

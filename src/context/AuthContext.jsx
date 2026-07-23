@@ -2,7 +2,9 @@ import { createContext, useContext, useEffect, useState, useCallback, useMemo } 
 import { useUser, useAuth as useClerkAuth } from "@clerk/clerk-react";
 import { useDev } from "./DevContext.jsx";
 
-const AuthContext = createContext(null);
+// Exported so the build-time prerenderer (entry-server.jsx) can supply a
+// logged-out mock value without pulling in Clerk.
+export const AuthContext = createContext(null);
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);
