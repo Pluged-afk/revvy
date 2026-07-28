@@ -7,6 +7,7 @@ import { UserButton } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { upload as blobUpload } from "@vercel/blob/client";
 import { useAdUnlocks } from "./lib/adUnlocks.js";
+import { useSRS, toCard } from "./lib/srs.js";
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
@@ -1096,6 +1097,17 @@ export default function StudyQuiz() {
     setExamAdBusy(false);
     setScreen("exam_setup");
   };
+  // Spaced-repetition review deck (missed questions resurface over time).
+  const srs = useSRS();
+  const [reviewQueue, setReviewQueue] = useState([]); // card ids for this session
+  const [reviewPos,   setReviewPos]   = useState(0);
+  const [reviewShown, setReviewShown] = useState(false); // answer revealed?
+  const [srsAdded,    setSrsAdded]    = useState(0); // "+N added to review" note
+  const startReview = () => {
+    setReviewQueue(srs.dueCards.map((c) => c.id));
+    setReviewPos(0); setReviewShown(false); setScreen("review");
+  };
+  const srsAddedRef = useRef(null);
   const fileRef  = useRef();
   const photoRef = useRef();
   const examFileRef0=useRef(),examFileRef1=useRef(),examFileRef2=useRef(),examFileRef3=useRef(),examFileRef4=useRef();
@@ -1109,6 +1121,19 @@ export default function StudyQuiz() {
   const [examIdx,     setExamIdx]     = useState(0);
   const [examAns,     setExamAns]     = useState({});
   const [examEvals,   setExamEvals]   = useState(null);
+  // When a quiz or exam finishes, add the missed questions to the review deck
+  // (once per result set — keyed on the object identity).
+  useEffect(() => {
+    if (screen === "results" && quiz && srsAddedRef.current !== quiz) {
+      srsAddedRef.current = quiz;
+      const missed = quiz.questions.filter((_, i) => answers[i] && answers[i].isCorrect === false).map(toCard);
+      setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
+    } else if (screen === "exam_results" && examEvals && srsAddedRef.current !== examEvals) {
+      srsAddedRef.current = examEvals;
+      const missed = examQs.filter((_, i) => (examEvals[i]?.score ?? 0) < 1).map(toCard);
+      setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
+    }
+  }, [screen, quiz, answers, examEvals, examQs, srs]);
   // ── Exam timer ──
   const [examTimerOn,   setExamTimerOn]   = useState(false);
   const [examTimerMin,  setExamTimerMin]  = useState("60");
@@ -1755,6 +1780,31 @@ export default function StudyQuiz() {
       </div>
 
       <div className="rv-home-body" style={{padding:"20px 16px 32px"}}>
+        {/* Smart Review — spaced repetition of missed questions + exam countdown */}
+        <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4f46e5,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 16px rgba(79,70,229,0.3)":"none"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:24,flexShrink:0}}>🔁</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:14,color:srs.dueCount>0?"#fff":"var(--color-text-primary)"}}>Smart Review</div>
+              <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:srs.dueCount>0?"rgba(255,255,255,0.85)":"var(--color-text-secondary)"}}>
+                {srs.dueCount>0 ? `${srs.dueCount} card${srs.dueCount>1?"s":""} due for review` :
+                 srs.totalCount>0 ? `All caught up · ${srs.totalCount} card${srs.totalCount>1?"s":""} in your deck` :
+                 "Missed questions land here for spaced review"}
+              </div>
+            </div>
+            {srs.dueCount>0
+              ? <button onClick={startReview} style={{flexShrink:0,background:"#fff",color:"#4f46e5",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Review</button>
+              : srs.totalCount>0 && <span style={{flexShrink:0,fontSize:20}}>✅</span>}
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,paddingTop:12,borderTop:srs.dueCount>0?"0.5px solid rgba(255,255,255,0.2)":"0.5px solid var(--color-border-tertiary)"}}>
+            <span style={{fontSize:12,fontWeight:600,color:srs.dueCount>0?"rgba(255,255,255,0.9)":"var(--color-text-secondary)"}}>
+              {srs.examDate ? `🎯 Exam in ${srs.daysToExam} day${srs.daysToExam===1?"":"s"}` : "🎯 Set your exam date"}
+            </span>
+            <input type="date" value={srs.examDate||""} min={new Date().toISOString().slice(0,10)}
+              onChange={e=>srs.setExamDate(e.target.value)}
+              style={{border:"0.5px solid var(--color-border-secondary)",borderRadius:8,padding:"5px 8px",fontSize:12,fontFamily:"inherit",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",outline:"none",colorScheme:srs.dueCount>0?"dark":"light"}}/>
+          </div>
+        </div>
         <p style={Sb.secLabel}>{t.whatUpload}</p>
         <div className="rv-feat-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
           {[...t.features.filter(([icon])=>icon!=="🔗"), t.langFeature].map(([icon,title,sub],i)=>(
@@ -2045,6 +2095,13 @@ export default function StudyQuiz() {
         <div style={{fontSize:22,letterSpacing:4,marginTop:14}}>{answers.map((a,i)=><span key={i}>{a.isCorrect?"🟩":"🟥"}</span>)}</div>
       </div>
       <div className="rv-center" style={{padding:"20px 16px"}}>
+        {srsAdded>0 && (
+          <div style={{display:"flex",alignItems:"center",gap:10,background:"#ede9fe",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
+            <span style={{fontSize:18}}>🔁</span>
+            <span style={{flex:1,fontSize:12.5,color:"#4338ca",lineHeight:1.4}}><strong>{srsAdded}</strong> missed question{srsAdded>1?"s":""} added to Smart Review.</span>
+            <button onClick={startReview} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Review</button>
+          </div>
+        )}
         <div style={{display:"flex",gap:10,marginBottom:16}}>
           {[{v:score,l:t.correct2},{v:quiz.questions.length-score,l:t.wrong},{v:t.diffOpts[diff]||"-",l:t.level}].map(({v,l},i)=>(
             <div key={i} style={{flex:1,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 6px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
@@ -2084,6 +2141,63 @@ export default function StudyQuiz() {
   );
 
   // ── EXAM SETUP ────────────────────────────────────────────────────
+  // ── REVIEW (spaced repetition) ───────────────────────────────────
+  if(screen==="review") {
+    const card = srs.cards.find(c=>c.id===reviewQueue[reviewPos]);
+    const done = reviewPos>=reviewQueue.length || !card;
+    const gradeCard = (ok) => { if(card) srs.grade(card.id, ok); setReviewShown(false); setReviewPos(p=>p+1); };
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        <AdBanners isPro={isPro}/>
+        <div style={Sb.topbar} className="rv-topbar">
+          <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← Home</button>
+          <span style={{...Sb.brand,color:"#4f46e5"}}>🔁 Review</span>
+          <span style={{fontSize:12,color:"var(--color-text-secondary)",fontWeight:600}}>{done?"":`${Math.min(reviewPos+1,reviewQueue.length)}/${reviewQueue.length}`}</span>
+        </div>
+        {!done && <PBar v={reviewPos} max={reviewQueue.length||1}/>}
+        <div className="rv-center-narrow" style={{padding:"22px 16px 32px"}}>
+          {done ? (
+            <div style={{textAlign:"center",padding:"30px 0"}}>
+              <div style={{fontSize:52,marginBottom:10}}>{reviewQueue.length?"🎉":"✅"}</div>
+              <h2 style={{...Sb.h2,margin:"0 0 6px"}}>{reviewQueue.length?"Review complete!":"Nothing due right now"}</h2>
+              <p style={{fontSize:14,color:"var(--color-text-secondary)",lineHeight:1.6,maxWidth:320,margin:"0 auto 22px"}}>
+                {reviewQueue.length
+                  ? `You reviewed ${reviewQueue.length} card${reviewQueue.length>1?"s":""}. ${srs.dueCount>0?`${srs.dueCount} more came due — keep going!`:"Come back tomorrow for your next batch."}`
+                  : "Miss a question in a quiz or exam and it lands here for spaced review. You have "+srs.totalCount+" card"+(srs.totalCount===1?"":"s")+" in your deck."}
+              </p>
+              {reviewQueue.length>0 && srs.dueCount>0 &&
+                <button style={{...Sb.btnPrimary,width:"100%",marginBottom:10}} onClick={startReview}>Review {srs.dueCount} more</button>}
+              <button style={{...Sb.btnPrimary,width:"100%",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"0.5px solid var(--color-border-secondary)"}} onClick={()=>setScreen("home")}>Back to home</button>
+            </div>
+          ) : (
+            <>
+              <div style={{background:"var(--color-background-primary)",borderRadius:16,border:"0.5px solid var(--color-border-tertiary)",padding:"24px 20px",minHeight:150,display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:"var(--color-text-tertiary)",marginBottom:10,textTransform:"uppercase"}}>Question</div>
+                <div style={{fontSize:18,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.45,fontFamily:"'Playfair Display',Georgia,serif"}}>{card.front}</div>
+                {reviewShown && (
+                  <div className="slide-up" style={{marginTop:18,paddingTop:16,borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:"#16a34a",marginBottom:8,textTransform:"uppercase"}}>Answer</div>
+                    <div style={{fontSize:15,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.5}}>{card.back||"—"}</div>
+                    {card.explanation && <p style={{margin:"12px 0 0",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.55}}>{card.explanation}</p>}
+                  </div>
+                )}
+              </div>
+              {!reviewShown ? (
+                <button style={{...Sb.btnPrimary,width:"100%",marginTop:18}} onClick={()=>setReviewShown(true)}>Show answer</button>
+              ) : (
+                <div style={{display:"flex",gap:10,marginTop:18}}>
+                  <button style={{flex:1,background:"#fef2f2",border:"1.5px solid #fca5a5",color:"#b91c1c",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>gradeCard(false)}>✗ Again</button>
+                  <button style={{flex:1,background:"#16a34a",border:"none",color:"#fff",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>gradeCard(true)}>✓ Got it</button>
+                </div>
+              )}
+              <p style={{textAlign:"center",fontSize:11,color:"var(--color-text-tertiary)",marginTop:14,lineHeight:1.5}}>"Again" brings it back soon · "Got it" schedules it further out</p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if(screen==="exam_setup") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
@@ -2365,6 +2479,13 @@ export default function StudyQuiz() {
           <p style={{margin:"14px 0 0",fontSize:14,color:"rgba(255,255,255,0.88)",lineHeight:1.6,maxWidth:300,marginLeft:"auto",marginRight:"auto"}}>{theme.msg}</p>
         </div>
         <div className="rv-center" style={{padding:"20px 16px"}}>
+          {srsAdded>0 && (
+            <div style={{display:"flex",alignItems:"center",gap:10,background:"#ede9fe",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
+              <span style={{fontSize:18}}>🔁</span>
+              <span style={{flex:1,fontSize:12.5,color:"#4338ca",lineHeight:1.4}}><strong>{srsAdded}</strong> question{srsAdded>1?"s":""} to review added to Smart Review.</span>
+              <button onClick={startReview} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Review</button>
+            </div>
+          )}
           <div style={{display:"flex",gap:10,marginBottom:18}}>
             {[{v:(Math.round(total*10)/10)+"/"+totalPossible,l:t.examScore},{v:pct+"%",l:"Score"},{v:passed?"PASS":"FAIL",l:"Result"}].map(({v,l},i)=>(
               <div key={i} style={{flex:1,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 6px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
