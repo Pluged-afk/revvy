@@ -3,11 +3,12 @@ import { LANGS } from "./i18n.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { useLang } from "./context/LanguageContext.jsx";
 import { useDev, DevBadge } from "./context/DevContext.jsx";
-import { UserButton } from "@clerk/clerk-react";
+import { useClerk } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { upload as blobUpload } from "@vercel/blob/client";
 import { useAdUnlocks } from "./lib/adUnlocks.js";
 import { useSRS, toCard } from "./lib/srs.js";
+import { useStudyStats } from "./lib/stats.js";
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
@@ -608,7 +609,11 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
 
 function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, t }) {
   const s = t.set || {};
-  const { subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
+  const { user, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
+  const { lang, setLang } = useLang();      // language control lives here now
+  const acctSrs = useSRS();                 // review-deck stats for the header
+  const acctStats = useStudyStats();        // streak + accuracy
+  const clerk = useClerk();                 // "manage login & security"
   const [adBusy, setAdBusy] = useState(false);
   const [packBusy, setPackBusy] = useState("");
   const [showPacks, setShowPacks] = useState(false);
@@ -668,16 +673,41 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
         borderLeft:"0.5px solid var(--color-border-secondary)",
       }}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-          padding:"18px 18px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",flexShrink:0}}>
-          <span style={{fontSize:18,fontWeight:700,
-            fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>
-            ⚙️ {s.title}
-          </span>
+          padding:"16px 18px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",flexShrink:0}}>
+          {signedIn && user ? (
+            <div style={{display:"flex",alignItems:"center",gap:11,minWidth:0}}>
+              <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#4f46e5,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0}}>{(user.email||"?").charAt(0).toUpperCase()}</div>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{user.email||"Your account"}</div>
+                <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,padding:"2px 8px",borderRadius:999,color:isPro?"#422006":"var(--color-text-secondary)",background:isPro?"linear-gradient(135deg,#fde68a,#f59e0b)":"var(--color-background-tertiary)",border:isPro?"none":"0.5px solid var(--color-border-secondary)",display:"inline-block",marginTop:3}}>{isPro?"✦ PRO":"FREE PLAN"}</span>
+              </div>
+            </div>
+          ) : (
+            <span style={{fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{s.title||"Settings"}</span>
+          )}
           <button onClick={onCancel} style={{background:"none",border:"none",fontSize:20,
-            cursor:"pointer",color:"var(--color-text-secondary)",lineHeight:1,padding:"2px 6px"}}>✕</button>
+            cursor:"pointer",color:"var(--color-text-secondary)",lineHeight:1,padding:"2px 6px",flexShrink:0}}>✕</button>
         </div>
 
         <div style={{flex:1,overflowY:"auto"}}>
+          {/* Your progress — makes the account a study home, not just billing */}
+          <div style={{padding:"16px 18px 6px"}}>
+            <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:10}}>Your progress</div>
+            <div style={{display:"flex",gap:8}}>
+              {[
+                { v: `🔥 ${acctStats.streak}`, l: "Day streak" },
+                { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : "—", l: "Accuracy" },
+                { v: acctSrs.totalCount, l: "In review" },
+              ].map(({ v, l }, i) => (
+                <div key={i} style={{flex:1,background:"var(--color-background-secondary)",borderRadius:12,padding:"12px 4px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
+                  <div style={{fontSize:15.5,fontWeight:800,color:"var(--color-text-primary)"}}>{v}</div>
+                  <div style={{fontSize:10,color:"var(--color-text-secondary)",marginTop:3}}>{l}</div>
+                </div>
+              ))}
+            </div>
+            {acctSrs.dueCount > 0 && <div style={{fontSize:11.5,color:"#4f46e5",fontWeight:600,marginTop:9,textAlign:"center"}}>🔁 {acctSrs.dueCount} card{acctSrs.dueCount>1?"s":""} due for review today</div>}
+          </div>
+
           <SectionLabel label={s.secAppearance}/>
           <SettingRow label={s.theme} desc={draft.theme==="light"?s.themeLight:draft.theme==="dark"?s.themeDark:s.themeFollows}>
             <Seg options={[["system",s.segAuto],["light","☀️"],["dark","🌙"]]} value={draft.theme} onChange={v=>update("theme",v)}/>
@@ -687,6 +717,11 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           </SettingRow>
           <SettingRow label={s.animations} desc={s.animationsDesc}>
             <Toggle on={draft.animations} onChange={v=>update("animations",v)}/>
+          </SettingRow>
+          <SettingRow label="🌍 Language" desc={LANGS[lang]?.name}>
+            <select value={lang} onChange={e=>setLang(e.target.value)} style={{border:"0.5px solid var(--color-border-secondary)",borderRadius:8,background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:13,padding:"6px 8px",fontFamily:"inherit",outline:"none",maxWidth:150,cursor:"pointer"}}>
+              {Object.entries(LANGS).map(([code,l])=><option key={code} value={code}>{l.flag} {l.name}</option>)}
+            </select>
           </SettingRow>
 
           <SectionLabel label={s.secSound}/>
@@ -819,7 +854,13 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           </div>
 
           <SectionLabel label={s.secAccount}/>
-          <div style={{padding:"4px 18px 6px"}}>
+          <div style={{padding:"4px 18px 6px",display:"flex",flexDirection:"column",gap:9}}>
+            <button onClick={()=>{ try { clerk.openUserProfile(); } catch { /* Clerk not ready */ } }}
+              style={{width:"100%",background:"var(--color-background-secondary)",
+                border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
+                fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
+              🔐 Manage login &amp; security
+            </button>
             <button onClick={onSignOut}
               style={{width:"100%",background:"var(--color-background-secondary)",
                 border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
@@ -1030,7 +1071,7 @@ function ActivatingOverlay({ show }) {
 
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
-  const { lang, setLang, t } = useLang();
+  const { t } = useLang(); // language control now lives inside the account panel
   const dev = useDev();
   const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack } = useAuth();
   const navigate = useNavigate();
@@ -1099,6 +1140,7 @@ export default function StudyQuiz() {
   };
   // Spaced-repetition review deck (missed questions resurface over time).
   const srs = useSRS();
+  const stats = useStudyStats(); // streak + accuracy for the account panel
   const [reviewQueue, setReviewQueue] = useState([]); // card ids for this session
   const [reviewPos,   setReviewPos]   = useState(0);
   const [reviewShown, setReviewShown] = useState(false); // answer revealed?
@@ -1128,12 +1170,14 @@ export default function StudyQuiz() {
       srsAddedRef.current = quiz;
       const missed = quiz.questions.filter((_, i) => answers[i] && answers[i].isCorrect === false).map(toCard);
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
+      stats.recordSession(answers.length, answers.filter((a) => a && a.isCorrect).length);
     } else if (screen === "exam_results" && examEvals && srsAddedRef.current !== examEvals) {
       srsAddedRef.current = examEvals;
       const missed = examQs.filter((_, i) => (examEvals[i]?.score ?? 0) < 1).map(toCard);
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
+      stats.recordSession(examEvals.length, examEvals.filter((e) => (e?.score ?? 0) >= 1).length);
     }
-  }, [screen, quiz, answers, examEvals, examQs, srs]);
+  }, [screen, quiz, answers, examEvals, examQs, srs, stats]);
   // ── Exam timer ──
   const [examTimerOn,   setExamTimerOn]   = useState(false);
   const [examTimerMin,  setExamTimerMin]  = useState("60");
@@ -1761,15 +1805,13 @@ export default function StudyQuiz() {
               {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
               <DevBadge/></span>
             <div className="rv-hero-tools">
-              <select value={lang} onChange={e=>setLang(e.target.value)} title="Language"
-                style={{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,fontSize:12,padding:"3px 6px",cursor:"pointer",fontFamily:"inherit",outline:"none"}}>
-                {Object.entries(LANGS).map(([code,l])=>(
-                  <option key={code} value={code} style={{color:"#1e293b"}}>{l.flag} {l.name}</option>
-                ))}
-              </select>
-              <button onClick={()=>openSettings()} title="Settings" style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:"2px 4px",color:"rgba(255,255,255,0.7)"}}>⚙️</button>
-              {user ? <UserButton afterSignOutUrl="/" /> : (
-                <button onClick={()=>navigate("/login")} style={{background:"rgba(255,255,255,0.16)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,fontSize:12,fontWeight:600,padding:"5px 12px",cursor:"pointer",fontFamily:"inherit"}}>{t.logIn || "Log in"}</button>
+              {user ? (
+                <button onClick={()=>openSettings()} title="Account" aria-label="Account"
+                  style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,0.16)",border:"1.5px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  {(user.email||"?").charAt(0).toUpperCase()}
+                </button>
+              ) : (
+                <button onClick={()=>navigate("/login")} style={{background:"rgba(255,255,255,0.16)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,fontSize:12,fontWeight:600,padding:"7px 14px",cursor:"pointer",fontFamily:"inherit"}}>{t.logIn || "Log in"}</button>
               )}
             </div>
           </div>
