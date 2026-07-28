@@ -5,15 +5,15 @@ import AdSlot from "../components/AdSlot.jsx";
 
 const FEATURES = [
   { icon: "🤖", title: "AI-Powered Questions", desc: "AI reads your material and writes accurate, exam-quality questions in seconds." },
+  { icon: "🎓", title: "AI-Graded Mock Exams", desc: "Full exams with written answers, marks, sections and a timer — graded by AI, like the real thing." },
+  { icon: "🔁", title: "Smart Review", desc: "Miss a question? Revyy brings it back on a spaced schedule until it sticks — right up to exam day." },
   { icon: "🎯", title: "4 Quiz Types", desc: "Multiple choice, flashcards, fill-in-the-blank, and match terms — pick what fits." },
-  { icon: "🎓", title: "Exam Mode", desc: "Simulate real exam conditions with AI-graded written and multiple-choice papers." },
-  { icon: "📱", title: "Works on Any Device", desc: "Phone, tablet, or laptop — Revyy is fully responsive and needs no install." },
 ];
 
 const STEPS = [
   { n: 1, title: "Upload your material", desc: "Drop a PDF, paste your notes, or snap a photo of your textbook." },
-  { n: 2, title: "Revyy generates your quiz", desc: "Our AI identifies the key concepts and writes a tailored quiz in seconds." },
-  { n: 3, title: "Study and track progress", desc: "Answer, get instant explanations, and see your score climb every session." },
+  { n: 2, title: "Practise with quizzes & mock exams", desc: "Revyy writes tailored questions and full AI-graded exams in seconds." },
+  { n: 3, title: "Review until exam day", desc: "Missed questions return on a spaced schedule so they stick before the exam." },
 ];
 
 const FREE_PERKS = ["50 questions per day", "Multiple choice — always free", "Flashcards, match & 1 exam a day via ads", "Up to 20 questions per quiz", "Files up to 5 MB"];
@@ -22,8 +22,8 @@ const PRO_PERKS = ["250 questions per day", "All 4 quiz types — no ads", "Unli
 export default function Home() {
   const { user, isPro } = useAuth();
   usePageMeta(
-    "Revyy — AI Quiz Generator: Turn Notes & PDFs Into Study Quizzes",
-    "Free AI quiz generator for students. Upload a PDF, paste notes or snap a photo and turn any material into study quizzes, flashcards and practice exams in seconds."
+    "Revyy — AI Exam Prep: Turn Notes Into Quizzes & Mock Exams",
+    "Free AI exam-prep tool for students. Turn any PDF or notes into practice quizzes and AI-graded mock exams, then let spaced review drill your weak spots until exam day."
   );
 
   return (
@@ -31,11 +31,12 @@ export default function Home() {
       {/* Hero */}
       <section className="hero">
         <div className="container">
-          <span className="eyebrow">AI Study Companion</span>
-          <h1>Turn Any Material Into a Quiz — Instantly</h1>
+          <span className="eyebrow">Your AI Exam-Prep Coach</span>
+          <h1>Turn Your Notes Into Exam Practice — Instantly</h1>
           <p className="hero-sub">
-            Upload a PDF, paste notes, or take a photo. Revyy builds your perfect
-            study quiz in seconds using AI.
+            Upload a PDF, paste notes, or snap a photo. Revyy builds quizzes and
+            AI-graded mock exams, then drills you on what you miss with spaced
+            review — right up to exam day.
           </p>
           <div className="hero-btns">
             {user ? (
@@ -140,8 +141,8 @@ export default function Home() {
       <section className="section">
         <div className="container">
           <div className="section-dark cta-band" style={{ borderRadius: 24, padding: "64px 24px" }}>
-            <h2>Ready to study smarter?</h2>
-            <p>Create your first quiz in under a minute. No credit card required.</p>
+            <h2>Ready for exam day?</h2>
+            <p>Build your first quiz or mock exam in under a minute. No credit card required.</p>
             {user ? (
               <Link to="/app" className="btn btn-light btn-lg">Start a Quiz →</Link>
             ) : (

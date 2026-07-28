@@ -21,7 +21,7 @@ const esc = (s) => String(s)
 
 // Marketing routes + metadata (mirrors each page's usePageMeta call).
 const routes = [
-  { path: "/",         title: "Revyy — AI Quiz Generator: Turn Notes & PDFs Into Study Quizzes", desc: "Free AI quiz generator for students. Upload a PDF, paste notes or snap a photo and turn any material into study quizzes, flashcards and practice exams in seconds." },
+  { path: "/",         title: "Revyy — AI Exam Prep: Turn Notes Into Quizzes & Mock Exams", desc: "Free AI exam-prep tool for students. Turn any PDF or notes into practice quizzes and AI-graded mock exams, then let spaced review drill your weak spots until exam day." },
   { path: "/features", title: "Revyy Features — AI Quiz Maker, Flashcards & Exam Mode", desc: "Four quiz types, AI-graded exam simulation, PDF & image upload, and 20+ languages. See how Revyy turns your study material into quizzes." },
   { path: "/pricing",  title: "Revyy Pricing — Free AI Quiz Generator, or Pro €4.99/mo", desc: "Use Revyy's AI quiz generator free forever, or go Pro for €4.99/month for exam mode, all quiz types and no ads. Cancel anytime." },
   { path: "/about",    title: "About — Revyy", desc: "Revyy started as a personal tool to get ready for exams — built to test yourself before the real thing." },

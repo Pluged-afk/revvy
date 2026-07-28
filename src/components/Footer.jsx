@@ -8,7 +8,7 @@ export default function Footer() {
         <div className="footer-top">
           <div className="footer-brand">
             <span className="nav-logo"><RevyyMark /> Revyy</span>
-            <p>Turn any material into a quiz, instantly. Study smarter with AI-powered quizzes built from your own notes.</p>
+            <p>Your AI exam-prep coach. Turn any material into quizzes and mock exams, then review your weak spots until exam day.</p>
             <div className="footer-tagline">Built with ❤️ for students everywhere</div>
           </div>
 
