@@ -2,9 +2,12 @@
 import { useDev } from "../context/DevContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
-// Master switch — ads only render when this env var is set to "true" (in
-// Vercel). Until then nothing ad-related shows in production.
-export const ADS_ENABLED = import.meta.env.VITE_ADS_ENABLED === "true";
+// Master switch for the built-in placeholder ad boxes. Kept OFF while pursuing
+// AdSense approval — empty "Advertisement" boxes that aren't real ads clutter
+// the site and hurt review. Real ads are served by AdSense Auto Ads via the
+// loader in index.html once approved; flip this back to the env check (or add
+// real <ins class="adsbygoogle"> units) after approval.
+export const ADS_ENABLED = false; // was: import.meta.env.VITE_ADS_ENABLED === "true"
 
 // Placeholder rewarded-ad function — stands in for a real ad SDK. Resolves
 // after a short simulated "watch". Swap out when a real provider is wired in.

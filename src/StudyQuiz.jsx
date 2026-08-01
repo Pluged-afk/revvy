@@ -1037,9 +1037,9 @@ function Confetti() {
 // ── Ad placeholders (free users only) ─────────────────────────────────
 // Side 160x600 banners on desktop (where there's empty margin), a 320x50
 // bottom banner on mobile. Visibility is controlled by CSS media queries.
-// Ads are master-switched by VITE_ADS_ENABLED — set it to "true" once an ad
-// network is integrated and redeploy; nothing renders until then.
-const ADS_ENABLED = import.meta.env.VITE_ADS_ENABLED === "true";
+// Placeholder ad boxes are OFF while pursuing AdSense approval (see lib/ads.jsx).
+// Real ads come from AdSense Auto Ads via the loader in index.html once approved.
+const ADS_ENABLED = false; // was: import.meta.env.VITE_ADS_ENABLED === "true"
 // Side 160x600 banners (desktop margins) + a 320x50 bottom anchor (mobile).
 // `bottom` can be turned off on screens that already have an in-content banner
 // so mobile never shows two banners stacked at once.
