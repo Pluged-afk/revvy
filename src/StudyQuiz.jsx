@@ -9,6 +9,8 @@ import { upload as blobUpload } from "@vercel/blob/client";
 import { useAdUnlocks } from "./lib/adUnlocks.js";
 import { useSRS, toCard } from "./lib/srs.js";
 import { useStudyStats } from "./lib/stats.js";
+import { usePlans } from "./context/StudyContext.jsx";
+import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, dayState } from "./lib/planner.js";
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
@@ -397,12 +399,12 @@ function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=fal
     if(!val.trim()) return;
     Haptics.buzz();
     if(instant) setChecked(true);   // reveal right/wrong
-    else onNext(isRight);           // "at end": record and move on, no reveal
+    else onNext(isRight,val);           // "at end": record and move on, no reveal
   };
   // Instant + auto-advance: once revealed, move on after the configured delay.
   useEffect(()=>{
     if(!checked||!autoAdvance) return;
-    const id=setTimeout(()=>onNext(isRight),autoSec*1000);
+    const id=setTimeout(()=>onNext(isRight,val),autoSec*1000);
     return ()=>clearTimeout(id);
   },[checked]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
@@ -424,7 +426,7 @@ function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=fal
         </div>
       )}
       {checked && autoAdvance && <AutoAdvanceBar sec={autoSec} runId={q.question} t={t}/>}
-      {checked && <button onClick={()=>onNext(isRight)} style={{...Sb.btnPrimary,width:"100%",marginTop:autoAdvance?12:0}}>{autoAdvance?(t.skip||t.next):(isLast?t.finish:t.next)}</button>}
+      {checked && <button onClick={()=>onNext(isRight,val)} style={{...Sb.btnPrimary,width:"100%",marginTop:autoAdvance?12:0}}>{autoAdvance?(t.skip||t.next):(isLast?t.finish:t.next)}</button>}
     </div>
   );
 }
@@ -1141,6 +1143,35 @@ export default function StudyQuiz() {
   // Spaced-repetition review deck (missed questions resurface over time).
   const srs = useSRS();
   const stats = useStudyStats(); // streak + accuracy for the account panel
+
+  // ── AI Study Coach: day-by-day exam plan (server-synced via StudyContext) ──
+  const { plans, savePlan, deletePlan, completePlanDay, setPlanDayStatus } = usePlans();
+  const [activePlanId, setActivePlanId] = useState(null);
+  const [planSession, setPlanSession] = useState(null); // active coached quiz: {planId,dayIndex,format,numQ,label,kind}
+  const [planForm, setPlanForm] = useState({ title:"", testDate:"", chapters:"6", chapterNames:"", mode:"selfpaced", reminderTime:"18:00" });
+  const [planErr, setPlanErr] = useState("");
+  const [confirmDelPlan, setConfirmDelPlan] = useState(false);
+  const [notifPerm, setNotifPerm] = useState(typeof Notification!=="undefined" ? Notification.permission : "unsupported");
+  const planDoneRef = useRef(null);
+  const sortedPlans = [...plans].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const homePlan = sortedPlans.find(p=>!isPlanComplete(p)) || sortedPlans[0] || null;
+  const activePlan = plans.find(p=>p.id===activePlanId) || homePlan;
+  // Best-effort browser reminder — fires only while Revyy is open in the tab
+  // (real push arrives with the mobile app). Schedules the plan's reminder time.
+  useEffect(() => {
+    if (typeof Notification==="undefined" || Notification.permission!=="granted") return;
+    if (!homePlan || homePlan.mode!=="remind" || !homePlan.reminderTime) return;
+    const nd = nextDayIndex(homePlan); if (nd===-1) return;
+    const day = homePlan.days[nd];
+    if (day.date !== new Date().toLocaleDateString("en-CA") || day.status==="done") return;
+    const [h,m] = homePlan.reminderTime.split(":").map(Number);
+    const when = new Date(); when.setHours(h||18, m||0, 0, 0);
+    const delay = when.getTime() - Date.now();
+    if (delay<=0 || delay>12*3600000) return;
+    const id = setTimeout(()=>{ try { new Notification("Revyy · Study Coach", { body:`Time to study: ${day.label}` }); } catch { /* ignore */ } }, delay);
+    return ()=>clearTimeout(id);
+  }, [homePlan]);
+
   const [reviewQueue, setReviewQueue] = useState([]); // card ids for this session
   const [reviewPos,   setReviewPos]   = useState(0);
   const [reviewShown, setReviewShown] = useState(false); // answer revealed?
@@ -1290,7 +1321,7 @@ export default function StudyQuiz() {
     const isCorrect = selected===quiz.questions[qIdx]?.correct;
     const delay = settings.feedback==="immediate" ? autoAdvanceSec*1000 : 450;
     const id=setTimeout(()=>{
-      setAnswers(a=>[...a,{isCorrect}]);
+      setAnswers(a=>[...a,{isCorrect,selected}]);
       setSelected(null);
       if(qIdx+1>=quiz.questions.length) setScreen("results");
       else setQIdx(i=>i+1);
@@ -1778,18 +1809,64 @@ export default function StudyQuiz() {
   },[isPro,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,requireLogin]);
 
   const pick    = i => { if(selected===null){ setSelected(i); haptic(); } };
-  const nextQ   = isCorrect => {
-    const upd=[...answers,{isCorrect}]; setAnswers(upd); setSelected(null);
+  const nextQ   = (isCorrect, detail) => {
+    // `detail` carries what the learner picked (e.g. {selected} for MCQ) so the
+    // results screen can show "Your answer" next to the correct one.
+    const upd=[...answers,{isCorrect,...(detail||{})}]; setAnswers(upd); setSelected(null);
     if (qIdx+1>=quiz.questions.length) setScreen("results");
     else setQIdx(i=>i+1);
   };
-  const nextMCQ = () => { if(selected===null)return; nextQ(selected===quiz.questions[qIdx].correct); };
+  const nextMCQ = () => { if(selected===null)return; nextQ(selected===quiz.questions[qIdx].correct,{selected}); };
   const retry   = () => { setQIdx(0);setAnswers([]);setSelected(null);setScreen("quiz"); };
   const newMat  = () => { setScreen("upload");setQuiz(null);setFile(null);setTextVal("");setError(""); };
 
   const score = answers.filter(a=>a.isCorrect).length;
   const pct   = quiz ? Math.round((score/quiz.questions.length)*100) : 0;
   const badge = pct>=90?{emoji:"🏆",text:t.excellent}:pct>=75?{emoji:"🎯",text:t.great}:pct>=60?{emoji:"📚",text:t.good}:{emoji:"💪",text:t.keep};
+
+  // ── Coach actions ────────────────────────────────────────────────
+  const openPlanSetup = () => { if (requireLogin()) return; setPlanErr(""); setScreen("plan_setup"); };
+  const buildAndSavePlan = () => {
+    if (requireLogin()) return;
+    setPlanErr("");
+    const today = new Date().toLocaleDateString("en-CA");
+    if (!planForm.testDate || planForm.testDate < today) { setPlanErr(t.coachInvalidDate); return; }
+    const { count } = parseChapters(planForm.chapterNames, planForm.chapters);
+    if (!count || count < 1) { setPlanErr(t.coachInvalidCh); return; }
+    const plan = buildPlan({ testDate:planForm.testDate, chapters:planForm.chapters, chapterNames:planForm.chapterNames, isPro, mode:planForm.mode, reminderTime:planForm.reminderTime, title:planForm.title });
+    savePlan(plan); setActivePlanId(plan.id); setConfirmDelPlan(false);
+    setPlanForm({ title:"", testDate:"", chapters:"6", chapterNames:"", mode:"selfpaced", reminderTime:"18:00" });
+    setScreen("plan");
+  };
+  // Start a scheduled day: preset the generator to that day's format + count
+  // (or open exam mode for a Pro mock). planSession drives completion on finish.
+  const startPlanDay = (plan, dayIndex) => {
+    if (requireLogin()) return;
+    const day = plan?.days?.[dayIndex]; if (!day) return;
+    setPlanSession({ planId:plan.id, dayIndex, format:day.format, numQ:day.numQ, label:day.label, kind:day.kind });
+    planDoneRef.current = null;
+    if (day.format==="exam") { setScreen("exam_setup"); return; }
+    const type = ["mcq","cards","fill","match"].includes(day.format) ? day.format : "mcq";
+    const n = Math.min(day.numQ||15, qCap());
+    setQType(type); setNumQ(n); setCustomQ(String(n)); setUseCustomQ(false);
+    setTab("file"); setFile(null); setTextVal(""); setError(""); setLimitHit(false);
+    setScreen("upload");
+  };
+  const backToPlan = () => { const pid = planSession?.planId; setPlanSession(null); if (pid) setActivePlanId(pid); setScreen("plan"); };
+  const enableReminders = async () => { try { if (typeof Notification!=="undefined") { const p = await Notification.requestPermission(); setNotifPerm(p); } } catch { /* ignore */ } };
+  // Tick a coached day off (once) when its quiz/exam results appear.
+  useEffect(() => {
+    if (!planSession) return;
+    if (screen==="results" && quiz && planDoneRef.current!==quiz) {
+      planDoneRef.current = quiz;
+      completePlanDay(planSession.planId, planSession.dayIndex, { score, total: quiz.questions.length });
+    } else if (screen==="exam_results" && examEvals && planDoneRef.current!==examEvals) {
+      planDoneRef.current = examEvals;
+      const possible = examQs.reduce((s,q)=>s+(q.marksPerQ||1),0) || examEvals.length || 1;
+      const got = examEvals.reduce((s,e,i)=>s+((e?.score||0)*(examQs[i]?.marksPerQ||1)),0);
+      completePlanDay(planSession.planId, planSession.dayIndex, { score: Math.round((got/possible)*100), total: 100 });
+    }
+  }, [screen, quiz, examEvals, planSession, score, examQs, completePlanDay]);
 
   // ── HOME ─────────────────────────────────────────────────────────
   if (screen==="home") return (
@@ -1847,6 +1924,49 @@ export default function StudyQuiz() {
               style={{border:"0.5px solid var(--color-border-secondary)",borderRadius:8,padding:"5px 8px",fontSize:12,fontFamily:"inherit",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",outline:"none",colorScheme:srs.dueCount>0?"dark":"light"}}/>
           </div>
         </div>
+        {/* AI Study Coach — day-by-day exam plan */}
+        {!homePlan ? (
+          <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <span style={{fontSize:24,flexShrink:0}}>🧭</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.coachTitle}</div>
+                <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.coachTagline}</div>
+              </div>
+              <button onClick={openPlanSetup} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachCreate}</button>
+            </div>
+          </div>
+        ) : (()=>{
+          const prog = planProgress(homePlan);
+          const complete = isPlanComplete(homePlan);
+          const nd = nextDayIndex(homePlan);
+          const day = nd>=0 ? homePlan.days[nd] : null;
+          const due = !!day && day.date === new Date().toLocaleDateString("en-CA");
+          const dte = Math.max(0, Math.ceil((new Date(homePlan.testDate+"T00:00:00").getTime() - Date.now())/86400000));
+          const countdown = dte===0 ? t.coachExamToday : t.coachExamIn.replace("{n}",dte).replace("{s}",dte===1?"":"s");
+          return (
+            <div style={{background:due?"linear-gradient(135deg,#4f46e5,#6366f1)":"var(--color-background-primary)",border:due?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:due?"0 4px 16px rgba(79,70,229,0.3)":"none"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:24,flexShrink:0}}>🧭</span>
+                <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>{setActivePlanId(homePlan.id);setConfirmDelPlan(false);setScreen("plan");}}>
+                  <div style={{fontWeight:700,fontSize:14,color:due?"#fff":"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{homePlan.title}</div>
+                  <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:due?"rgba(255,255,255,0.85)":"var(--color-text-secondary)"}}>
+                    {complete ? t.coachAllDone : `${t.coachProgressLbl.replace("{done}",prog.done).replace("{total}",prog.total)} · ${countdown}`}
+                  </div>
+                </div>
+                {complete
+                  ? <button onClick={()=>{setActivePlanId(homePlan.id);setScreen("plan");}} style={{flexShrink:0,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachViewPlan}</button>
+                  : <button onClick={()=>startPlanDay(homePlan, nd)} style={{flexShrink:0,background:due?"#fff":"#4f46e5",color:due?"#4f46e5":"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{due?t.coachStart:t.coachContinue}</button>}
+              </div>
+              {!complete && day && (
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,paddingTop:12,borderTop:due?"0.5px solid rgba(255,255,255,0.2)":"0.5px solid var(--color-border-tertiary)"}}>
+                  <span style={{fontSize:12,fontWeight:600,color:due?"rgba(255,255,255,0.9)":"var(--color-text-secondary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📖 {day.label}</span>
+                  <span style={{flexShrink:0,fontSize:10,fontWeight:700,letterSpacing:0.3,background:due?"rgba(255,255,255,0.2)":"#ede9fe",color:due?"#fff":"#4f46e5",borderRadius:8,padding:"3px 8px"}}>{day.format==="exam"?t.coachExamFormat:(t.quizTypes?.[day.format]||day.format)}</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
         <p style={Sb.secLabel}>{t.whatUpload}</p>
         <div className="rv-feat-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
           {[...t.features.filter(([icon])=>icon!=="🔗"), t.langFeature].map(([icon,title,sub],i)=>(
@@ -1905,6 +2025,16 @@ export default function StudyQuiz() {
       </div>
       <div className="rv-upload-body" style={{padding:"18px 16px 32px"}}>
         <div className="rv-ul-left">
+        {planSession && (
+          <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:14,color:"#fff"}}>
+            <span style={{fontSize:18,flexShrink:0}}>🧭</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.coachSessionBanner} · {planSession.label}</div>
+              <div style={{fontSize:11,opacity:0.85,marginTop:1}}>{t.quizTypes?.[planSession.format]||planSession.format} · {planSession.numQ} Qs</div>
+            </div>
+            <button onClick={backToPlan} style={{flexShrink:0,background:"rgba(255,255,255,0.2)",color:"#fff",border:"none",borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachBackToPlan}</button>
+          </div>
+        )}
         <h2 style={Sb.h2}>{t.uploadTitle}</h2>
         <div style={{display:"flex",gap:5,marginBottom:16}}>
           {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4f46e5":"var(--color-border-secondary)",background:tab===id?"#4f46e5":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s"}}>{lb}</button>)}
@@ -2091,7 +2221,7 @@ export default function StudyQuiz() {
             <span style={{background:"#ede9fe",color:"#4f46e5",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.quizTypes[quiz.type]}</span>
           </div>
           {quiz.type==="cards"&&<Flashcard key={qIdx} q={q} isLast={isLast} t={t} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
-          {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} feedback={settings.feedback} autoAdvance={settings.autoAdvance} autoSec={autoAdvanceSec} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
+          {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} feedback={settings.feedback} autoAdvance={settings.autoAdvance} autoSec={autoAdvanceSec} onNext={(ok,picked)=>{const u=[...answers,{isCorrect:ok,picked}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="mcq"  &&(
             <>
               <h3 style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}</h3>
@@ -2152,6 +2282,13 @@ export default function StudyQuiz() {
             </div>
           ))}
         </div>
+        {planSession && (
+          <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:14,color:"#fff"}}>
+            <span style={{fontSize:18}}>🧭</span>
+            <span style={{flex:1,fontSize:12.5,fontWeight:700,lineHeight:1.4}}>{t.coachComplete}</span>
+            <button onClick={backToPlan} style={{flexShrink:0,background:"rgba(255,255,255,0.2)",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachBackToPlan}</button>
+          </div>
+        )}
         <div style={{display:"flex",gap:10,marginBottom:14}}>
           <button style={{...Sb.btnPrimary,flex:1,margin:0}} onClick={retry}>{t.retry}</button>
           <button style={{...Sb.btnOutline,flex:1}} onClick={newMat}>{t.newMat}</button>
@@ -2172,7 +2309,7 @@ export default function StudyQuiz() {
             const a=answers[i];
             return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"14px 14px 14px 11px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${a?.isCorrect?"#22c55e":"#ef4444"}`}} className="fade-in">
               <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{fontSize:15,flexShrink:0}}>{a?.isCorrect?"✅":"❌"}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}</span></div>
-              {quiz.type==="mcq"&&!a?.isCorrect&&a&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {q.options?.[a.selected]}</div>}
+              {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="fill")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {quiz.type==="mcq"?(q.options?.[a.selected]??"—"):(a.picked||"—")}</div>}
               <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {quiz.type==="mcq"?q.options?.[q.correct]:(q.answer||"")}</div>
               {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.55,paddingTop:8,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:23}}>{q.explanation}</div>}
             </div>;
@@ -2574,6 +2711,13 @@ export default function StudyQuiz() {
               })}
             </div>
           )}
+          {planSession && (
+            <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:16,color:"#fff"}}>
+              <span style={{fontSize:18}}>🧭</span>
+              <span style={{flex:1,fontSize:12.5,fontWeight:700,lineHeight:1.4}}>{t.coachComplete}</span>
+              <button onClick={backToPlan} style={{flexShrink:0,background:"rgba(255,255,255,0.2)",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachBackToPlan}</button>
+            </div>
+          )}
           <div style={{display:"flex",gap:10,marginBottom:20}}>
             <button style={{...Sb.btnPrimary,flex:1,margin:0}} onClick={()=>{setScreen("exam_setup");setExamQs([]);setExamAns({});setExamEvals(null);setShowConfetti(false);}}>{t.retakeExam}</button>
             <button style={{...Sb.btnOutline,flex:1}} onClick={()=>setScreen("upload")}>{t.newExam}</button>
@@ -2612,6 +2756,144 @@ export default function StudyQuiz() {
     );
   }
 
+  // ── PLAN SETUP (AI Study Coach) ───────────────────────────────────
+  if (screen==="plan_setup") return (
+    <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      <div style={Sb.topbar} className="rv-topbar">
+        <button style={Sb.backBtn} onClick={()=>setScreen(homePlan?"plan":"home")}>← {homePlan?t.coachYourPlan:"Home"}</button>
+        <span style={Sb.brand}>{t.coachTitle}</span>
+        <span/>
+      </div>
+      <div className="rv-center-narrow" style={{padding:"22px 16px 40px"}}>
+        <h2 style={Sb.h2}>{t.coachSetupTitle}</h2>
+        <p style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.55,margin:"-6px 0 18px"}}>{t.coachSetupSub}</p>
+
+        <label style={Sb.coachLabel}>{t.coachName}</label>
+        <input value={planForm.title} onChange={e=>setPlanForm(f=>({...f,title:e.target.value}))} placeholder={t.coachNamePh} style={Sb.coachInput}/>
+
+        <label style={Sb.coachLabel}>{t.coachDate}</label>
+        <input type="date" value={planForm.testDate} min={new Date().toISOString().slice(0,10)} onChange={e=>setPlanForm(f=>({...f,testDate:e.target.value}))} style={{...Sb.coachInput,colorScheme:"light"}}/>
+
+        <label style={Sb.coachLabel}>{t.coachChapters}</label>
+        <input type="number" inputMode="numeric" min={1} max={60} value={planForm.chapters} onChange={e=>setPlanForm(f=>({...f,chapters:e.target.value.replace(/[^0-9]/g,"").slice(0,2)}))} placeholder={t.coachChaptersPh} style={Sb.coachInput}/>
+
+        <label style={Sb.coachLabel}>{t.coachChapterNames}</label>
+        <textarea value={planForm.chapterNames} onChange={e=>setPlanForm(f=>({...f,chapterNames:e.target.value}))} placeholder={t.coachChapterNamesPh} style={{...Sb.coachInput,height:90,resize:"vertical",lineHeight:1.5}}/>
+        <div style={{fontSize:11,color:"var(--color-text-tertiary)",margin:"-6px 0 16px",lineHeight:1.5}}>{t.coachChapterNamesHint}</div>
+
+        <label style={Sb.coachLabel}>{t.coachMode}</label>
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+          {[["selfpaced",t.coachModeSelf,t.coachModeSelfDesc],["remind",t.coachModeRemind,t.coachModeRemindDesc]].map(([v,lbl,desc])=>(
+            <button key={v} onClick={()=>setPlanForm(f=>({...f,mode:v}))} style={{textAlign:"left",display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",borderRadius:12,border:"1.5px solid "+(planForm.mode===v?"#4f46e5":"var(--color-border-secondary)"),background:planForm.mode===v?"var(--color-sel-tint)":"var(--color-background-primary)",cursor:"pointer",fontFamily:"inherit"}}>
+              <span style={{width:18,height:18,borderRadius:"50%",border:"2px solid "+(planForm.mode===v?"#4f46e5":"var(--color-border-secondary)"),flexShrink:0,marginTop:1,background:planForm.mode===v?"#4f46e5":"transparent",boxShadow:planForm.mode===v?"inset 0 0 0 2px var(--color-background-primary)":"none"}}/>
+              <span style={{flex:1}}>
+                <span style={{display:"block",fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)"}}>{lbl}</span>
+                <span style={{display:"block",fontSize:11.5,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.45}}>{desc}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        {planForm.mode==="remind" && (
+          <div style={{marginBottom:16}}>
+            <label style={Sb.coachLabel}>{t.coachReminderTime}</label>
+            <input type="time" value={planForm.reminderTime} onChange={e=>setPlanForm(f=>({...f,reminderTime:e.target.value}))} style={{...Sb.coachInput,marginBottom:8,colorScheme:"light"}}/>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.5,marginBottom:8}}>{t.coachReminderNote}</div>
+            <button onClick={enableReminders} disabled={notifPerm==="granted"||notifPerm==="unsupported"} style={{...Sb.btnGhost,width:"100%",fontSize:12.5,opacity:(notifPerm==="granted"||notifPerm==="unsupported")?0.6:1}}>{notifPerm==="granted"?t.coachNotifOn:t.coachEnableNotif}</button>
+          </div>
+        )}
+
+        <div style={{background:isPro?"#fffbeb":"var(--color-background-secondary)",border:"0.5px solid "+(isPro?"#f59e0b44":"var(--color-border-tertiary)"),borderRadius:10,padding:"10px 14px",fontSize:12,color:isPro?"#92400e":"var(--color-text-secondary)",lineHeight:1.5,marginBottom:14}}>
+          {isPro ? ("✦ "+t.coachTierPro) : t.coachTierFree}
+        </div>
+        {planErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {planErr}</div>}
+        <button style={{...Sb.btnPrimary,width:"100%"}} onClick={buildAndSavePlan}>🧭 {t.coachBuild}</button>
+      </div>
+    </div>
+  );
+
+  // ── PLAN DETAIL (schedule) ────────────────────────────────────────
+  if (screen==="plan" && activePlan) {
+    const prog = planProgress(activePlan);
+    const nd = nextDayIndex(activePlan);
+    const dte = Math.max(0, Math.ceil((new Date(activePlan.testDate+"T00:00:00").getTime() - Date.now())/86400000));
+    const countdown = dte===0 ? t.coachExamToday : t.coachExamIn.replace("{n}",dte).replace("{s}",dte===1?"":"s");
+    const KIND = { learn:t.coachKindLearn, review:t.coachKindReview, final:t.coachKindFinal };
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        <AdBanners isPro={isPro}/>
+        <div style={Sb.topbar} className="rv-topbar">
+          <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← Home</button>
+          <span style={Sb.brand}>{t.coachTitle}</span>
+          <button onClick={openPlanSetup} title={t.coachCreate} style={{background:"none",border:"none",fontSize:20,lineHeight:1,cursor:"pointer",color:"var(--color-text-secondary)",padding:0,fontWeight:400}}>＋</button>
+        </div>
+        <div style={{background:"linear-gradient(145deg,#1e1b4b,#4f46e5)",padding:"22px 20px 20px"}}>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",marginBottom:4}}>{t.coachYourPlan}</div>
+          <h2 style={{margin:0,fontSize:21,fontWeight:700,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif"}}>{activePlan.title}</h2>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,flexWrap:"wrap"}}>
+            <span style={{fontSize:12,fontWeight:700,color:"#fff",background:"rgba(255,255,255,0.18)",borderRadius:20,padding:"4px 12px"}}>🎯 {countdown}</span>
+            <span style={{fontSize:12,color:"rgba(255,255,255,0.85)"}}>{t.coachProgressLbl.replace("{done}",prog.done).replace("{total}",prog.total)}</span>
+          </div>
+          <div style={{height:6,background:"rgba(255,255,255,0.2)",borderRadius:3,overflow:"hidden",marginTop:12}}>
+            <div style={{height:"100%",width:prog.pct+"%",background:"#fff",borderRadius:3,transition:"width .3s"}}/>
+          </div>
+        </div>
+        <div className="rv-center" style={{padding:"18px 16px 40px"}}>
+          {activePlan.mode==="remind" && activePlan.reminderTime && (
+            <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"var(--color-text-secondary)",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:14}}>
+              🔔 <span style={{flex:1}}>{t.coachReminderTime} <strong style={{color:"var(--color-text-primary)"}}>{activePlan.reminderTime}</strong></span>
+              {notifPerm!=="granted" && notifPerm!=="unsupported" && <button onClick={enableReminders} style={{background:"none",border:"none",color:"#4f46e5",fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",padding:0}}>{t.coachEnableNotif}</button>}
+            </div>
+          )}
+          {activePlan.days.map((day,i)=>{
+            const st = dayState(day);
+            const isNext = i===nd;
+            const pctScore = (day.status==="done" && day.total) ? Math.round((day.score/day.total)*100) : null;
+            const stColor = st==="done"?"#16a34a":st==="today"?"#4f46e5":st==="missed"?"#b45309":"var(--color-text-tertiary)";
+            const stLabel = st==="done"?t.coachDayDone:st==="today"?t.coachDayToday:st==="missed"?t.coachDayMissed:t.coachDayUpcoming;
+            const dObj = new Date(day.date+"T00:00:00");
+            return (
+              <div key={i} style={{background:"var(--color-background-primary)",borderRadius:12,padding:"12px 14px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:"3px solid "+stColor,opacity:st==="upcoming"?0.92:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:36,height:38,borderRadius:9,background:st==="done"?"var(--color-background-success)":"var(--color-background-secondary)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <span style={{fontSize:9,fontWeight:700,color:"var(--color-text-tertiary)",lineHeight:1,textTransform:"uppercase"}}>{dObj.toLocaleDateString(undefined,{weekday:"short"})}</span>
+                    <span style={{fontSize:14,fontWeight:800,color:"var(--color-text-primary)",lineHeight:1.15}}>{dObj.getDate()}</span>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st==="done"&&"✓ "}{day.label}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
+                      <span style={{fontSize:9.5,fontWeight:700,letterSpacing:0.3,background:"#ede9fe",color:"#4f46e5",borderRadius:7,padding:"2px 6px"}}>{KIND[day.kind]||day.kind}</span>
+                      <span style={{fontSize:10.5,color:"var(--color-text-secondary)"}}>{day.format==="exam"?t.coachExamFormat:(t.quizTypes?.[day.format]||day.format)} · {day.numQ} Qs</span>
+                      {pctScore!=null && <span style={{fontSize:10.5,fontWeight:700,color:"#16a34a"}}>· {t.coachScored.replace("{pct}",pctScore)}</span>}
+                    </div>
+                  </div>
+                  <span style={{flexShrink:0,fontSize:9.5,fontWeight:700,color:stColor}}>{stLabel}</span>
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:10}}>
+                  {day.status==="done"
+                    ? <button onClick={()=>setPlanDayStatus(activePlan.id,i,"pending")} style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:9,padding:"8px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>↻ {t.coachRedo}</button>
+                    : <>
+                        <button onClick={()=>startPlanDay(activePlan,i)} style={{flex:2,background:isNext?"#4f46e5":"var(--color-background-secondary)",color:isNext?"#fff":"var(--color-text-primary)",border:isNext?"none":"0.5px solid var(--color-border-secondary)",borderRadius:9,padding:"8px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>▶ {t.coachStart}</button>
+                        <button onClick={()=>setPlanDayStatus(activePlan.id,i,"done")} style={{flex:1,background:"none",color:"var(--color-text-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:9,padding:"8px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✓ {t.coachMarkDone}</button>
+                      </>}
+                </div>
+              </div>
+            );
+          })}
+          {!confirmDelPlan
+            ? <button onClick={()=>setConfirmDelPlan(true)} style={{...Sb.btnGhost,width:"100%",marginTop:8,color:"#dc2626"}}>{t.coachDelete}</button>
+            : <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:12,padding:"12px 14px",marginTop:8}}>
+                <div style={{fontSize:12.5,color:"#b91c1c",marginBottom:10,lineHeight:1.5}}>{t.coachDeleteConfirm}</div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>{deletePlan(activePlan.id);setConfirmDelPlan(false);setActivePlanId(null);setScreen("home");}} style={{flex:1,background:"#dc2626",color:"#fff",border:"none",borderRadius:9,padding:"9px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachDeleteYes}</button>
+                  <button onClick={()=>setConfirmDelPlan(false)} style={{...Sb.btnGhost,flex:1,padding:"9px"}}>{t.notNow||"Cancel"}</button>
+                </div>
+              </div>}
+        </div>
+      </div>
+    );
+  }
+
   return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>;
 }
 
@@ -2636,6 +2918,8 @@ const Sb = {
   btnHero:     { background:"#fff", color:"#312e81", border:"none", borderRadius:12, padding:"13px 30px", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"inherit" },
   btnOutline:  { background:"none", color:"var(--color-text-primary)", border:"1px solid var(--color-border-secondary)", borderRadius:12, padding:"12px 20px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" },
   btnGhost:    { background:"none", color:"var(--color-text-secondary)", border:"0.5px solid var(--color-border-tertiary)", borderRadius:12, padding:"11px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  coachLabel:  { display:"block", fontSize:12, fontWeight:700, color:"var(--color-text-secondary)", margin:"0 0 6px", letterSpacing:0.2 },
+  coachInput:  { width:"100%", borderRadius:10, border:"1.5px solid var(--color-border-secondary)", background:"var(--color-background-primary)", color:"var(--color-text-primary)", fontSize:14, padding:"11px 13px", fontFamily:"inherit", outline:"none", boxSizing:"border-box", marginBottom:14 },
 };
 
 const CSS = `

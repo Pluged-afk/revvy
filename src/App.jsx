@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { ClerkProvider } from '@clerk/clerk-react'
 import { AuthProvider } from './context/AuthContext.jsx'
+import { StudyProvider } from './context/StudyContext.jsx'
 import { LanguageProvider } from './context/LanguageContext.jsx'
 import { DevProvider } from './context/DevContext.jsx'
 import DevWidget from './components/DevWidget.jsx'
@@ -59,8 +60,10 @@ function ClerkRoutes() {
           <Route path="/logo-export" element={<LogoExport />} />
 
           {/* The quiz app — browsable by everyone. Generating a quiz requires
-              an account; that gate lives in StudyQuiz's generate handlers. */}
-          <Route path="/app" element={<StudyQuiz />} />
+              an account; that gate lives in StudyQuiz's generate handlers.
+              StudyProvider (server-synced deck / stats / plans) wraps only this
+              route so it never loads on the marketing pages or during SSR. */}
+          <Route path="/app" element={<StudyProvider><StudyQuiz /></StudyProvider>} />
 
           {/* Unknown routes → 404 inside the site chrome */}
           <Route path="*" element={<SiteLayout />}>

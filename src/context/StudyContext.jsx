@@ -1,0 +1,253 @@
+import { createContext, useContext, useState, useRef, useEffect, useCallback } from "react";
+import { useAuth } from "./AuthContext.jsx";
+
+// ── Server-synced study data ──────────────────────────────────────────
+// Single source of truth for the spaced-repetition deck, lifetime stats +
+// streak, exam date, and AI study plans. Held in one blob, cached in
+// localStorage (instant + offline), and synced to Neon per-user when signed
+// in (debounced write-through; one read on sign-in with a merge so progress
+// made while logged out is never lost). Replaces the old per-hook localStorage
+// state in srs.js / stats.js — those now read from here.
+
+const LS_KEY = "revyy_study_v1";
+const DAY = 86400000;
+
+const uid = () =>
+  globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2);
+const dstr = (d = new Date()) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD (local)
+const yesterdayStr = () => { const d = new Date(); d.setDate(d.getDate() - 1); return dstr(d); };
+
+function safeParse(raw, fallback) {
+  try { return raw ? JSON.parse(raw) : fallback; } catch { return fallback; }
+}
+function normStats(s) {
+  s = s || {};
+  return {
+    answered: s.answered || 0, correct: s.correct || 0,
+    streak: s.streak || 0, best: s.best || 0, lastActive: s.lastActive || null,
+  };
+}
+function emptyData() {
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], updatedAt: 0 };
+}
+
+// Load from the new blob, falling back to (and migrating) the pre-sync keys so
+// existing users keep their deck, streak and exam date.
+function loadLocal() {
+  const blob = safeParse(typeof localStorage !== "undefined" && localStorage.getItem(LS_KEY), null);
+  if (blob && typeof blob === "object") {
+    return {
+      cards: Array.isArray(blob.cards) ? blob.cards : [],
+      examDate: blob.examDate || null,
+      stats: normStats(blob.stats),
+      plans: Array.isArray(blob.plans) ? blob.plans : [],
+      updatedAt: blob.updatedAt || 0,
+    };
+  }
+  if (typeof localStorage === "undefined") return emptyData();
+  return {
+    cards: safeParse(localStorage.getItem("revyy_srs_cards_v1"), []),
+    examDate: safeParse(localStorage.getItem("revyy_srs_exam_date"), null),
+    stats: normStats(safeParse(localStorage.getItem("revyy_stats_v1"), {})),
+    plans: [],
+    updatedAt: 0,
+  };
+}
+
+// Merge server blob with whatever is in memory locally. Used once on sign-in so
+// that a deck/streak/plan built while logged out (or on another device) is
+// preserved rather than clobbered. Union cards & plans by identity; take the
+// larger lifetime stats.
+function mergeStudy(server, local) {
+  server = server || {};
+  const hasServer =
+    (server.cards && server.cards.length) ||
+    (server.plans && server.plans.length) ||
+    (server.stats && (server.stats.answered || server.stats.best)) ||
+    server.examDate;
+  if (!hasServer) return local; // fresh account → push local up
+
+  // Cards: union by front text; keep the more-progressed copy for duplicates.
+  const byFront = new Map();
+  for (const c of server.cards || []) byFront.set((c.front || "").toLowerCase(), c);
+  for (const c of local.cards || []) {
+    const k = (c.front || "").toLowerCase();
+    const ex = byFront.get(k);
+    if (!ex || (c.reps || 0) > (ex.reps || 0)) byFront.set(k, c);
+  }
+  // Plans: union by id; server wins on conflict.
+  const byId = new Map();
+  for (const p of local.plans || []) byId.set(p.id, p);
+  for (const p of server.plans || []) byId.set(p.id, p);
+
+  const ss = normStats(server.stats), ls = normStats(local.stats);
+  const laterActive = (ss.lastActive || "") >= (ls.lastActive || "") ? ss : ls;
+  return {
+    cards: [...byFront.values()],
+    examDate: server.examDate || local.examDate || null,
+    stats: {
+      answered: Math.max(ss.answered, ls.answered),
+      correct: Math.max(ss.correct, ls.correct),
+      best: Math.max(ss.best, ls.best),
+      streak: laterActive.streak,
+      lastActive: laterActive.lastActive,
+    },
+    plans: [...byId.values()],
+    updatedAt: Date.now(),
+  };
+}
+
+// SM-2-flavoured scheduling for a graded card.
+function schedule(card, ok, examDate) {
+  if (ok) {
+    const reps = card.reps + 1;
+    const interval = reps === 1 ? 1 : reps === 2 ? 3 : Math.max(1, Math.round(card.interval * card.ease));
+    const ease = Math.min(2.7, card.ease + 0.05);
+    let due = Date.now() + interval * DAY;
+    const ex = examDate ? new Date(examDate).getTime() : 0; // never schedule past the exam
+    if (ex && ex > Date.now() && due > ex) due = ex;
+    return { ...card, reps, interval, ease, due };
+  }
+  return { ...card, reps: 0, interval: 0, lapses: card.lapses + 1, ease: Math.max(1.3, card.ease - 0.2), due: Date.now() + 10 * 60000 };
+}
+
+const StudyContext = createContext(null);
+// eslint-disable-next-line react-refresh/only-export-components
+export const useStudy = () => useContext(StudyContext);
+// eslint-disable-next-line react-refresh/only-export-components
+export const usePlans = () => {
+  const s = useStudy();
+  return {
+    plans: s?.plans || [],
+    savePlan: s?.savePlan || (() => {}),
+    deletePlan: s?.deletePlan || (() => {}),
+    completePlanDay: s?.completePlanDay || (() => {}),
+    setPlanDayStatus: s?.setPlanDayStatus || (() => {}),
+  };
+};
+
+export function StudyProvider({ children }) {
+  const { user, getToken } = useAuth();
+  const [data, setData] = useState(loadLocal);
+  const dataRef = useRef(data);
+  const hydrated = useRef(false);   // server load/merge done → safe to write up
+  const saveTimer = useRef(null);
+
+  // Persist locally + (debounced) to the server on every change.
+  useEffect(() => {
+    dataRef.current = data;
+    try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch { /* ignore */ }
+    if (!user || !hydrated.current) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        const token = await getToken?.();
+        if (!token) return;
+        await fetch("/api/study", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ data: dataRef.current }),
+        });
+      } catch { /* offline / transient — localStorage keeps the copy */ }
+    }, 1200);
+  }, [data, user, getToken]);
+
+  // On sign-in: pull the server blob, merge with local, adopt as canonical.
+  // On sign-out: drop back to local-only (stop writing up).
+  useEffect(() => {
+    if (!user) { hydrated.current = false; return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken?.();
+        if (!token) return;
+        const res = await fetch("/api/study", { headers: { Authorization: `Bearer ${token}` } });
+        const body = res.ok ? await res.json().catch(() => ({})) : {};
+        if (cancelled) return;
+        const merged = mergeStudy(body?.data || {}, dataRef.current);
+        hydrated.current = true;
+        setData(merged); // change effect pushes the merged blob back up once
+      } catch {
+        if (!cancelled) hydrated.current = true; // allow local→server on next edit
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, getToken]);
+
+  // ── Mutators (all go through commit → local + server) ──
+  const commit = useCallback((updater) => {
+    setData((prev) => {
+      const base = typeof updater === "function" ? updater(prev) : updater;
+      return { ...base, updatedAt: Date.now() };
+    });
+  }, []);
+
+  // Add missed questions to the deck (deduped by front text). Returns # added.
+  const addMissed = useCallback((items) => {
+    const prev = dataRef.current;
+    const seen = new Set((prev.cards || []).map((c) => (c.front || "").toLowerCase()));
+    const toAdd = [];
+    for (const it of items || []) {
+      const front = String(it.front ?? it.question ?? "").trim();
+      const key = front.toLowerCase();
+      if (!front || seen.has(key)) continue;
+      seen.add(key);
+      toAdd.push({
+        id: uid(), front,
+        back: String(it.back ?? (it.options && it.options[it.correct]) ?? it.answer ?? "").trim(),
+        explanation: String(it.explanation ?? "").trim(),
+        ease: 2.3, interval: 0, due: Date.now(), reps: 0, lapses: 0, createdAt: Date.now(),
+      });
+    }
+    if (toAdd.length) commit((p) => ({ ...p, cards: [...(p.cards || []), ...toAdd] }));
+    return toAdd.length;
+  }, [commit]);
+
+  const grade = useCallback((id, ok) => {
+    commit((p) => ({ ...p, cards: (p.cards || []).map((c) => (c.id === id ? schedule(c, ok, p.examDate) : c)) }));
+  }, [commit]);
+  const removeCard = useCallback((id) => {
+    commit((p) => ({ ...p, cards: (p.cards || []).filter((c) => c.id !== id) }));
+  }, [commit]);
+  const clearAll = useCallback(() => commit((p) => ({ ...p, cards: [] })), [commit]);
+  const setExamDate = useCallback((d) => commit((p) => ({ ...p, examDate: d || null })), [commit]);
+
+  const recordSession = useCallback((answered = 0, correct = 0) => {
+    commit((p) => {
+      const s = normStats(p.stats), today = dstr();
+      let streak = s.streak;
+      if (s.lastActive === today) { /* already counted today */ }
+      else if (s.lastActive === yesterdayStr()) streak = s.streak + 1;
+      else streak = 1;
+      return { ...p, stats: {
+        answered: s.answered + answered, correct: s.correct + correct,
+        streak, best: Math.max(s.best || 0, streak), lastActive: today,
+      } };
+    });
+  }, [commit]);
+
+  // ── Study plans ──
+  const savePlan = useCallback((plan) => {
+    commit((p) => ({ ...p, plans: [...(p.plans || []).filter((x) => x.id !== plan.id), plan] }));
+  }, [commit]);
+  const deletePlan = useCallback((id) => {
+    commit((p) => ({ ...p, plans: (p.plans || []).filter((x) => x.id !== id) }));
+  }, [commit]);
+  const setPlanDayStatus = useCallback((planId, dayIdx, status) => {
+    commit((p) => ({ ...p, plans: (p.plans || []).map((pl) => pl.id !== planId ? pl :
+      { ...pl, days: pl.days.map((d, i) => i !== dayIdx ? d :
+        { ...d, status, ...(status === "done" ? { doneAt: Date.now() } : { doneAt: null, score: null, total: null }) }) }) }));
+  }, [commit]);
+  const completePlanDay = useCallback((planId, dayIdx, result) => {
+    commit((p) => ({ ...p, plans: (p.plans || []).map((pl) => pl.id !== planId ? pl :
+      { ...pl, days: pl.days.map((d, i) => i !== dayIdx ? d :
+        { ...d, status: "done", doneAt: Date.now(), score: result?.score ?? null, total: result?.total ?? null }) }) }));
+  }, [commit]);
+
+  const value = {
+    cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans,
+    addMissed, grade, removeCard, clearAll, setExamDate, recordSession,
+    savePlan, deletePlan, completePlanDay, setPlanDayStatus,
+  };
+  return <StudyContext.Provider value={value}>{children}</StudyContext.Provider>;
+}

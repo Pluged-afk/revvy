@@ -30,7 +30,18 @@ export default async function handler(req, res) {
     await sql`CREATE INDEX IF NOT EXISTS profiles_clerk_idx ON profiles (clerk_user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS profiles_email_idx ON profiles (email)`;
     await sql`CREATE INDEX IF NOT EXISTS profiles_stripe_cust_idx ON profiles (stripe_customer_id)`;
-    return res.status(200).json({ ok: true, message: "profiles table ready (with clerk_user_id)" });
+
+    // Server-synced study data: one JSON blob per user holding the spaced-
+    // repetition deck, lifetime stats + streak, exam date, and study plans.
+    // Kept as a single row so cross-device sync is one read / one write.
+    await sql`
+      CREATE TABLE IF NOT EXISTS study_data (
+        clerk_user_id TEXT PRIMARY KEY,
+        data          JSONB       NOT NULL DEFAULT '{}'::jsonb,
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+
+    return res.status(200).json({ ok: true, message: "profiles + study_data tables ready" });
   } catch (e) {
     console.error("[init-db]", e.message);
     return res.status(500).json({ error: e.message });
