@@ -104,6 +104,8 @@ const T_EN = {
   shareQuiz:"Share quiz", shareCreating:"Creating link…", shareTitle:"Share this quiz",
   shareDesc:"Anyone with the link can take it — no account needed. See who beats your score.",
   shareCopy:"Copy link", shareCopied:"Copied ✓", shareNative:"Share…", shareErr:"Couldn't create a link. Try again.",
+  // ── Exam level / type ──
+  levelLabel:"Level", levelGeneral:"General", levelHighschool:"High school", levelUniversity:"University",
   custom:"Custom", customHint:"Enter 1–100",
   proFeature:"Pro Feature", upgradePro:"⭐ Upgrade to Pro — €4.99/mo",
   activatePro:"Activate Pro", activateNote:"Secure billing powered by Stripe.",
