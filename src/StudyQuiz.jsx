@@ -12,7 +12,7 @@ import { useStudyStats } from "./lib/stats.js";
 import { usePlans } from "./context/StudyContext.jsx";
 import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, dayState } from "./lib/planner.js";
 import { computeReadiness, weakTopics } from "./lib/insights.js";
-import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scaledScore, compositeScore } from "./lib/mockExams.js";
+import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scaledScore, compositeScore, compositeMax } from "./lib/mockExams.js";
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
@@ -37,19 +37,6 @@ const DIFFICULTY = [
   { name:"Medium", guide:"Test understanding and application. Require connecting ideas or one reasoning step. For multiple choice, distractors should be plausible and require thought." },
   { name:"Hard",   guide:"Test analysis, synthesis, and edge cases. Require multi-step reasoning or distinguishing subtle differences. For multiple choice, distractors should be very close and tricky. Avoid trivially-recalled facts." },
 ];
-// Exam-type framing — shapes the AI's command words and depth for the audience.
-// Composes with DIFFICULTY (which sets challenge *within* the chosen level).
-const LEVELS = [
-  { id:"general",    label:"General" },
-  { id:"highschool", label:"High school" },
-  { id:"university", label:"University" },
-];
-function levelDirective(level) {
-  if (level === "highschool") return "AUDIENCE: High-school student. Use clear, curriculum-level language and standard command words (define, describe, explain, calculate, outline). Keep depth appropriate for secondary school and avoid graduate-level jargon.";
-  if (level === "university") return "AUDIENCE: University student. Use higher-order command words (analyse, evaluate, compare, critically assess, justify, derive). Assume solid foundational knowledge and test application, synthesis, and nuance rather than plain recall.";
-  return "";
-}
-const levelName = (id, t) => id === "highschool" ? t.levelHighschool : id === "university" ? t.levelUniversity : t.levelGeneral;
 const STRIPE_MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const STRIPE_YEARLY_PRICE  = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
 
@@ -150,7 +137,7 @@ const THEME_DARK = `
 `;
 
 // ── Claude API ────────────────────────────────────────────────────────
-async function callClaude({ blocks, numQ, diff, type, level }) {
+async function callClaude({ blocks, numQ, diff, type }) {
   const typeMap = {
     mcq:   `Multiple choice: exactly 4 options. "correct" is 0-based index of the right answer.`,
     cards: `Flashcards: "question" = front (term/concept), "answer" = back (full explanation). Set options:[] correct:0.`,
@@ -159,8 +146,7 @@ async function callClaude({ blocks, numQ, diff, type, level }) {
   };
   // `diff` is the 0/1/2 index; map to the difficulty rubric.
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
-  const lv = levelDirective(level);
-  const prompt = `Generate EXACTLY ${numQ} study questions from the material — not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\n${lv ? lv + "\n" : ""}Return ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic"}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand") — used to track weak areas. Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material — not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic"}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand") — used to track weak areas. Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
@@ -219,13 +205,12 @@ function followupAnswer({ question, correct, prior, ask }) {
 // Generate one section of a standardized mock exam from its spec (no upload) —
 // authentic style, self-contained MCQs. Lenient on count: returns whatever
 // well-formed questions the model produces.
-async function callMockSection(exam, section, level) {
+async function callMockSection(exam, section) {
   const nOpt = section.options || 4;
   const optTemplate = Array(nOpt).fill('"..."').join(",");
   const prompt = `You are writing a realistic ${exam.name} practice exam section for a student.
 SECTION: ${section.name}. Generate EXACTLY ${section.count} multiple-choice questions.
 ${section.instr}
-${levelDirective(level) || ""}
 Each question needs: "question" (the full stem, with any passage/data/context written into it as text — no external images), "options" (an array of exactly ${nOpt} answer choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary the skills/topics across the section and make every distractor plausible.
 Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."}]}
 The "questions" array MUST contain ${section.count} items.`;
@@ -1299,7 +1284,7 @@ export default function StudyQuiz() {
   const [shareErr, setShareErr]   = useState("");
   const [shareCopied, setShareCopied] = useState(false);
   // ── Standardized mock exams (ACT) — self-contained, per-section timed ──
-  const [mockPresetId] = useState("act");
+  const [mockPresetId, setMockPresetId] = useState("act");
   const [mock, setMock] = useState(null);
   const [mockSecIdx, setMockSecIdx] = useState(0);
   const [mockQIdx, setMockQIdx] = useState(0);
@@ -1426,7 +1411,6 @@ export default function StudyQuiz() {
     autoAdvanceSec:5,
     defaultDiff:1,
     defaultQCount:10,
-    level:'general',     // exam-type framing: general | highschool | university
   });
   const [examSections, setExamSections] = useState([
     {id:0, type:'mcq',     count:'10', marksPerQ:'2'},
@@ -1662,7 +1646,7 @@ export default function StudyQuiz() {
           return "Section "+(i+1)+": generate exactly "+desc+". Set \"section\":" +(i+1)+" on EVERY question in this section.";
         }).join("\n");
       }
-      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\n"+(levelDirective(settings.level)?levelDirective(settings.level)+"\n":"")+"Return ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\",\"topic\":\"2-4 word sub-topic\"}]}\nSet \"topic\" to the specific concept each question tests (2-4 words) — used to track weak areas. For written/fill: options:[], correct:0. Keep questions in section order.";
+      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\",\"topic\":\"2-4 word sub-topic\"}]}\nSet \"topic\" to the specific concept each question tests (2-4 words) — used to track weak areas. For written/fill: options:[], correct:0. Keep questions in section order.";
       return { prompt, marksMap };
     };
 
@@ -1704,7 +1688,7 @@ export default function StudyQuiz() {
       setScreen("exam_run");
       if(!isPro) unlocks.consumeExam();   // free daily exam is now used up
     }catch(err){setError(err.message.includes("parse")?"Unexpected format — please try again.":err.message);setScreen("exam_setup");}
-  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks,settings.level]);
+  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks]);
 
   const evaluateExam=useCallback(async(answers)=>{
     const hasWritten=examQs.some(q=>q.type==="written");
@@ -1976,7 +1960,7 @@ export default function StudyQuiz() {
       for (let attempt = 0; attempt < 3; attempt++) {
         let r = null;
         try {
-          r = await callClaude({blocks, numQ:finalNumQ, diff, type:finalType, level:settings.level});
+          r = await callClaude({blocks, numQ:finalNumQ, diff, type:finalType});
         } catch (e1) { lastErr = e1; }
         if (r?.questions?.length) {
           // Keep the best-so-far (most questions).
@@ -1992,7 +1976,7 @@ export default function StudyQuiz() {
       setError(err.message.includes("parse")?"AI returned unexpected format. Please try again.":err.message);
       setScreen("upload");
     }
-  },[isPro,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,requireLogin,settings.level]);
+  },[isPro,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,requireLogin]);
 
   const pick    = i => { if(selected===null){ setSelected(i); haptic(); } };
   const nextQ   = (isCorrect, detail) => {
@@ -2068,7 +2052,7 @@ export default function StudyQuiz() {
     const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
     setMockGenErr(""); setScreen("mock_gen");
     try {
-      const settled = await Promise.allSettled(exam.sections.map((s) => callMockSection(exam, s, settings.level)));
+      const settled = await Promise.allSettled(exam.sections.map((s) => callMockSection(exam, s)));
       const usable = exam.sections
         .map((s, i) => ({ ...s, questions: settled[i].status === "fulfilled" ? settled[i].value : [] }))
         .filter((s) => s.questions.length);
@@ -2370,12 +2354,6 @@ export default function StudyQuiz() {
               {t.diffOpts.map((d,i)=><Chip key={d} small label={d} active={diff===i} onClick={()=>setDiff(i)}/>)}
             </div>
           </div>
-          <div style={Sb.settingRow}>
-            <span style={Sb.settingLabel}>{t.levelLabel}</span>
-            <div style={{display:"flex",gap:5,flexWrap:"wrap",justifyContent:"flex-end"}}>
-              {LEVELS.map(lv=><Chip key={lv.id} small label={levelName(lv.id,t)} active={settings.level===lv.id} onClick={()=>updateSetting("level",lv.id)}/>)}
-            </div>
-          </div>
         </div>
         {/* Usage strip — questions remaining today (server-tracked). */}
         <div style={{background:isPro?"var(--color-background-secondary)":"#fffbeb",border:isPro?"0.5px solid var(--color-border-tertiary)":"1px solid #f59e0b44",borderRadius:10,padding:"10px 14px",fontSize:12,color:isPro?"var(--color-text-secondary)":"#92400e",marginBottom:14}}>
@@ -2405,14 +2383,15 @@ export default function StudyQuiz() {
             </span>
           </div>
         )}
-        <div onClick={()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_intro"); }}
-          style={{background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
+        <div onClick={()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }}
+          style={{background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
           <span style={{fontSize:22,flexShrink:0}}>🎓</span>
           <div style={{flex:1,color:"#fff",minWidth:0}}>
             <div style={{fontWeight:700,fontSize:14}}>{t.mockCardTitle}</div>
             <div style={{fontSize:11,opacity:0.85,marginTop:2,lineHeight:1.45}}>{t.mockCardSub}</div>
           </div>
-          <span style={{fontSize:10,background:isPro?"rgba(255,255,255,0.2)":"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0}}>{isPro?"ACT":"PRO"}</span>
+          {!isPro && <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0}}>PRO</span>}
+          <span style={{fontSize:18,color:"rgba(255,255,255,0.6)",flexShrink:0}}>›</span>
         </div>
         <button style={{...Sb.btnPrimary,width:"100%"}} onClick={generate}>{t.generate}</button>
         </div>
@@ -2756,8 +2735,6 @@ export default function StudyQuiz() {
         <div style={{marginBottom:22}}>
           <p style={Sb.secLabel}>{t.difficulty.toUpperCase()}</p>
           <div style={{display:"flex",gap:8}}>{t.diffOpts.map((d,i)=><Chip key={d} label={d} active={diff===i} onClick={()=>setDiff(i)}/>)}</div>
-          <p style={{...Sb.secLabel,marginTop:18}}>{t.levelLabel.toUpperCase()}</p>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{LEVELS.map(lv=><Chip key={lv.id} label={levelName(lv.id,t)} active={settings.level===lv.id} onClick={()=>updateSetting("level",lv.id)}/>)}</div>
         </div>
         <p style={Sb.secLabel}>{t.examFiles.toUpperCase()} ({examFiles.filter(Boolean).length}/5)</p>
         <p style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:12,marginTop:-8}}>{t.examFilesHint}</p>
@@ -3177,6 +3154,37 @@ export default function StudyQuiz() {
     );
   }
 
+  // ── MOCK EXAMS: template picker ───────────────────────────────────
+  if (screen==="mock_select") return (
+    <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      <div style={Sb.topbar} className="rv-topbar">
+        <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← Back</button>
+        <span style={Sb.brand}>{t.mockTitle}</span><span/>
+      </div>
+      <div className="rv-center-narrow" style={{padding:"22px 16px 40px"}}>
+        <div style={{textAlign:"center",marginBottom:18}}>
+          <div style={{fontSize:36,marginBottom:6}}>🎓</div>
+          <h2 style={{...Sb.h2,textAlign:"center",margin:"0 0 4px"}}>{t.mockChoose}</h2>
+          <p style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.mockSelectSub}</p>
+        </div>
+        {MOCK_EXAMS.map(exam=>(
+          <div key={exam.id} onClick={()=>{setMockPresetId(exam.id);setMockGenErr("");setScreen("mock_intro");}}
+            style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:10,cursor:"pointer"}} className="exam-type-card">
+            <div style={{width:46,height:46,borderRadius:11,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"#fff",fontWeight:800,fontSize:13,letterSpacing:0.2,fontFamily:"'Playfair Display',Georgia,serif"}}>{exam.name.split("/")[0].slice(0,4)}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:15,color:"var(--color-text-primary)"}}>{exam.name}</div>
+              <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:1}}>{exam.blurb}</div>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{exam.note}</div>
+            </div>
+            <span style={{fontSize:20,color:"var(--color-text-tertiary)",flexShrink:0}}>›</span>
+          </div>
+        ))}
+        <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:12,lineHeight:1.55}}>{t.mockNoPdf}</p>
+      </div>
+    </div>
+  );
+
   // ── MOCK EXAM: intro ──────────────────────────────────────────────
   if (screen==="mock_intro") {
     const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
@@ -3185,7 +3193,7 @@ export default function StudyQuiz() {
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
         <div style={Sb.topbar} className="rv-topbar">
-          <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← Back</button>
+          <button style={Sb.backBtn} onClick={()=>setScreen("mock_select")}>← Back</button>
           <span style={Sb.brand}>{t.mockTitle}</span><span/>
         </div>
         <div className="rv-center-narrow" style={{padding:"22px 16px 40px"}}>
@@ -3283,14 +3291,14 @@ export default function StudyQuiz() {
 
   // ── MOCK EXAM: results ────────────────────────────────────────────
   if (screen==="mock_results" && mock) {
-    const comp = compositeScore(mockSecResults.map(r=>r.scaled));
+    const comp = compositeScore(mockSecResults.map(r=>r.scaled), mock.scoreMode);
     return (
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
         <div style={{background:"linear-gradient(145deg,#1e1b4b,#4f46e5)",padding:"34px 20px 26px",textAlign:"center"}}>
           <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"rgba(255,255,255,0.7)",textTransform:"uppercase"}}>{mock.name} {t.mockComposite}</div>
           <div style={{fontSize:58,fontWeight:800,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif",lineHeight:1.1}}>{comp}</div>
-          <div style={{fontSize:13,color:"rgba(255,255,255,0.7)"}}>{t.mockOutOf} {mock.scaleMax}</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.7)"}}>{t.mockOutOf} {compositeMax(mock)}</div>
         </div>
         <div className="rv-center" style={{padding:"20px 16px 40px"}}>
           <div style={Sb.settingsBox}>

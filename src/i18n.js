@@ -104,15 +104,16 @@ const T_EN = {
   shareQuiz:"Share quiz", shareCreating:"Creating link…", shareTitle:"Share this quiz",
   shareDesc:"Anyone with the link can take it — no account needed. See who beats your score.",
   shareCopy:"Copy link", shareCopied:"Copied ✓", shareNative:"Share…", shareErr:"Couldn't create a link. Try again.",
-  // ── Exam level / type ──
-  levelLabel:"Level", levelGeneral:"General", levelHighschool:"High school", levelUniversity:"University",
-  // ── Standardized mock exams (ACT) ──
-  mockTitle:"Mock Exams", mockCardTitle:"Full mock exams",
-  mockCardSub:"Sit a real ACT — 4 timed sections, scored 1–36.",
+  // ── Standardized mock exams ──
+  mockTitle:"Mock Exams", mockCardTitle:"Mock exams",
+  mockCardSub:"Full timed practice tests — ACT, SAT, PSAT, GRE. No PDF needed.",
+  mockChoose:"Choose a test",
+  mockSelectSub:"Full-length, timed practice exams that mirror the real thing — no upload needed.",
+  mockNoPdf:"No notes or PDF required — every test is generated fresh.",
   mockPracticeTest:"Practice Test", mockTotal:"Total",
   mockWarn:"A full-length, timed exam. Each section is timed separately and locks when time runs out — just like the real test. Set aside the full time and find a quiet spot.",
   mockStart:"Start full mock", mockProOnly:"Go Pro to take full mocks",
-  mockDisclaimer:"AI-generated, ACT-style practice questions — not official ACT content. Scores are estimates.",
+  mockDisclaimer:"AI-generated practice questions in the style of the real exam — not official test content. Scores are estimates.",
   mockBuilding:"Building your exam…", mockBuildingSub:"Writing all four sections — this takes a minute or two. Hang tight.",
   mockSection:"Section", question:"Question", prev:"Prev",
   mockSubmitSection:"Submit section", mockEndSection:"End section early",
