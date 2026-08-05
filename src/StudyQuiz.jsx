@@ -205,16 +205,26 @@ function followupAnswer({ question, correct, prior, ask }) {
 // Generate one section of a standardized mock exam from its spec (no upload) —
 // authentic style, self-contained MCQs. Lenient on count: returns whatever
 // well-formed questions the model produces.
-async function callMockSection(exam, section) {
+async function callMockSection(exam, section, tilt) {
   const nOpt = section.options || 4;
   const optTemplate = Array(nOpt).fill('"..."').join(",");
+  // Pure test environment: the learner can't set difficulty. Each generated
+  // form gets one randomly-chosen overall difficulty (luck of the draw), and
+  // within it the questions span the authentic range — like a real exam.
+  const diff = tilt === "easier"
+    ? "OVERALL DIFFICULTY: an easier form of this exam — lean toward more approachable questions, but still include a few genuinely hard ones."
+    : tilt === "harder"
+    ? "OVERALL DIFFICULTY: a harder form of this exam — lean toward more challenging questions with subtle, close distractors, as tough test forms are."
+    : "OVERALL DIFFICULTY: an authentic exam form — span the full real range, from a few easy questions to several genuinely hard ones.";
   const prompt = `You are writing a realistic ${exam.name} practice exam section for a student.
 SECTION: ${section.name}. Generate EXACTLY ${section.count} multiple-choice questions.
 ${section.instr}
+${diff} Do NOT make every question the same difficulty — this is a real, un-adjustable test, so vary it like the actual exam.
 Each question needs: "question" (the full stem, with any passage/data/context written into it as text — no external images), "options" (an array of exactly ${nOpt} answer choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary the skills/topics across the section and make every distractor plausible.
+CRITICAL — accuracy: for any question involving a calculation or data, work the answer out fully yourself FIRST, then set "correct" to the index of the option that exactly matches your computed result; double-check every calculation and unit. Every question must have exactly ONE clearly correct option, and its "explanation" must agree with that option. Discard any question you are not certain is correct.
 Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."}]}
 The "questions" array MUST contain ${section.count} items.`;
-  const maxTokens = Math.min(section.count * 300 + 2000, 56000);
+  const maxTokens = Math.min(section.count * 450 + 3000, 60000); // roomy — data questions run long
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ model:AI_MODEL, max_tokens:maxTokens,
@@ -222,9 +232,25 @@ The "questions" array MUST contain ${section.count} items.`;
       messages:[{ role:"user", content:[{type:"text",text:prompt}] }] }),
   });
   if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`Error ${res.status}`); }
-  const parsed = JSON.parse(stripFences(await readStream(res)));
+  const raw = stripFences(await readStream(res));
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch {
+    // Salvage a truncated response: close the array after the last complete object.
+    const cut = raw.lastIndexOf("}");
+    try { parsed = JSON.parse(raw.slice(0, cut + 1) + "]}"); } catch { parsed = {}; }
+  }
   const qs = Array.isArray(parsed.questions) ? parsed.questions : [];
-  return qs.filter((q) => q && q.question && Array.isArray(q.options) && q.options.length >= 2 && Number.isInteger(q.correct) && q.correct < q.options.length);
+  // Keep only well-formed MCQs. A ballooning "explanation" is the tell-tale sign
+  // the model couldn't solve the question cleanly — drop those rather than ship
+  // a mis-keyed or incoherent question.
+  return qs.filter((q) =>
+    q && typeof q.question === "string" && q.question.length > 8 &&
+    Array.isArray(q.options) && q.options.length >= 2 &&
+    q.options.every((o) => typeof o === "string" && o.trim().length) &&
+    Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length &&
+    String(q.explanation || "").length <= 400
+  );
 }
 
 function readText(f)   { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error("Read failed")); r.readAsText(f); }); }
@@ -2052,7 +2078,10 @@ export default function StudyQuiz() {
     const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
     setMockGenErr(""); setScreen("mock_gen");
     try {
-      const settled = await Promise.allSettled(exam.sections.map((s) => callMockSection(exam, s)));
+      // One difficulty tilt for the whole form (luck of the draw) — the learner
+      // can't choose it. Weighted: ~25% easier, ~50% standard, ~25% harder.
+      const tilt = ["easier", "standard", "standard", "harder"][Math.floor(Math.random() * 4)];
+      const settled = await Promise.allSettled(exam.sections.map((s) => callMockSection(exam, s, tilt)));
       const usable = exam.sections
         .map((s, i) => ({ ...s, questions: settled[i].status === "fulfilled" ? settled[i].value : [] }))
         .filter((s) => s.questions.length);
@@ -3291,7 +3320,7 @@ export default function StudyQuiz() {
 
   // ── MOCK EXAM: results ────────────────────────────────────────────
   if (screen==="mock_results" && mock) {
-    const comp = compositeScore(mockSecResults.map(r=>r.scaled), mock.scoreMode);
+    const comp = compositeScore(mockSecResults.map(r=>r.scaled), mock);
     return (
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
