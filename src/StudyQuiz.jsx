@@ -12,6 +12,7 @@ import { useStudyStats } from "./lib/stats.js";
 import { usePlans } from "./context/StudyContext.jsx";
 import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, dayState } from "./lib/planner.js";
 import { computeReadiness, weakTopics } from "./lib/insights.js";
+import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scaledScore, compositeScore } from "./lib/mockExams.js";
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
@@ -25,7 +26,7 @@ const FREE_DAILY   = 50;  // free daily QUESTION allowance (shown in plan lists)
 const Q_FREE       = [5, 10, 15, 20];
 const Q_EXTRA      = [25, 30, 40, 50];
 const QUIZ_TYPES   = ["mcq","cards","fill","match"];
-const LETTERS      = ["A","B","C","D"];
+const LETTERS      = ["A","B","C","D","E","F"];
 // Model for all generation/grading. Haiku 4.5: cheap + fast, plenty for
 // question writing. ($0.80/1M in, $4/1M out vs Sonnet's $3/$15.)
 const AI_MODEL     = "claude-haiku-4-5-20251001";
@@ -213,6 +214,32 @@ function followupAnswer({ question, correct, prior, ask }) {
   return callClaudeText(
     `A student is reviewing a quiz question they got wrong.\nQuestion: ${question}\nCorrect answer: ${correct}\nYour earlier explanation: ${prior}\nThe student now asks: "${ask}"\nAnswer their follow-up clearly and concisely (2-4 sentences).`
   );
+}
+
+// Generate one section of a standardized mock exam from its spec (no upload) —
+// authentic style, self-contained MCQs. Lenient on count: returns whatever
+// well-formed questions the model produces.
+async function callMockSection(exam, section, level) {
+  const nOpt = section.options || 4;
+  const optTemplate = Array(nOpt).fill('"..."').join(",");
+  const prompt = `You are writing a realistic ${exam.name} practice exam section for a student.
+SECTION: ${section.name}. Generate EXACTLY ${section.count} multiple-choice questions.
+${section.instr}
+${levelDirective(level) || ""}
+Each question needs: "question" (the full stem, with any passage/data/context written into it as text — no external images), "options" (an array of exactly ${nOpt} answer choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary the skills/topics across the section and make every distractor plausible.
+Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."}]}
+The "questions" array MUST contain ${section.count} items.`;
+  const maxTokens = Math.min(section.count * 300 + 2000, 56000);
+  const res = await fetch("/api/anthropic", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ model:AI_MODEL, max_tokens:maxTokens,
+      system:"You are an expert standardized-test writer. Return ONLY valid raw JSON, no markdown.",
+      messages:[{ role:"user", content:[{type:"text",text:prompt}] }] }),
+  });
+  if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`Error ${res.status}`); }
+  const parsed = JSON.parse(stripFences(await readStream(res)));
+  const qs = Array.isArray(parsed.questions) ? parsed.questions : [];
+  return qs.filter((q) => q && q.question && Array.isArray(q.options) && q.options.length >= 2 && Number.isInteger(q.correct) && q.correct < q.options.length);
 }
 
 function readText(f)   { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error("Read failed")); r.readAsText(f); }); }
@@ -1271,6 +1298,45 @@ export default function StudyQuiz() {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr]   = useState("");
   const [shareCopied, setShareCopied] = useState(false);
+  // ── Standardized mock exams (ACT) — self-contained, per-section timed ──
+  const [mockPresetId] = useState("act");
+  const [mock, setMock] = useState(null);
+  const [mockSecIdx, setMockSecIdx] = useState(0);
+  const [mockQIdx, setMockQIdx] = useState(0);
+  const [mockAns, setMockAns] = useState([]); // [secIdx] => [selected index per question]
+  const [mockSecResults, setMockSecResults] = useState([]);
+  const [mockSecTimeLeft, setMockSecTimeLeft] = useState(0);
+  const [mockGenErr, setMockGenErr] = useState("");
+  const [showMockSubmit, setShowMockSubmit] = useState(false);
+  const submittedSecRef = useRef(-1);
+  const submitSectionRef = useRef(() => {});
+  // Grade the current section, then lock it and advance (or finish the exam).
+  const submitSection = () => {
+    if (!mock || submittedSecRef.current === mockSecIdx) return;
+    submittedSecRef.current = mockSecIdx;
+    const sec = mock.sections[mockSecIdx];
+    const ans = mockAns[mockSecIdx] || [];
+    const raw = sec.questions.reduce((s, q, i) => s + (ans[i] === q.correct ? 1 : 0), 0);
+    const scaled = scaledScore(raw, sec.questions.length, mock.scaleMin, mock.scaleMax);
+    setMockSecResults((prev) => { const n = [...prev]; n[mockSecIdx] = { sectionId: sec.id, name: sec.name, raw, count: sec.questions.length, scaled }; return n; });
+    setShowMockSubmit(false);
+    if (mockSecIdx + 1 < mock.sections.length) {
+      const ni = mockSecIdx + 1;
+      setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(mock.sections[ni].minutes * 60);
+    } else {
+      setScreen("mock_results");
+    }
+  };
+  useEffect(() => { submitSectionRef.current = submitSection; }); // keep latest closure
+  // Per-section countdown: one interval per section, auto-submits at 0.
+  useEffect(() => {
+    if (screen !== "mock_run") return;
+    const id = setInterval(() => setMockSecTimeLeft((t) => { if (t <= 1) { clearInterval(id); return 0; } return t - 1; }), 1000);
+    return () => clearInterval(id);
+  }, [screen, mockSecIdx]);
+  useEffect(() => {
+    if (screen === "mock_run" && mockSecTimeLeft === 0 && mock && submittedSecRef.current !== mockSecIdx) submitSectionRef.current();
+  }, [mockSecTimeLeft, screen, mockSecIdx, mock]);
   const sortedPlans = [...plans].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const homePlan = sortedPlans.find(p=>!isPlanComplete(p)) || sortedPlans[0] || null;
   const activePlan = plans.find(p=>p.id===activePlanId) || homePlan;
@@ -1995,6 +2061,28 @@ export default function StudyQuiz() {
     setShareBusy(false);
   };
   const copyShare = async () => { try { await navigator.clipboard.writeText(shareLink); setShareCopied(true); setTimeout(()=>setShareCopied(false),1800); } catch { /* ignore */ } };
+  // Generate a full standardized mock (all sections, from spec — no upload).
+  const startMock = async () => {
+    if (requireLogin()) return;
+    if (!isPro) { setShowProModal(true); return; }
+    const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
+    setMockGenErr(""); setScreen("mock_gen");
+    try {
+      const settled = await Promise.allSettled(exam.sections.map((s) => callMockSection(exam, s, settings.level)));
+      const usable = exam.sections
+        .map((s, i) => ({ ...s, questions: settled[i].status === "fulfilled" ? settled[i].value : [] }))
+        .filter((s) => s.questions.length);
+      if (!usable.length) throw new Error("Couldn't generate the exam — please try again.");
+      submittedSecRef.current = -1;
+      setMock({ presetId: exam.id, name: exam.name, scaleMin: exam.scaleMin, scaleMax: exam.scaleMax, sections: usable });
+      setMockSecIdx(0); setMockQIdx(0); setMockAns(usable.map(() => []));
+      setMockSecResults([]); setMockSecTimeLeft(usable[0].minutes * 60);
+      setScreen("mock_run");
+    } catch (e) {
+      setMockGenErr(e.message || "Generation failed. Please try again.");
+      setScreen("mock_intro");
+    }
+  };
   const enableReminders = async () => { try { if (typeof Notification!=="undefined") { const p = await Notification.requestPermission(); setNotifPerm(p); } } catch { /* ignore */ } };
   // Tick a coached day off (once) when its quiz/exam results appear.
   useEffect(() => {
@@ -2317,6 +2405,15 @@ export default function StudyQuiz() {
             </span>
           </div>
         )}
+        <div onClick={()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_intro"); }}
+          style={{background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
+          <span style={{fontSize:22,flexShrink:0}}>🎓</span>
+          <div style={{flex:1,color:"#fff",minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14}}>{t.mockCardTitle}</div>
+            <div style={{fontSize:11,opacity:0.85,marginTop:2,lineHeight:1.45}}>{t.mockCardSub}</div>
+          </div>
+          <span style={{fontSize:10,background:isPro?"rgba(255,255,255,0.2)":"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0}}>{isPro?"ACT":"PRO"}</span>
+        </div>
         <button style={{...Sb.btnPrimary,width:"100%"}} onClick={generate}>{t.generate}</button>
         </div>
       </div>
@@ -3075,6 +3172,156 @@ export default function StudyQuiz() {
                   <button onClick={()=>setConfirmDelPlan(false)} style={{...Sb.btnGhost,flex:1,padding:"9px"}}>{t.notNow||"Cancel"}</button>
                 </div>
               </div>}
+        </div>
+      </div>
+    );
+  }
+
+  // ── MOCK EXAM: intro ──────────────────────────────────────────────
+  if (screen==="mock_intro") {
+    const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
+    const totalMin = mockTotalMinutes(exam), totalQ = mockTotalQuestions(exam);
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        <AdBanners isPro={isPro}/>
+        <div style={Sb.topbar} className="rv-topbar">
+          <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← Back</button>
+          <span style={Sb.brand}>{t.mockTitle}</span><span/>
+        </div>
+        <div className="rv-center-narrow" style={{padding:"22px 16px 40px"}}>
+          <div style={{textAlign:"center",marginBottom:18}}>
+            <div style={{fontSize:40,marginBottom:6}}>🎓</div>
+            <h2 style={{...Sb.h2,textAlign:"center",margin:"0 0 4px"}}>{exam.name} {t.mockPracticeTest}</h2>
+            <p style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{exam.note}</p>
+          </div>
+          <div style={Sb.settingsBox}>
+            {exam.sections.map((s,i)=>(
+              <div key={s.id} style={{...Sb.settingRow,borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+                <span style={Sb.settingLabel}>{i+1}. {s.name}</span>
+                <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{s.count} Qs · {s.minutes} min</span>
+              </div>
+            ))}
+            <div style={{...Sb.settingRow,borderBottom:"none",background:"var(--color-background-secondary)"}}>
+              <span style={Sb.settingLabel}>{t.mockTotal}</span>
+              <span style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)"}}>{totalQ} Qs · {Math.floor(totalMin/60)}h {totalMin%60}m</span>
+            </div>
+          </div>
+          <div style={{background:"#fffbeb",border:"0.5px solid #f59e0b44",borderRadius:10,padding:"11px 14px",fontSize:12,color:"#92400e",lineHeight:1.5,marginBottom:14}}>⏱️ {t.mockWarn}</div>
+          {mockGenErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {mockGenErr}</div>}
+          {isPro
+            ? <button style={{...Sb.btnPrimary,width:"100%"}} onClick={startMock}>🎓 {t.mockStart}</button>
+            : <button style={{...Sb.btnPrimary,width:"100%",background:"#f59e0b"}} onClick={()=>{if(requireLogin())return;setShowProModal(true);}}>⭐ {t.mockProOnly}</button>}
+          <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:12,lineHeight:1.5}}>{t.mockDisclaimer}</p>
+        </div>
+        {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
+      </div>
+    );
+  }
+
+  // ── MOCK EXAM: generating ─────────────────────────────────────────
+  if (screen==="mock_gen") return (
+    <div style={{...Sb.root,alignItems:"center",justifyContent:"center",padding:"0 24px",textAlign:"center",minHeight:"100vh",display:"flex",flexDirection:"column"}}><style>{CSS}</style>
+      <div className="spin-ring" style={{width:52,height:52,borderRadius:"50%",border:"4px solid var(--color-border-tertiary)",borderTopColor:"#4f46e5"}}/>
+      <h2 style={{...Sb.h2,textAlign:"center",marginTop:28}}>{t.mockBuilding}</h2>
+      <p style={{marginTop:12,maxWidth:320,fontSize:13,lineHeight:1.55,color:"var(--color-text-secondary)"}}>{t.mockBuildingSub}</p>
+    </div>
+  );
+
+  // ── MOCK EXAM: per-section timed runner ───────────────────────────
+  if (screen==="mock_run" && mock) {
+    const sec = mock.sections[mockSecIdx];
+    const q = sec.questions[mockQIdx];
+    const ans = mockAns[mockSecIdx] || [];
+    const sel = ans[mockQIdx];
+    const mm = Math.floor(mockSecTimeLeft/60), ss = mockSecTimeLeft%60;
+    const low = mockSecTimeLeft <= 60;
+    const answered = ans.filter(a=>a!=null).length;
+    const pick = (i) => setMockAns(prev => { const n = prev.map(a=>[...a]); n[mockSecIdx][mockQIdx] = i; return n; });
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        <div style={Sb.topbar} className="rv-topbar">
+          <span style={{fontSize:13,fontWeight:700,color:"var(--color-text-primary)"}}>{sec.name}</span>
+          <span style={{fontSize:11,color:"var(--color-text-secondary)"}}>{t.mockSection} {mockSecIdx+1}/{mock.sections.length}</span>
+          <span className={low?"rv-timer-flash":""} style={{fontSize:15,fontWeight:800,color:low?"#dc2626":"#4f46e5",fontVariantNumeric:"tabular-nums"}}>{mm}:{String(ss).padStart(2,"0")}</span>
+        </div>
+        <PBar v={mockQIdx} max={sec.questions.length}/>
+        <div className="rv-center-narrow" style={{padding:"16px 16px 32px"}}>
+          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:10}}>{t.question} {mockQIdx+1} {t.outOf} {sec.questions.length}</div>
+          <h3 style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:16.5,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.5,margin:0,whiteSpace:"pre-wrap"}}>{q.question}</h3>
+          <div style={{display:"flex",flexDirection:"column",gap:9,marginTop:16}}>
+            {q.options.map((opt,i)=>{
+              const chosen = sel===i;
+              return <button key={i} onClick={()=>pick(i)} style={{display:"flex",alignItems:"center",gap:12,background:chosen?"var(--color-sel-tint)":"var(--color-background-primary)",border:`1.5px solid ${chosen?"#4f46e5":"var(--color-border-tertiary)"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left"}}>
+                <span style={{width:26,height:26,borderRadius:"50%",background:chosen?"#4f46e5":"var(--color-background-secondary)",color:chosen?"#fff":"var(--color-text-primary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{LETTERS[i]}</span>
+                <span style={{flex:1,lineHeight:1.4}}>{opt}</span>
+              </button>;
+            })}
+          </div>
+          <div style={{display:"flex",gap:10,marginTop:18}}>
+            <button disabled={mockQIdx===0} onClick={()=>setMockQIdx(i=>Math.max(0,i-1))} style={{...Sb.btnOutline,flex:1,opacity:mockQIdx===0?0.4:1}}>← {t.prev}</button>
+            {mockQIdx+1 < sec.questions.length
+              ? <button onClick={()=>setMockQIdx(i=>i+1)} style={{...Sb.btnPrimary,flex:1,margin:0}}>{t.next}</button>
+              : <button onClick={()=>setShowMockSubmit(true)} style={{...Sb.btnPrimary,flex:1,margin:0,background:"#16a34a"}}>{t.mockSubmitSection}</button>}
+          </div>
+          <button onClick={()=>setShowMockSubmit(true)} style={{...Sb.btnGhost,width:"100%",marginTop:12,fontSize:12}}>{t.mockEndSection} · {answered}/{sec.questions.length}</button>
+        </div>
+        {showMockSubmit && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowMockSubmit(false)}>
+            <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:16,padding:"22px 20px",maxWidth:360,width:"100%",boxSizing:"border-box"}}>
+              <h3 style={{margin:"0 0 8px",fontSize:17,fontWeight:700,color:"var(--color-text-primary)"}}>{(t.mockSubmitConfirm||"Submit {s}?").replace("{s}",sec.name)}</h3>
+              <p style={{margin:"0 0 16px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.mockSubmitWarn} {t.mockAnsweredCount?.replace("{a}",answered).replace("{n}",sec.questions.length) || `${answered}/${sec.questions.length} answered.`}</p>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>setShowMockSubmit(false)} style={{...Sb.btnGhost,flex:1}}>{t.notNow||"Cancel"}</button>
+                <button onClick={submitSection} style={{...Sb.btnPrimary,flex:1,margin:0,background:"#16a34a"}}>{t.mockSubmitSection}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── MOCK EXAM: results ────────────────────────────────────────────
+  if (screen==="mock_results" && mock) {
+    const comp = compositeScore(mockSecResults.map(r=>r.scaled));
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        <AdBanners isPro={isPro}/>
+        <div style={{background:"linear-gradient(145deg,#1e1b4b,#4f46e5)",padding:"34px 20px 26px",textAlign:"center"}}>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"rgba(255,255,255,0.7)",textTransform:"uppercase"}}>{mock.name} {t.mockComposite}</div>
+          <div style={{fontSize:58,fontWeight:800,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif",lineHeight:1.1}}>{comp}</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.7)"}}>{t.mockOutOf} {mock.scaleMax}</div>
+        </div>
+        <div className="rv-center" style={{padding:"20px 16px 40px"}}>
+          <div style={Sb.settingsBox}>
+            {mockSecResults.map((r,i)=>(
+              <div key={i} style={{...Sb.settingRow,borderBottom:i<mockSecResults.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
+                <span style={Sb.settingLabel}>{r.name}</span>
+                <span style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{r.raw}/{r.count} · <strong style={{color:"var(--color-text-primary)",fontSize:15}}>{r.scaled}</strong></span>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:10,marginBottom:16}}>
+            <button style={{...Sb.btnPrimary,flex:1,margin:0}} onClick={()=>setScreen("mock_intro")}>{t.mockRetake}</button>
+            <button style={{...Sb.btnOutline,flex:1}} onClick={()=>setScreen("upload")}>{t.newMat}</button>
+          </div>
+          <p style={Sb.secLabel}>{t.review}</p>
+          {mock.sections.map((sec,si)=>(
+            <div key={si}>
+              <div style={{fontSize:12,fontWeight:700,color:"var(--color-text-secondary)",margin:"14px 0 8px",letterSpacing:0.3}}>{sec.name.toUpperCase()}</div>
+              {sec.questions.map((q,i)=>{
+                const chosen=(mockAns[si]||[])[i];
+                const ok=chosen===q.correct;
+                return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 13px 12px 11px",marginBottom:9,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${ok?"#22c55e":"#ef4444"}`}} className="fade-in">
+                  <div style={{display:"flex",gap:8,alignItems:"flex-start"}}><span style={{fontSize:14,flexShrink:0}}>{ok?"✅":"❌"}</span><span style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{q.question}</span></div>
+                  {!ok&&<div style={{fontSize:12,color:"#dc2626",marginTop:5,paddingLeft:22}}>{t.yourAns} {chosen!=null?q.options[chosen]:"—"}</div>}
+                  <div style={{fontSize:12,color:"#16a34a",marginTop:3,paddingLeft:22,fontWeight:500}}>{t.correctAns} {q.options[q.correct]}</div>
+                  {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingTop:6,marginTop:6,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:22}}>{q.explanation}</div>}
+                  {!ok&&<ExplainBox t={t} ctx={{question:q.question,correct:q.options[q.correct],picked:chosen!=null?q.options[chosen]:"",subject:sec.name}}/>}
+                </div>;
+              })}
+            </div>
+          ))}
         </div>
       </div>
     );
