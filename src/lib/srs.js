@@ -17,6 +17,7 @@ export function toCard(q) {
     front: String(q?.question || "").trim(),
     back: String(q?.answer || (q?.options && q.options[q.correct]) || "").trim(),
     explanation: String(q?.explanation || "").trim(),
+    topic: String(q?.topic || "").trim(), // for weak-topic detection
   };
 }
 

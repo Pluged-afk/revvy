@@ -41,7 +41,15 @@ export default async function handler(req, res) {
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`;
 
-    return res.status(200).json({ ok: true, message: "profiles + study_data tables ready" });
+    // Publicly-shareable quizzes ("share-a-quiz") + their friend leaderboards.
+    await sql`
+      CREATE TABLE IF NOT EXISTS shared_quizzes (
+        id         TEXT PRIMARY KEY,
+        data       JSONB       NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+
+    return res.status(200).json({ ok: true, message: "profiles + study_data + shared_quizzes tables ready" });
   } catch (e) {
     console.error("[init-db]", e.message);
     return res.status(500).json({ error: e.message });

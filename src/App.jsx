@@ -19,6 +19,7 @@ import Login from './pages/Login.jsx'
 import Signup from './pages/Signup.jsx'
 import NotFound from './pages/NotFound.jsx'
 import LogoExport from './pages/LogoExport.jsx'
+import SharedQuiz from './pages/SharedQuiz.jsx'
 import StudyQuiz from './StudyQuiz.jsx'
 import './site.css'
 
@@ -58,6 +59,10 @@ function ClerkRoutes() {
 
           {/* Standalone logo export (no navbar/footer) — for screenshotting */}
           <Route path="/logo-export" element={<LogoExport />} />
+
+          {/* Public shared-quiz taker (no account needed) — the share-a-quiz
+              growth loop. Standalone: its own styling, no app shell. */}
+          <Route path="/q/:id" element={<SharedQuiz />} />
 
           {/* The quiz app — browsable by everyone. Generating a quiz requires
               an account; that gate lives in StudyQuiz's generate handlers.

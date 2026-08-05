@@ -11,6 +11,7 @@ import { useSRS, toCard } from "./lib/srs.js";
 import { useStudyStats } from "./lib/stats.js";
 import { usePlans } from "./context/StudyContext.jsx";
 import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, dayState } from "./lib/planner.js";
+import { computeReadiness, weakTopics } from "./lib/insights.js";
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
@@ -144,7 +145,7 @@ async function callClaude({ blocks, numQ, diff, type }) {
   };
   // `diff` is the 0/1/2 index; map to the difficulty rubric.
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
-  const prompt = `Generate EXACTLY ${numQ} study questions from the material — not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence"}]}\nMake all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material — not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic"}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand") — used to track weak areas. Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
@@ -175,6 +176,29 @@ async function readStream(res) {
 }
 function stripFences(t) {
   return (t||"").trim().replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/\s*```$/i,"").trim();
+}
+
+// One-shot plain-text tutor completion via the same proxy (no JSON). Used by
+// the "Explain why" feature on wrong answers.
+async function callClaudeText(prompt, max = 400) {
+  const res = await fetch("/api/anthropic", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ model:AI_MODEL, max_tokens:max,
+      system:"You are a warm, encouraging tutor. Reply in plain text, 2-4 sentences, no markdown, no headings.",
+      messages:[{ role:"user", content:[{type:"text",text:prompt}] }] }),
+  });
+  if (!res.ok) throw new Error("explain failed");
+  return (await readStream(res)).trim();
+}
+function explainAnswer({ question, correct, picked, subject }) {
+  return callClaudeText(
+    `A student just answered a study question wrong.\nQuestion: ${question}\nCorrect answer: ${correct}\nStudent's answer: ${picked || "(left blank)"}${subject ? `\nSubject: ${subject}` : ""}\nIn 2-4 short sentences, explain clearly why the correct answer is right and gently point out the likely misunderstanding behind the student's answer. Be specific and concrete.`
+  );
+}
+function followupAnswer({ question, correct, prior, ask }) {
+  return callClaudeText(
+    `A student is reviewing a quiz question they got wrong.\nQuestion: ${question}\nCorrect answer: ${correct}\nYour earlier explanation: ${prior}\nThe student now asks: "${ask}"\nAnswer their follow-up clearly and concisely (2-4 sentences).`
+  );
 }
 
 function readText(f)   { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error("Read failed")); r.readAsText(f); }); }
@@ -498,6 +522,80 @@ function MatchQuiz({ questions, onDone, t }) {
       </div>
       {!checked && <button disabled={!allMatched} onClick={check} style={{...Sb.btnPrimary,width:"100%",opacity:allMatched?1:0.35}}>{t.checkAll}</button>}
       {checked && <div style={{textAlign:"center",fontSize:14,color:"var(--color-text-secondary)",marginTop:8}}>{t.matchDone}{Object.values(results).filter(Boolean).length}/{terms.length}</div>}
+    </div>
+  );
+}
+
+// ── "Explain why" — AI tutor on a wrong answer ────────────────────────
+function ExplainBox({ ctx, t }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [turns, setTurns] = useState([]);
+  const [ask, setAsk] = useState("");
+  const [asking, setAsking] = useState(false);
+  const load = async () => {
+    setOpen(true);
+    if (text || loading) return;
+    setLoading(true); setErr("");
+    try { setText(await explainAnswer(ctx)); } catch { setErr(t.explainErr); }
+    setLoading(false);
+  };
+  const doAsk = async () => {
+    const q = ask.trim(); if (!q || asking) return;
+    setAsk(""); setAsking(true);
+    try { const a = await followupAnswer({ question: ctx.question, correct: ctx.correct, prior: text, ask: q }); setTurns((p)=>[...p,{q,a}]); }
+    catch { setTurns((p)=>[...p,{q,a:t.explainErr}]); }
+    setAsking(false);
+  };
+  if (!open) return (
+    <button onClick={load} style={{marginTop:8,marginLeft:23,background:"none",border:"none",color:"#4f46e5",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0}}>💡 {t.explainWhy}</button>
+  );
+  return (
+    <div style={{marginTop:8,marginLeft:23,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"10px 12px"}} className="fade-in">
+      {loading && <div style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>💡 {t.explainLoading}</div>}
+      {err && <div style={{fontSize:12.5,color:"#b91c1c"}}>{err}</div>}
+      {text && <div style={{fontSize:12.5,color:"var(--color-text-primary)",lineHeight:1.55,whiteSpace:"pre-wrap"}}>{text}</div>}
+      {turns.map((turn,i)=>(
+        <div key={i} style={{marginTop:8,paddingTop:8,borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--color-text-secondary)"}}>❓ {turn.q}</div>
+          <div style={{fontSize:12.5,color:"var(--color-text-primary)",lineHeight:1.55,marginTop:3,whiteSpace:"pre-wrap"}}>{turn.a}</div>
+        </div>
+      ))}
+      {text && !loading && (
+        <div style={{display:"flex",gap:6,marginTop:10}}>
+          <input value={ask} onChange={(e)=>setAsk(e.target.value)} onKeyDown={(e)=>e.key==="Enter"&&doAsk()} placeholder={t.explainAsk} disabled={asking}
+            style={{flex:1,borderRadius:8,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:12.5,padding:"7px 10px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+          <button onClick={doAsk} disabled={asking||!ask.trim()} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:(asking||!ask.trim())?0.5:1}}>{asking?"…":t.explainAskBtn}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Share-a-quiz sheet ─────────────────────────────────────────────────
+function ShareModal({ link, err, copied, onCopy, onClose, t }) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={onClose}>
+      <div className="slide-up" onClick={(e)=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"26px 20px 36px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box"}}>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:34,marginBottom:6}}>📤</div>
+          <h3 style={{margin:"0 0 6px",fontSize:19,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{t.shareTitle}</h3>
+          <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.shareDesc}</p>
+        </div>
+        {err && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,marginBottom:12}}>{err}</div>}
+        {link && (
+          <>
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <input readOnly value={link} onFocus={(e)=>e.target.select()} style={{flex:1,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",fontSize:12.5,padding:"11px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+              <button onClick={onCopy} style={{...Sb.btnPrimary,padding:"11px 16px",fontSize:13,minWidth:96}}>{copied?t.shareCopied:t.shareCopy}</button>
+            </div>
+            {typeof navigator!=="undefined"&&navigator.share && <button onClick={()=>navigator.share({title:"Revyy quiz",url:link}).catch(()=>{})} style={{...Sb.btnOutline,width:"100%"}}>{t.shareNative}</button>}
+          </>
+        )}
+        <button onClick={onClose} style={{...Sb.btnGhost,width:"100%",marginTop:10}}>{t.notNow||"Close"}</button>
+      </div>
     </div>
   );
 }
@@ -1153,9 +1251,16 @@ export default function StudyQuiz() {
   const [confirmDelPlan, setConfirmDelPlan] = useState(false);
   const [notifPerm, setNotifPerm] = useState(typeof Notification!=="undefined" ? Notification.permission : "unsupported");
   const planDoneRef = useRef(null);
+  // Share-a-quiz
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareLink, setShareLink] = useState("");
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareErr, setShareErr]   = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
   const sortedPlans = [...plans].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const homePlan = sortedPlans.find(p=>!isPlanComplete(p)) || sortedPlans[0] || null;
   const activePlan = plans.find(p=>p.id===activePlanId) || homePlan;
+  const topicsWeak = weakTopics(srs.cards); // weak areas from the review deck
   // Best-effort browser reminder — fires only while Revyy is open in the tab
   // (real push arrives with the mobile app). Schedules the plan's reminder time.
   useEffect(() => {
@@ -1476,7 +1581,7 @@ export default function StudyQuiz() {
           return "Section "+(i+1)+": generate exactly "+desc+". Set \"section\":" +(i+1)+" on EVERY question in this section.";
         }).join("\n");
       }
-      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\"}]}\nFor written/fill: options:[], correct:0. Keep questions in section order.";
+      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\",\"topic\":\"2-4 word sub-topic\"}]}\nSet \"topic\" to the specific concept each question tests (2-4 words) — used to track weak areas. For written/fill: options:[], correct:0. Keep questions in section order.";
       return { prompt, marksMap };
     };
 
@@ -1853,6 +1958,28 @@ export default function StudyQuiz() {
     setScreen("upload");
   };
   const backToPlan = () => { const pid = planSession?.planId; setPlanSession(null); if (pid) setActivePlanId(pid); setScreen("plan"); };
+  // Share-a-quiz: create a public link for the just-finished quiz.
+  const createShareLink = async () => {
+    if (shareBusy) return;
+    setShareErr(""); setShareCopied(false);
+    if (shareLink) { setShareOpen(true); return; } // reuse an already-made link
+    setShareBusy(true);
+    try {
+      const token = await getToken?.();
+      const ownerName = (user?.email || "").split("@")[0] || "";
+      const res = await fetch("/api/study", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json", ...(token ? { Authorization:`Bearer ${token}` } : {}) },
+        body: JSON.stringify({ action:"createShare", quiz:{ title:quiz?.title, subject:quiz?.subject, type:quiz?.type, diff, questions:quiz?.questions, owner:ownerName } }),
+      });
+      const d = await res.json().catch(()=>({}));
+      if (!res.ok || !d.id) throw new Error();
+      setShareLink(`${window.location.origin}/q/${d.id}`);
+      setShareOpen(true);
+    } catch { setShareErr(t.shareErr); setShareOpen(true); }
+    setShareBusy(false);
+  };
+  const copyShare = async () => { try { await navigator.clipboard.writeText(shareLink); setShareCopied(true); setTimeout(()=>setShareCopied(false),1800); } catch { /* ignore */ } };
   const enableReminders = async () => { try { if (typeof Notification!=="undefined") { const p = await Notification.requestPermission(); setNotifPerm(p); } } catch { /* ignore */ } };
   // Tick a coached day off (once) when its quiz/exam results appear.
   useEffect(() => {
@@ -1924,6 +2051,13 @@ export default function StudyQuiz() {
               style={{border:"0.5px solid var(--color-border-secondary)",borderRadius:8,padding:"5px 8px",fontSize:12,fontFamily:"inherit",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",outline:"none",colorScheme:srs.dueCount>0?"dark":"light"}}/>
           </div>
         </div>
+        {/* Weak-topic nudge — from the review deck */}
+        {topicsWeak.length>0 && (
+          <div style={{display:"flex",alignItems:"center",gap:10,background:"#fff7ed",border:"0.5px solid #fed7aa",borderRadius:12,padding:"10px 14px",marginBottom:18}}>
+            <span style={{fontSize:16,flexShrink:0}}>🎯</span>
+            <div style={{flex:1,fontSize:12,color:"#9a3412",lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis"}}>{t.weakestLabel}: <strong>{topicsWeak.map(x=>x.label).join(", ")}</strong></div>
+          </div>
+        )}
         {/* AI Study Coach — day-by-day exam plan */}
         {!homePlan ? (
           <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
@@ -2293,6 +2427,8 @@ export default function StudyQuiz() {
           <button style={{...Sb.btnPrimary,flex:1,margin:0}} onClick={retry}>{t.retry}</button>
           <button style={{...Sb.btnOutline,flex:1}} onClick={newMat}>{t.newMat}</button>
         </div>
+        <button style={{...Sb.btnOutline,width:"100%",marginBottom:14,borderColor:"#4f46e5",color:"#4f46e5"}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:`📤 ${t.shareQuiz}`}</button>
+        {shareOpen && <ShareModal link={shareLink} err={shareErr} copied={shareCopied} onCopy={copyShare} onClose={()=>setShareOpen(false)} t={t}/>}
         {!isPro&&adsOn&&<div style={{background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",textAlign:"center",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}>📣 Advertisement</div>}
         <p style={Sb.secLabel}>{t.review}</p>
         {quiz.type==="match"?
@@ -2302,6 +2438,7 @@ export default function StudyQuiz() {
               <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{fontSize:15,flexShrink:0}}>{a?.isCorrect?"✅":"❌"}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}</span></div>
               {!a?.isCorrect&&a&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {a.chosen||"—"}</div>}
               <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {q.answer||""}</div>
+              {!a?.isCorrect&&<ExplainBox t={t} ctx={{question:q.question,correct:q.answer||"",picked:a?.chosen||"",subject:quiz.subject}}/>}
             </div>;
           })
         :
@@ -2312,6 +2449,7 @@ export default function StudyQuiz() {
               {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="fill")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {quiz.type==="mcq"?(q.options?.[a.selected]??"—"):(a.picked||"—")}</div>}
               <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {quiz.type==="mcq"?q.options?.[q.correct]:(q.answer||"")}</div>
               {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.55,paddingTop:8,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:23}}>{q.explanation}</div>}
+              {!a?.isCorrect&&<ExplainBox t={t} ctx={{question:q.question,correct:quiz.type==="mcq"?(q.options?.[q.correct]??""):(q.answer||""),picked:quiz.type==="mcq"?(q.options?.[a?.selected]??""):(a?.picked||""),subject:quiz.subject}}/>}
             </div>;
           })
         }
@@ -2748,6 +2886,7 @@ export default function StudyQuiz() {
                 )}
                 {ev?.feedback&&<div style={{background:bg,border:"0.5px solid "+bdr,borderRadius:8,padding:"7px 10px",fontSize:12,color:col,marginTop:6,lineHeight:1.5}}>{ev.feedback}</div>}
                 {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingTop:6,borderTop:"0.5px solid var(--color-border-tertiary)",marginTop:6}}>{q.explanation}</div>}
+                {sc<1&&<div style={{marginLeft:-8}}><ExplainBox t={t} ctx={{question:q.question,correct:q.type==="mcq"?(q.options?.[q.correct]??""):(q.answer||""),picked:q.type==="mcq"?(q.options?.[examAns[i]]??""):(examAns[i]||""),subject:""}}/></div>}
               </div>
             );
           })}
@@ -2819,6 +2958,8 @@ export default function StudyQuiz() {
     const dte = Math.max(0, Math.ceil((new Date(activePlan.testDate+"T00:00:00").getTime() - Date.now())/86400000));
     const countdown = dte===0 ? t.coachExamToday : t.coachExamIn.replace("{n}",dte).replace("{s}",dte===1?"":"s");
     const KIND = { learn:t.coachKindLearn, review:t.coachKindReview, final:t.coachKindFinal };
+    const rd = computeReadiness({ cards:srs.cards, stats, plan:activePlan });
+    const focus = weakTopics(srs.cards);
     return (
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
@@ -2843,6 +2984,28 @@ export default function StudyQuiz() {
             <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"var(--color-text-secondary)",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:14}}>
               🔔 <span style={{flex:1}}>{t.coachReminderTime} <strong style={{color:"var(--color-text-primary)"}}>{activePlan.reminderTime}</strong></span>
               {notifPerm!=="granted" && notifPerm!=="unsupported" && <button onClick={enableReminders} style={{background:"none",border:"none",color:"#4f46e5",fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",padding:0}}>{t.coachEnableNotif}</button>}
+            </div>
+          )}
+          {rd.score!=null && (
+            <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"14px 16px",marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:12,fontWeight:700,color:"var(--color-text-secondary)",letterSpacing:0.3}}>{t.readinessTitle}</span>
+                <span style={{fontSize:12,fontWeight:700,color:rd.score>=75?"#16a34a":rd.score>=45?"#b45309":"#dc2626"}}>{rd.label}</span>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:30,fontWeight:800,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif",minWidth:58}}>{rd.score}%</span>
+                <div style={{flex:1,height:8,background:"var(--color-background-tertiary)",borderRadius:4,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:rd.score+"%",background:rd.score>=75?"#16a34a":rd.score>=45?"#f59e0b":"#ef4444",borderRadius:4,transition:"width .4s"}}/>
+                </div>
+              </div>
+              {focus.length>0 && (
+                <div style={{marginTop:12,paddingTop:12,borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"var(--color-text-tertiary)",marginBottom:6}}>{t.focusAreas}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {focus.map((x,i)=><span key={i} style={{fontSize:11,fontWeight:600,background:"#fff7ed",color:"#9a3412",border:"0.5px solid #fed7aa",borderRadius:8,padding:"3px 9px"}}>{x.label}</span>)}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {activePlan.days.map((day,i)=>{

@@ -196,6 +196,7 @@ export function StudyProvider({ children }) {
         id: uid(), front,
         back: String(it.back ?? (it.options && it.options[it.correct]) ?? it.answer ?? "").trim(),
         explanation: String(it.explanation ?? "").trim(),
+        topic: String(it.topic ?? "").trim(),
         ease: 2.3, interval: 0, due: Date.now(), reps: 0, lapses: 0, createdAt: Date.now(),
       });
     }

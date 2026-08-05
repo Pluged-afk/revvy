@@ -97,6 +97,13 @@ const T_EN = {
   coachReminderNote:"Reminders show inside Revyy while it's open. App notifications arrive with the mobile app.",
   coachEnableNotif:"🔔 Enable browser reminders", coachNotifOn:"🔔 Reminders on",
   coachDueBanner:"Today's coach session is ready", coachStartSession:"Start session",
+  // ── Explain why / readiness / share ──
+  explainWhy:"Explain why", explainLoading:"Thinking…", explainAsk:"Ask a follow-up…", explainAskBtn:"Ask",
+  explainErr:"Couldn't load an explanation — try again.",
+  readinessTitle:"Exam readiness", focusAreas:"Focus areas", weakestLabel:"Weakest",
+  shareQuiz:"Share quiz", shareCreating:"Creating link…", shareTitle:"Share this quiz",
+  shareDesc:"Anyone with the link can take it — no account needed. See who beats your score.",
+  shareCopy:"Copy link", shareCopied:"Copied ✓", shareNative:"Share…", shareErr:"Couldn't create a link. Try again.",
   custom:"Custom", customHint:"Enter 1–100",
   proFeature:"Pro Feature", upgradePro:"⭐ Upgrade to Pro — €4.99/mo",
   activatePro:"Activate Pro", activateNote:"Secure billing powered by Stripe.",
