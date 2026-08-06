@@ -137,7 +137,7 @@ const THEME_DARK = `
 `;
 
 // ── Claude API ────────────────────────────────────────────────────────
-async function callClaude({ blocks, numQ, diff, type }) {
+async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
   const typeMap = {
     mcq:   `Multiple choice: exactly 4 options. "correct" is 0-based index of the right answer.`,
     cards: `Flashcards: "question" = front (term/concept), "answer" = back (full explanation). Set options:[] correct:0.`,
@@ -146,7 +146,7 @@ async function callClaude({ blocks, numQ, diff, type }) {
   };
   // `diff` is the 0/1/2 index; map to the difficulty rubric.
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
-  const prompt = `Generate EXACTLY ${numQ} study questions from the material — not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic"}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand") — used to track weak areas. Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material — not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nLANGUAGE: Write the ENTIRE quiz — every question, all answer options, the answer, the explanation, and the title/subject/topic — in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic"}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand") — used to track weak areas. Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
@@ -349,9 +349,9 @@ function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
 // One-time top-ups added to the bonus balance (never expire, used after the
 // daily allowance). Shown from the "limit reached" message and from Settings.
 const QUESTION_PACKS = [
-  { id:"A", q:"500",   price:"€1.99", blurb:"A few extra study sessions" },
-  { id:"B", q:"1,500", price:"€4.99", blurb:"Best value — a month of heavy use", best:true },
-  { id:"C", q:"3,000", price:"€8.99", blurb:"For power users & exam crunch" },
+  { id:"A", q:"500",   price:"€1.99", blurbKey:"packBlurbA" },
+  { id:"B", q:"1,500", price:"€4.99", blurbKey:"packBlurbB", best:true },
+  { id:"C", q:"3,000", price:"€8.99", blurbKey:"packBlurbC" },
 ];
 function PacksModal({ onClose, buyPack, t }) {
   const [busy, setBusy] = useState("");
@@ -371,10 +371,10 @@ function PacksModal({ onClose, buyPack, t }) {
             borderRadius:14,padding:"13px 14px",marginBottom:10}}>
             <div style={{flex:1}}>
               <div style={{fontSize:15,fontWeight:800,color:p.best?"#92400e":"var(--color-text-primary)"}}>
-                {p.q} {t.questionsWord || "questions"}
+                {p.q} {t.questionsLow}
                 {p.best && <span style={{marginLeft:8,fontSize:9,fontWeight:800,letterSpacing:0.6,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"2px 7px",verticalAlign:"middle"}}>{t.bestValue || "BEST VALUE"}</span>}
               </div>
-              <div style={{fontSize:11.5,color:p.best?"#b45309":"var(--color-text-secondary)",marginTop:2}}>{p.blurb}</div>
+              <div style={{fontSize:11.5,color:p.best?"#b45309":"var(--color-text-secondary)",marginTop:2}}>{t[p.blurbKey]}</div>
             </div>
             <button onClick={()=>buy(p.id)} disabled={!!busy} style={{...Sb.btnPrimary,margin:0,padding:"10px 16px",fontSize:14,minWidth:78,background:p.best?"#f59e0b":"#4f46e5",opacity:(busy&&busy!==p.id)?0.5:1}}>
               {busy===p.id ? "…" : p.price}
@@ -400,7 +400,7 @@ const UNLOCK_META = {
 function UnlockModal({ feature, unlocks, onClose, onUpgrade, t }) {
   const [busy, setBusy] = useState(false);
   if (!feature) return null;
-  const m = UNLOCK_META[feature];
+  const m = { ...UNLOCK_META[feature], ...(t.unlockMeta?.[feature]||{}) };
   const active = unlocks.isUnlocked(feature);
   const canU = unlocks.canUnlock(feature);
   const usedUp = !active && !canU; // once-daily already used today
@@ -412,23 +412,23 @@ function UnlockModal({ feature, unlocks, onClose, onUpgrade, t }) {
           <div style={{fontSize:38,marginBottom:8}}>{active ? "🔓" : "🔒"}</div>
           <h3 style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{m.title}</h3>
           <p style={{margin:0,fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>
-            Watch a short ad to unlock <strong style={{color:"var(--color-text-primary)"}}>{m.gives}</strong> for <strong>1 hour</strong>.{m.daily ? " Once per day." : " Unlimited times per day."}
+            {(()=>{const [a,b=""]=t.unlockWatchLine.split("{gives}");return <>{a}<strong style={{color:"var(--color-text-primary)"}}>{m.gives}</strong>{b}</>;})()} {m.daily ? t.unlockDaily : t.unlockUnlimited}
           </p>
         </div>
         {active && (
           <div style={{background:"var(--color-background-success)",border:"0.5px solid var(--color-border-success)",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,color:"var(--color-text-success)",textAlign:"center"}}>
-            ✓ Unlocked — <strong>{unlocks.remainingLabel(feature)}</strong> left
+            {(()=>{const [a,b=""]=t.unlockedLeft.split("{label}");return <>{a}<strong>{unlocks.remainingLabel(feature)}</strong>{b}</>;})()}
           </div>
         )}
         {!active && canU && (
           <button onClick={doWatch} disabled={busy} style={{width:"100%",marginBottom:10,background:"#fefce8",border:"1.5px solid #f59e0b",color:"#92400e",borderRadius:12,padding:"13px 14px",fontSize:13.5,fontWeight:700,cursor:busy?"default":"pointer",fontFamily:"inherit",lineHeight:1.5,textAlign:"center",opacity:busy?0.6:1}}>
-            {busy ? "Loading ad…" : "📺 Watch ad to unlock"}<br/>
-            <span style={{fontSize:11,fontWeight:500,opacity:0.85}}>Unlocks {m.gives} for 1 hour</span>
+            {busy ? t.loadingAd : t.unlockWatchBtn}<br/>
+            <span style={{fontSize:11,fontWeight:500,opacity:0.85}}>{t.unlockGivesFor.replace("{gives}",m.gives)}</span>
           </button>
         )}
         {usedUp && (
           <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:"var(--color-text-secondary)",textAlign:"center",lineHeight:1.5}}>
-            📵 You've used today's free unlock for this. It's back tomorrow — or go Pro for unlimited access.
+            {t.unlockUsedUp}
           </div>
         )}
         <button onClick={onUpgrade} style={{...Sb.btnPrimary,width:"100%",marginBottom:10,fontFamily:"inherit",fontSize:14,background:"#4f46e5"}}>
@@ -448,15 +448,15 @@ function Flashcard({ q, onNext, isLast, t }) {
     <div>
       <div onClick={()=>setFlipped(f=>!f)} style={{cursor:"pointer"}}>
         <div style={{background:flipped?"var(--color-background-secondary)":"var(--color-background-primary)",border:`1.5px solid ${flipped?"#4f46e5":"var(--color-border-tertiary)"}`,borderRadius:16,padding:"40px 24px",textAlign:"center",minHeight:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",transition:"all 0.25s"}}>
-          <div style={{fontSize:10,fontWeight:700,color:"var(--color-text-tertiary)",letterSpacing:1.5,marginBottom:16}}>{flipped?"ANSWER":"QUESTION"}</div>
+          <div style={{fontSize:10,fontWeight:700,color:"var(--color-text-tertiary)",letterSpacing:1.5,marginBottom:16}}>{flipped?t.fcAnswer:t.fcQuestion}</div>
           <div style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.5}}>{flipped?ans:q.question}</div>
           <div style={{marginTop:20,fontSize:12,color:"var(--color-text-tertiary)"}}>{flipped?t.flipBack:t.flip}</div>
         </div>
       </div>
       {flipped && (
         <div style={{display:"flex",gap:10,marginTop:14}} className="slide-up">
-          <button onClick={()=>{Haptics.buzz();setFlipped(false);setTimeout(()=>onNext(false),200);}} style={{flex:1,background:"#fef2f2",border:"1px solid #fca5a5",color:"#b91c1c",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✗ Didn't know</button>
-          <button onClick={()=>{Haptics.buzz();setFlipped(false);setTimeout(()=>onNext(true),200);}} style={{flex:1,background:"#f0fdf4",border:"1px solid #86efac",color:"#15803d",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✓ Got it</button>
+          <button onClick={()=>{Haptics.buzz();setFlipped(false);setTimeout(()=>onNext(false),200);}} style={{flex:1,background:"#fef2f2",border:"1px solid #fca5a5",color:"#b91c1c",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t.fcDidntKnow}</button>
+          <button onClick={()=>{Haptics.buzz();setFlipped(false);setTimeout(()=>onNext(true),200);}} style={{flex:1,background:"#f0fdf4",border:"1px solid #86efac",color:"#15803d",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t.gotIt}</button>
         </div>
       )}
     </div>
@@ -497,7 +497,7 @@ function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=fal
       {checked && (
         <div style={{borderRadius:10,padding:"12px 14px",background:isRight?"#f0fdf4":"#fef2f2",border:`0.5px solid ${isRight?"#86efac":"#fca5a5"}`,color:isRight?"#15803d":"#b91c1c",marginBottom:14}} className="slide-up">
           <strong>{isRight?t.correct:t.incorrect}</strong>
-          {!isRight && <div style={{fontSize:13,marginTop:4}}>Answer: <strong>{q.answer}</strong></div>}
+          {!isRight && <div style={{fontSize:13,marginTop:4}}>{t.fbAnswerLabel} <strong>{q.answer}</strong></div>}
           {q.explanation && <p style={{margin:"6px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p>}
         </div>
       )}
@@ -831,7 +831,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
               <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#4f46e5,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0}}>{(user.email||"?").charAt(0).toUpperCase()}</div>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{user.email||"Your account"}</div>
-                <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,padding:"2px 8px",borderRadius:999,color:isPro?"#422006":"var(--color-text-secondary)",background:isPro?"linear-gradient(135deg,#fde68a,#f59e0b)":"var(--color-background-tertiary)",border:isPro?"none":"0.5px solid var(--color-border-secondary)",display:"inline-block",marginTop:3}}>{isPro?"✦ PRO":"FREE PLAN"}</span>
+                <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,padding:"2px 8px",borderRadius:999,color:isPro?"#422006":"var(--color-text-secondary)",background:isPro?"linear-gradient(135deg,#fde68a,#f59e0b)":"var(--color-background-tertiary)",border:isPro?"none":"0.5px solid var(--color-border-secondary)",display:"inline-block",marginTop:3}}>{isPro?"✦ PRO":t.freePlanBadge}</span>
               </div>
             </div>
           ) : (
@@ -844,12 +844,12 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
         <div style={{flex:1,overflowY:"auto"}}>
           {/* Your progress — makes the account a study home, not just billing */}
           <div style={{padding:"16px 18px 6px"}}>
-            <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:10}}>Your progress</div>
+            <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:10}}>{t.progressTitle}</div>
             <div style={{display:"flex",gap:8}}>
               {[
-                { v: `🔥 ${acctStats.streak}`, l: "Day streak" },
-                { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : "—", l: "Accuracy" },
-                { v: acctSrs.totalCount, l: "In review" },
+                { v: `🔥 ${acctStats.streak}`, l: t.dayStreak },
+                { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : "—", l: t.accuracyLbl },
+                { v: acctSrs.totalCount, l: t.inReviewLbl },
               ].map(({ v, l }, i) => (
                 <div key={i} style={{flex:1,background:"var(--color-background-secondary)",borderRadius:12,padding:"12px 4px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
                   <div style={{fontSize:15.5,fontWeight:800,color:"var(--color-text-primary)"}}>{v}</div>
@@ -1037,10 +1037,10 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           </>) : (
           <div style={{padding:"18px"}}>
             <div style={{padding:"16px",borderRadius:12,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-secondary)",textAlign:"center"}}>
-              <div style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.6,marginBottom:12}}>Log in to save your quizzes, track your daily questions and upgrade to Pro.</div>
+              <div style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.6,marginBottom:12}}>{t.loginPrompt}</div>
               <button onClick={()=>window.location.assign("/login")}
                 style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",boxShadow:"0 2px 12px #4f46e544"}}>
-                Log in or sign up →
+                {t.loginOrSignup}
               </button>
             </div>
           </div>
@@ -1106,16 +1106,17 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
 }
 
 function ExitModal({ show, onStay, onLeave, message, title, stayLabel, leaveLabel, stayGreen }) {
+  const lc = useLang(); const t = (lc && lc.t) || {};
   if (!show) return null;
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:550,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
       <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"28px 22px",maxWidth:320,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
         <div style={{fontSize:36,marginBottom:10}}>⚠️</div>
-        <h3 style={{margin:"0 0 8px",fontSize:17,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{title||"Leave this page?"}</h3>
-        <p style={{margin:"0 0 22px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{message||"Your progress will be lost and cannot be recovered."}</p>
+        <h3 style={{margin:"0 0 8px",fontSize:17,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{title||t.exitTitle||"Leave this page?"}</h3>
+        <p style={{margin:"0 0 22px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{message||t.exitMsg||"Your progress will be lost and cannot be recovered."}</p>
         <div style={{display:"flex",gap:10}}>
-          <button onClick={onStay}  style={{flex:1,background:stayGreen?"#16a34a":"var(--color-background-secondary)",color:stayGreen?"#fff":"var(--color-text-primary)",border:stayGreen?"none":"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:stayGreen?700:500,cursor:"pointer",fontFamily:"inherit"}}>{stayLabel||"Stay"}</button>
-          <button onClick={onLeave} style={{flex:1,background:"#ef4444",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{leaveLabel||"Leave"}</button>
+          <button onClick={onStay}  style={{flex:1,background:stayGreen?"#16a34a":"var(--color-background-secondary)",color:stayGreen?"#fff":"var(--color-text-primary)",border:stayGreen?"none":"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:stayGreen?700:500,cursor:"pointer",fontFamily:"inherit"}}>{stayLabel||t.stayBtn||"Stay"}</button>
+          <button onClick={onLeave} style={{flex:1,background:"#ef4444",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{leaveLabel||t.leaveBtn||"Leave"}</button>
         </div>
       </div>
     </div>
@@ -1124,12 +1125,13 @@ function ExitModal({ show, onStay, onLeave, message, title, stayLabel, leaveLabe
 
 // Pause overlay — strong blur over the whole exam so nothing is visible/clickable.
 function PauseOverlay({ onResume }) {
+  const lc=useLang(); const t=(lc&&lc.t)||{};
   return (
     <div style={{position:"fixed",inset:0,zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",background:"rgba(15,16,32,0.45)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}}>
       <div className="slide-up" style={{textAlign:"center",maxWidth:340}}>
-        <div style={{fontSize:30,fontWeight:800,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif",marginBottom:8}}>⏸ Exam Paused</div>
-        <div style={{fontSize:14,color:"rgba(255,255,255,0.85)",marginBottom:24}}>Your progress is saved</div>
-        <button onClick={onResume} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:14,padding:"15px 40px",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 24px rgba(79,70,229,0.4)"}}>Resume Exam</button>
+        <div style={{fontSize:30,fontWeight:800,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif",marginBottom:8}}>{t.examPausedTitle}</div>
+        <div style={{fontSize:14,color:"rgba(255,255,255,0.85)",marginBottom:24}}>{t.progressSaved}</div>
+        <button onClick={onResume} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:14,padding:"15px 40px",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 24px rgba(79,70,229,0.4)"}}>{t.resumeExamBtn}</button>
       </div>
     </div>
   );
@@ -1137,12 +1139,13 @@ function PauseOverlay({ onResume }) {
 
 // Time's-up — non-dismissable, shown while the exam auto-submits.
 function TimeUpModal() {
+  const lc=useLang(); const t=(lc&&lc.t)||{};
   return (
     <div style={{position:"fixed",inset:0,zIndex:950,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",background:"rgba(15,16,32,0.7)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
       <div style={{background:"var(--color-background-primary)",borderRadius:18,padding:"32px 26px",maxWidth:320,width:"100%",textAlign:"center",boxShadow:"0 12px 40px rgba(0,0,0,0.4)"}}>
         <div style={{fontSize:46,marginBottom:10}}>⏰</div>
-        <h3 style={{margin:"0 0 6px",fontSize:22,fontWeight:800,color:"#dc2626",fontFamily:"'Playfair Display',Georgia,serif"}}>Time's Up!</h3>
-        <p style={{margin:"0 0 20px",fontSize:14,color:"var(--color-text-secondary)",lineHeight:1.5}}>Your exam is being submitted now.</p>
+        <h3 style={{margin:"0 0 6px",fontSize:22,fontWeight:800,color:"#dc2626",fontFamily:"'Playfair Display',Georgia,serif"}}>{t.timesUp}</h3>
+        <p style={{margin:"0 0 20px",fontSize:14,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.examSubmittingNow}</p>
         <div style={{width:36,height:36,margin:"0 auto",border:"3px solid var(--color-border-secondary)",borderTopColor:"#4f46e5",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
       </div>
     </div>
@@ -1151,19 +1154,20 @@ function TimeUpModal() {
 
 // Offered on a refresh that interrupted an exam.
 function ResumeModal({ info, onResume, onDiscard, fmtClock }) {
+  const lc=useLang(); const t=(lc&&lc.t)||{};
   if (!info) return null;
   const answered = info.examAns ? Object.values(info.examAns).filter(v=>v!==undefined&&v!=="").length : 0;
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:560,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
       <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"28px 22px",maxWidth:330,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.25)"}}>
         <div style={{fontSize:36,marginBottom:10}}>📝</div>
-        <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>Exam in progress — Continue?</h3>
+        <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{t.examInProgressQ}</h3>
         <p style={{margin:"0 0 20px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>
-          {(info.examQs?.length||0)} questions · {answered} answered{info.examTimerOn && info.examTimeLeft!=null ? " · "+fmtClock(info.examTimeLeft)+" left" : ""}
+          {t.resumeQInfo.replace("{q}",info.examQs?.length||0).replace("{a}",answered)}{info.examTimerOn && info.examTimeLeft!=null ? " · "+fmtClock(info.examTimeLeft)+" left" : ""}
         </p>
         <div style={{display:"flex",gap:10}}>
-          <button onClick={onDiscard} style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>Discard</button>
-          <button onClick={onResume} style={{flex:2,background:"#4f46e5",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Continue exam</button>
+          <button onClick={onDiscard} style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>{t.discardBtn}</button>
+          <button onClick={onResume} style={{flex:2,background:"#4f46e5",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.continueExamBtn}</button>
         </div>
       </div>
     </div>
@@ -1196,14 +1200,15 @@ const ADS_ENABLED = false; // was: import.meta.env.VITE_ADS_ENABLED === "true"
 // `bottom` can be turned off on screens that already have an in-content banner
 // so mobile never shows two banners stacked at once.
 function AdBanners({ isPro, bottom = true }) {
+  const lc=useLang(); const t=(lc&&lc.t)||{};
   const dev = useDev();
   const adsOn = dev.devMode && dev.ads !== null ? dev.ads : ADS_ENABLED;
   if (isPro || !adsOn) return null;
   return (
     <>
-      <div className="ad-placeholder rv-ad rv-ad-side rv-ad-left"><span className="rv-ad-label">Advertisement</span></div>
-      <div className="ad-placeholder rv-ad rv-ad-side rv-ad-right"><span className="rv-ad-label">Advertisement</span></div>
-      {bottom && <div className="ad-placeholder rv-ad rv-ad-bottom"><span className="rv-ad-label">Advertisement</span></div>}
+      <div className="ad-placeholder rv-ad rv-ad-side rv-ad-left"><span className="rv-ad-label">{t.advertisement}</span></div>
+      <div className="ad-placeholder rv-ad rv-ad-side rv-ad-right"><span className="rv-ad-label">{t.advertisement}</span></div>
+      {bottom && <div className="ad-placeholder rv-ad rv-ad-bottom"><span className="rv-ad-label">{t.advertisement}</span></div>}
     </>
   );
 }
@@ -1211,19 +1216,20 @@ function AdBanners({ isPro, bottom = true }) {
 // Full-screen overlay shown while we poll Supabase for Pro status after a
 // successful Stripe checkout (the webhook writes is_pro asynchronously).
 function ActivatingOverlay({ show }) {
+  const lc=useLang(); const t=(lc&&lc.t)||{};
   if (!show) return null;
   return (
     <div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:18,padding:24,textAlign:"center",background:"rgba(15,16,32,0.55)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
       <div style={{width:48,height:48,borderRadius:"50%",border:"4px solid rgba(255,255,255,0.25)",borderTopColor:"#fff",animation:"spin 0.8s linear infinite"}}/>
-      <div style={{color:"#fff",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif"}}>✨ Activating your Pro account…</div>
-      <div style={{color:"rgba(255,255,255,0.8)",fontSize:13.5,maxWidth:320,lineHeight:1.5}}>Refreshing your account — this takes a few seconds after payment.</div>
+      <div style={{color:"#fff",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif"}}>{t.activatingPro}</div>
+      <div style={{color:"rgba(255,255,255,0.8)",fontSize:13.5,maxWidth:320,lineHeight:1.5}}>{t.refreshingAccount}</div>
     </div>
   );
 }
 
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
-  const { t } = useLang(); // language control now lives inside the account panel
+  const { t, lang } = useLang(); // language control now lives inside the account panel
   const dev = useDev();
   const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack } = useAuth();
   const navigate = useNavigate();
@@ -1252,7 +1258,7 @@ export default function StudyQuiz() {
     setAdBusy(true);
     const r = await watchAdQuestions();
     setAdBusy(false);
-    if (r && r.allowed === false) setError("You've used all of today's ad watches.");
+    if (r && r.allowed === false) setError(t.errAdWatchesUsed);
     else setError("");
   };
   // Keep usage fresh when landing on the home / quiz-setup screens.
@@ -1556,16 +1562,16 @@ export default function StudyQuiz() {
   const addExamFile=useCallback(async(f,idx)=>{
     if(!f)return;
     const lim=fileLimitMB();
-    if(f.size/1024/1024>lim){setError("File too large: max "+lim+"MB");return;}
+    if(f.size/1024/1024>lim){setError(t.errFileTooLarge.replace("{n}",lim));return;}
     const isPdf=f.type==="application/pdf",isImg=f.type.startsWith("image/"),isTxt=f.type.startsWith("text/")||/\.(txt|md|csv)$/i.test(f.name);
-    if(!isPdf&&!isImg&&!isTxt){setError("Supported: PDF, images, .txt/.md");return;}
+    if(!isPdf&&!isImg&&!isTxt){setError(t.errFileType);return;}
     try{
       let p;
       if(isTxt){const text=await readText(f);p={type:"text",content:text,mime:null,name:f.name};}
       else{p={type:isPdf?"pdf":"image",raw:f,mime:f.type,name:f.name};}
       setExamFiles(prev=>{const a=[...prev];a[idx]=p;return a.filter(Boolean);});
       setError("");
-    }catch{setError("Could not read file.");}
+    }catch{setError(t.errReadFile);}
   },[fileLimitMB]);
 
   const removeExamFile=useCallback(idx=>{setExamFiles(prev=>prev.filter((_,i)=>i!==idx));},[]);
@@ -1628,14 +1634,14 @@ export default function StudyQuiz() {
 
   const generateExam=useCallback(async()=>{
     if (requireLogin()) return;   // logged-out visitors are sent to sign-up
-    if(examFiles.length===0){setError("Upload at least one study file.");return;}
+    if(examFiles.length===0){setError(t.errUploadOne);return;}
     // Free users: exam is ad-unlocked, single-use per day, capped to a
     // 20-question all-MCQ or all-written paper (no custom sections).
     if(!isPro){
-      if(!unlocks.examUnlocked()){setError("You've used today's free exam. Come back tomorrow, or upgrade to Pro for unlimited exams.");return;}
-      if(examMode==="custom"){setError("Custom exams are a Pro feature — pick all multiple-choice or all written.");return;}
+      if(!unlocks.examUnlocked()){setError(t.errExamUsed);return;}
+      if(examMode==="custom"){setError(t.errCustomPro);return;}
     }
-    if(examMode==="custom" && sectionTotalQs===0){setError("Please add at least one question to your sections.");return;}
+    if(examMode==="custom" && sectionTotalQs===0){setError(t.errAddQuestion);return;}
     setError("");
     const dg = DIFFICULTY[diff] || DIFFICULTY[1];
     const totalQ = examMode==="custom" ? sectionTotalQs : (isPro ? Math.min(Math.max(parseInt(examTotalQ)||5,1),100) : 20);
@@ -1645,7 +1651,7 @@ export default function StudyQuiz() {
     if (consumed && consumed.allowed === false) {
       const left = consumed.remaining ?? 0;
       setLimitHit(true); // Pro-only screen → offer the question-pack button
-      setError(`This exam is ${totalQ} questions but you have ${left} left today (limit ${consumed.daily_limit}/day). Lower the count or grab a question pack.`);
+      setError(t.errExamOverLimit.replace("{q}",totalQ).replace("{left}",left).replace("{limit}",consumed.daily_limit));
       setScreen("exam_setup");
       return;
     }
@@ -1672,7 +1678,7 @@ export default function StudyQuiz() {
           return "Section "+(i+1)+": generate exactly "+desc+". Set \"section\":" +(i+1)+" on EVERY question in this section.";
         }).join("\n");
       }
-      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\",\"topic\":\"2-4 word sub-topic\"}]}\nSet \"topic\" to the specific concept each question tests (2-4 words) — used to track weak areas. For written/fill: options:[], correct:0. Keep questions in section order.";
+      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nLANGUAGE: Write the ENTIRE exam — every question, all options, model answers, explanations and the title — in the SAME language as the study material provided. Match the material's language exactly; do NOT translate it into English."+(LANGS[lang]?.name?" If the material is too short to tell its language, use "+LANGS[lang].name+".":"")+"\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\",\"topic\":\"2-4 word sub-topic\"}]}\nSet \"topic\" to the specific concept each question tests (2-4 words) — used to track weak areas. For written/fill: options:[], correct:0. Keep questions in section order.";
       return { prompt, marksMap };
     };
 
@@ -1713,13 +1719,13 @@ export default function StudyQuiz() {
       setExamPaused(false); setExamTimeUp(false); setExamReview(false); setShowSubmitPrompt(false); setExamTimeExpired(false);
       setScreen("exam_run");
       if(!isPro) unlocks.consumeExam();   // free daily exam is now used up
-    }catch(err){setError(err.message.includes("parse")?"Unexpected format — please try again.":err.message);setScreen("exam_setup");}
+    }catch(err){setError(err.message.includes("parse")?t.errUnexpectedFormat:err.message);setScreen("exam_setup");}
   },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks]);
 
   const evaluateExam=useCallback(async(answers)=>{
     const hasWritten=examQs.some(q=>q.type==="written");
     if(!hasWritten){
-      return examQs.map((q,i)=>q.type==="mcq"?{score:answers[i]===q.correct?1:0,feedback:answers[i]===q.correct?"Correct!":"Incorrect."}:{score:0,feedback:""});
+      return examQs.map((q,i)=>q.type==="mcq"?{score:answers[i]===q.correct?1:0,feedback:answers[i]===q.correct?t.correct:t.incorrect}:{score:0,feedback:""});
     }
     setScreen("exam_eval");
     // Number the written answers 1..N in their own sequence (NOT the full
@@ -1749,11 +1755,11 @@ export default function StudyQuiz() {
       const evals=Array.isArray(parsed.evals)?parsed.evals:[];
       const clamp=s=>{const n=Number(s);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):0;};
       return examQs.map((q,i)=>{
-        if(q.type==="mcq") return{score:answers[i]===q.correct?1:0,feedback:answers[i]===q.correct?"Correct!":"Incorrect."};
+        if(q.type==="mcq") return{score:answers[i]===q.correct?1:0,feedback:answers[i]===q.correct?t.correct:t.incorrect};
         const rank=writtenIdxs.indexOf(i); // 0-based position among written answers
         // Match on the answer's own 1-based number; fall back to positional order.
         const ev=evals.find(e=>Number(e.n)===rank+1) ?? evals[rank];
-        return ev?{score:clamp(ev.score),feedback:ev.feedback||""}:{score:0,feedback:"Not evaluated"};
+        return ev?{score:clamp(ev.score),feedback:ev.feedback||""}:{score:0,feedback:t.notEvaluated};
       });
     }catch{return examQs.map((q,i)=>({score:q.type==="mcq"?(answers[i]===q.correct?1:0):0,feedback:""}));}
   },[examQs]);
@@ -1910,14 +1916,14 @@ export default function StudyQuiz() {
 
   const processFile = useCallback(async (f, limitMB) => {
     const isPdf=f.type==="application/pdf", isImg=f.type.startsWith("image/"), isTxt=f.type.startsWith("text/")||/\.(txt|md|csv)$/i.test(f.name);
-    if (!isPdf&&!isImg&&!isTxt) { setError("Supported: PDF, images (JPG/PNG/WebP), or .txt / .md files"); return; }
+    if (!isPdf&&!isImg&&!isTxt) { setError(t.errFileType2); return; }
     try {
       if (isTxt) { const text=await readText(f); setFile({type:"text",content:text,mime:null,name:f.name,sizeMB:f.size/1024/1024}); }
       // PDFs/images are uploaded to the Anthropic Files API at generate time —
       // keep the raw File (no base64) so large files aren't inflated.
       else { setFile({type:isPdf?"pdf":"image",raw:f,mime:f.type,name:f.name,sizeMB:f.size/1024/1024}); }
       setError("");
-    } catch { setError("Could not read file. Please try another."); }
+    } catch { setError(t.errReadFile2); }
   },[]);
 
   const loadFile = useCallback(async (f) => {
@@ -1925,15 +1931,15 @@ export default function StudyQuiz() {
     setError("");
     const fileMB  = f.size/1024/1024;
     const limitMB = fileLimitMB();
-    if (fileMB > PRO_FILE_MB) { setError(`File is ${fmtMB(f.size)} — exceeds the maximum ${PRO_FILE_MB}MB even for Pro.`); return; }
+    if (fileMB > PRO_FILE_MB) { setError(t.errFileOverPro.replace("{size}",fmtMB(f.size)).replace("{max}",PRO_FILE_MB)); return; }
     if (fileMB > limitMB) {
       // Too big for the current limit. Pro can't exceed 999MB; free users can
       // watch an ad to raise the limit to 10MB for an hour.
       if (!isPro && fileMB <= AD_FILE_MB) {
-        setError(`File is ${fmtMB(f.size)} — over the ${limitMB}MB free limit. Watch an ad to unlock ${AD_FILE_MB}MB uploads for 1 hour.`);
+        setError(t.errFileOverFree.replace("{size}",fmtMB(f.size)).replace("{limit}",limitMB).replace("{ad}",AD_FILE_MB));
         setUnlockFeature("filesize");
       } else {
-        setError(`File is ${fmtMB(f.size)} — over your ${limitMB}MB limit.${isPro?"":" Upgrade to Pro for unlimited size."}`);
+        setError(t.errFileOver.replace("{size}",fmtMB(f.size)).replace("{limit}",limitMB)+(isPro?"":" "+t.errUpgradeSize));
       }
       return;
     }
@@ -1946,8 +1952,8 @@ export default function StudyQuiz() {
     const finalType = canUseQType(qType)?qType:"mcq";
     const finalNumQ = effectiveNumQ();
     if (tab==="file"||tab==="photo") {
-      if (!file) { setError("Please upload a file first."); return; }
-    } else if (!textVal.trim()) { setError("Please paste study text first."); return; }
+      if (!file) { setError(t.errUploadFirst); return; }
+    } else if (!textVal.trim()) { setError(t.errPasteFirst); return; }
 
     // Enforce the daily question limit (server-side; reserves the questions).
     const consumed = await consumeQuestions(finalNumQ);
@@ -1986,7 +1992,7 @@ export default function StudyQuiz() {
       for (let attempt = 0; attempt < 3; attempt++) {
         let r = null;
         try {
-          r = await callClaude({blocks, numQ:finalNumQ, diff, type:finalType});
+          r = await callClaude({blocks, numQ:finalNumQ, diff, type:finalType, uiLangName:LANGS[lang]?.name});
         } catch (e1) { lastErr = e1; }
         if (r?.questions?.length) {
           // Keep the best-so-far (most questions).
@@ -1999,7 +2005,7 @@ export default function StudyQuiz() {
       setQIdx(0); setAnswers([]); setSelected(null);
       setScreen("quiz");
     } catch(err) {
-      setError(err.message.includes("parse")?"AI returned unexpected format. Please try again.":err.message);
+      setError(err.message.includes("parse")?t.errAiFormat:err.message);
       setScreen("upload");
     }
   },[isPro,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,requireLogin]);
@@ -2116,7 +2122,7 @@ export default function StudyQuiz() {
     <div style={Sb.root}><style>{CSS}</style>
       <ActivatingOverlay show={activating}/>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
           <button onClick={()=>navigate("/")} title={t.mainSite} className="rv-hero-back" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.78)",fontFamily:"inherit",padding:0,fontWeight:500,marginBottom:18,display:"inline-flex",alignItems:"center",gap:5}}>← {t.mainSite}</button>
@@ -2126,12 +2132,12 @@ export default function StudyQuiz() {
               <DevBadge/></span>
             <div className="rv-hero-tools">
               {user ? (
-                <button onClick={()=>openSettings()} title="Account" aria-label="Account"
+                <button onClick={()=>openSettings()} title={t.accountLbl} aria-label={t.accountLbl}
                   style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,0.16)",border:"1.5px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   {(user.email||"?").charAt(0).toUpperCase()}
                 </button>
               ) : (
-                <button onClick={()=>navigate("/login")} style={{background:"rgba(255,255,255,0.16)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,fontSize:12,fontWeight:600,padding:"7px 14px",cursor:"pointer",fontFamily:"inherit"}}>{t.logIn || "Log in"}</button>
+                <button onClick={()=>navigate("/login")} style={{background:"rgba(255,255,255,0.16)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,fontSize:12,fontWeight:600,padding:"7px 14px",cursor:"pointer",fontFamily:"inherit"}}>{t.logIn}</button>
               )}
             </div>
           </div>
@@ -2147,20 +2153,20 @@ export default function StudyQuiz() {
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <span style={{fontSize:24,flexShrink:0}}>🔁</span>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:700,fontSize:14,color:srs.dueCount>0?"#fff":"var(--color-text-primary)"}}>Smart Review</div>
+              <div style={{fontWeight:700,fontSize:14,color:srs.dueCount>0?"#fff":"var(--color-text-primary)"}}>{t.srsTitle}</div>
               <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:srs.dueCount>0?"rgba(255,255,255,0.85)":"var(--color-text-secondary)"}}>
-                {srs.dueCount>0 ? `${srs.dueCount} card${srs.dueCount>1?"s":""} due for review` :
-                 srs.totalCount>0 ? `All caught up · ${srs.totalCount} card${srs.totalCount>1?"s":""} in your deck` :
-                 "Missed questions land here for spaced review"}
+                {srs.dueCount>0 ? t.srsDue.replace("{n}",srs.dueCount).replace("{s}",srs.dueCount>1?"s":"") :
+                 srs.totalCount>0 ? t.srsCaughtUp.replace("{n}",srs.totalCount).replace("{s}",srs.totalCount>1?"s":"") :
+                 t.srsEmpty}
               </div>
             </div>
             {srs.dueCount>0
-              ? <button onClick={startReview} style={{flexShrink:0,background:"#fff",color:"#4f46e5",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Review</button>
+              ? <button onClick={startReview} style={{flexShrink:0,background:"#fff",color:"#4f46e5",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
               : srs.totalCount>0 && <span style={{flexShrink:0,fontSize:20}}>✅</span>}
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,paddingTop:12,borderTop:srs.dueCount>0?"0.5px solid rgba(255,255,255,0.2)":"0.5px solid var(--color-border-tertiary)"}}>
             <span style={{fontSize:12,fontWeight:600,color:srs.dueCount>0?"rgba(255,255,255,0.9)":"var(--color-text-secondary)"}}>
-              {srs.examDate ? `🎯 Exam in ${srs.daysToExam} day${srs.daysToExam===1?"":"s"}` : "🎯 Set your exam date"}
+              {srs.examDate ? t.srsExamIn.replace("{n}",srs.daysToExam).replace("{s}",srs.daysToExam===1?"":"s") : t.srsSetExam}
             </span>
             <input type="date" value={srs.examDate||""} min={new Date().toISOString().slice(0,10)}
               onChange={e=>srs.setExamDate(e.target.value)}
@@ -2244,8 +2250,8 @@ export default function StudyQuiz() {
             <div style={{fontSize:11,color:"#78350f",lineHeight:1.7}}>{t.proDesc}</div>
             {isPro ? (
               <>
-                <div style={{width:"100%",marginTop:10,fontSize:13,fontWeight:700,color:"#fff",textAlign:"center",padding:"10px",borderRadius:10,background:"linear-gradient(135deg,#16a34a,#15803d)",boxShadow:"0 2px 10px rgba(22,163,74,0.3)"}}>✓ You're Pro</div>
-                <button style={{...Sb.btnPrimary,width:"100%",marginTop:8,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>setScreen("upload")}>{t.makeQuiz || "Make a quiz"}</button>
+                <div style={{width:"100%",marginTop:10,fontSize:13,fontWeight:700,color:"#fff",textAlign:"center",padding:"10px",borderRadius:10,background:"linear-gradient(135deg,#16a34a,#15803d)",boxShadow:"0 2px 10px rgba(22,163,74,0.3)"}}>{t.youArePro}</div>
+                <button style={{...Sb.btnPrimary,width:"100%",marginTop:8,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>setScreen("upload")}>{t.makeQuiz}</button>
               </>
             ) : (
               <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>{if(requireLogin())return;setCoErr("");setShowProModal(true);}}>{t.upgrade}</button>
@@ -2263,14 +2269,14 @@ export default function StudyQuiz() {
   if (screen==="upload") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
       <div style={Sb.topbar} className="rv-topbar">
-        <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← Home</button>
+        <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
         <span style={Sb.brand}>{t.appName}</span>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           {isPro && <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"2px 7px",fontWeight:700}}>PRO</span>}
           <button onClick={()=>setSoundOn(s=>!s)} title={soundOn?t.soundOn:t.soundOff} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",opacity:soundOn?1:0.4}}>{soundOn?"🔊":"🔇"}</button>
-          <button onClick={()=>openSettings()} title="Settings" style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",color:"var(--color-text-secondary)"}}>⚙️</button>
+          <button onClick={()=>openSettings()} title={t.set.title} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",color:"var(--color-text-secondary)"}}>⚙️</button>
         </div>
       </div>
       <div className="rv-upload-body" style={{padding:"18px 16px 32px"}}>
@@ -2295,14 +2301,14 @@ export default function StudyQuiz() {
             onDrop={e=>{e.preventDefault();setDrag(false);loadFile(e.dataTransfer.files[0]);}}
             onClick={()=>fileRef.current.click()}>
             <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,image/*" style={{display:"none"}} onChange={e=>loadFile(e.target.files[0])}/>
-            {file?(<><div style={{fontSize:32}}>{file.type==="pdf"?"📄":file.type==="image"?"🖼️":"📝"}</div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(file.sizeMB*1024*1024)} · {t.tapChange}</div></>):(<><div style={{fontSize:32}}>📂</div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.dropTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.dropSub}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{isPro?"Unlimited":("Max "+fileLimitMB()+"MB (free)")}</div></>)}
+            {file?(<><div style={{fontSize:32}}>{file.type==="pdf"?"📄":file.type==="image"?"🖼️":"📝"}</div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(file.sizeMB*1024*1024)} · {t.tapChange}</div></>):(<><div style={{fontSize:32}}>📂</div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.dropTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.dropSub}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{isPro?t.unlimited:t.maxFileFree.replace("{n}",fileLimitMB())}</div></>)}
           </div>
         )}
         {tab==="file" && !isPro && (
           unlocks.isUnlocked("filesize")
             ? <div style={{fontSize:11,color:"var(--color-text-success)",marginTop:8,fontWeight:600}}>🔓 {AD_FILE_MB}MB uploads unlocked · {unlocks.remainingLabel("filesize")} left</div>
             : <button onClick={()=>setUnlockFeature("filesize")} style={{fontSize:11,color:"#f59e0b",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:"6px 0 0",textAlign:"left",display:"block"}}>
-                {unlocks.canUnlock("filesize") ? `📺 Watch ad — ${AD_FILE_MB}MB uploads (1 hr)` : `🔒 ${AD_FILE_MB}MB unlock used today`}
+                {unlocks.canUnlock("filesize") ? t.adWatchFile.replace("{n}",AD_FILE_MB) : t.adFileUsed.replace("{n}",AD_FILE_MB)}
               </button>
         )}
         {tab==="photo" && (
@@ -2313,7 +2319,7 @@ export default function StudyQuiz() {
         )}
         {tab==="text" && <textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>}
         {error && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,lineHeight:1.5}}>⚠️ {error}</div>}
-        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions || "Get more questions"}</button>}
+        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions}</button>}
         </div>
         <div className="rv-ul-right">
         <div style={Sb.settingsBox}>
@@ -2329,7 +2335,7 @@ export default function StudyQuiz() {
                   <div key={type} style={{position:"relative"}}>
                     <Chip small hideBadge label={t.quizTypes[type]} active={qType===type} locked={!unlocked}
                       onClick={()=>{ if(unlocked) setQType(type); else setUnlockFeature(feat); }}/>
-                    {adLockable&&<span style={{position:"absolute",top:-6,right:-4,background:"#7c3aed",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 5px",fontWeight:800,letterSpacing:0.3,lineHeight:1.4,pointerEvents:"none"}}>AD</span>}
+                    {adLockable&&<span style={{position:"absolute",top:-6,right:-4,background:"#7c3aed",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 5px",fontWeight:800,letterSpacing:0.3,lineHeight:1.4,pointerEvents:"none"}}>{t.badgeAd}</span>}
                     {active&&<span style={{position:"absolute",top:-6,right:-4,background:"#16a34a",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 4px",fontWeight:700,lineHeight:1.4,pointerEvents:"none"}}>{unlocks.remainingLabel(feat)}</span>}
                   </div>
                 );
@@ -2366,14 +2372,14 @@ export default function StudyQuiz() {
               <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>
                 <span>{useCustomQ&&canCustomQ()?1:5}</span>
                 <span style={{color:(!isPro&&!unlocks.isUnlocked("questions"))?"#f59e0b":"var(--color-text-tertiary)"}}>
-                  {qCap()}{!isPro&&!unlocks.isUnlocked("questions")?" (free max)":""}{!isPro&&unlocks.isUnlocked("questions")?` · ${unlocks.remainingLabel("questions")}`:""}
+                  {qCap()}{!isPro&&!unlocks.isUnlocked("questions")?" "+t.freeMax:""}{!isPro&&unlocks.isUnlocked("questions")?` · ${unlocks.remainingLabel("questions")}`:""}
                 </span>
               </div>
               {useCustomQ&&canCustomQ()&&<div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:3}}>{t.customAmountHint}</div>}
             </div>
             {!isPro&&!unlocks.isUnlocked("questions")&&(
               <button onClick={()=>setUnlockFeature("questions")} style={{fontSize:11,color:"#f59e0b",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0,textAlign:"left"}}>
-                {unlocks.canUnlock("questions") ? `📺 Watch ad — up to ${AD_MAX_Q} questions/quiz (1 hr)` : `🔒 ${AD_MAX_Q}-question unlock used today`}
+                {unlocks.canUnlock("questions") ? t.adWatchQ.replace("{n}",AD_MAX_Q) : t.adQUsed.replace("{n}",AD_MAX_Q)}
               </button>
             )}
           </div>
@@ -2388,14 +2394,14 @@ export default function StudyQuiz() {
         <div style={{background:isPro?"var(--color-background-secondary)":"#fffbeb",border:isPro?"0.5px solid var(--color-border-tertiary)":"1px solid #f59e0b44",borderRadius:10,padding:"10px 14px",fontSize:12,color:isPro?"var(--color-text-secondary)":"#92400e",marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
             <span><strong>{usage?.remaining ?? (isPro?250:50)}</strong> {t.questionsLeftToday} · {usage?.questions_used_today ?? 0}/{usage?.daily_limit ?? (isPro?250:50)} {t.used}{(usage?.bonus_questions_remaining>0)?` · +${usage.bonus_questions_remaining} ${t.bonusWord}`:""} · {t.maxPerQuiz.replace("{n}",isPro?PRO_MAX_Q:FREE_MAX_Q)}</span>
-            {!isPro&&<span onClick={()=>setShowProModal(true)} style={{color:"#f59e0b",fontWeight:700,cursor:"pointer",flexShrink:0,fontSize:11,textDecoration:"underline"}}>Go Pro →</span>}
+            {!isPro&&<span onClick={()=>setShowProModal(true)} style={{color:"#f59e0b",fontWeight:700,cursor:"pointer",flexShrink:0,fontSize:11,textDecoration:"underline"}}>{t.goPro}</span>}
           </div>
           {!isPro&&(usage?.remaining??99)<=10&&((usage?.max_ad_watches??2)-(usage?.ad_watches_today??0))>0&&
             <button disabled={adBusy} onClick={handleWatchAd} style={{marginTop:8,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:8,padding:"9px",fontSize:12,fontWeight:700,cursor:adBusy?"default":"pointer",fontFamily:"inherit",opacity:adBusy?0.6:1}}>
               {adBusy?t.loadingAd:`📺 ${t.watchAdForQuestions.replace("{n}",usage?.ad_question_bonus??10)} · ${usage?.ad_watches_today??0}/${usage?.max_ad_watches??2}`}
             </button>}
         </div>
-        {isPro&&<button style={{width:"100%",marginBottom:14,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span>{t.examModeLabel}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>UNLIMITED</span></button>}
+        {isPro&&<button style={{width:"100%",marginBottom:14,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span>{t.examModeLabel}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>{t.badgeUnlimited}</span></button>}
         {!isPro&&(
           <div
             onClick={unlocks.examUsedToday()?undefined:enterExamMode}
@@ -2404,11 +2410,11 @@ export default function StudyQuiz() {
             <div style={{flex:1}}>
               <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.examModeLabel}</div>
               <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.45}}>
-                {examAdBusy?"Loading ad…":unlocks.examUsedToday()?"Used today — come back tomorrow, or go Pro for unlimited exams.":unlocks.examUnlocked()?"Unlocked! Tap to start your free exam (20 questions).":"Watch a short ad to unlock 1 free exam today (20 questions, MCQ or written)."}
+                {examAdBusy?t.loadingAd:unlocks.examUsedToday()?t.examAdUsed:unlocks.examUnlocked()?t.examAdUnlocked:t.examAdWatch}
               </div>
             </div>
             <span style={{fontSize:10,background:unlocks.examUsedToday()?"#94a3b8":unlocks.examUnlocked()?"#4f46e5":"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>
-              {unlocks.examUsedToday()?"USED":unlocks.examUnlocked()?"READY":"📺 FREE"}
+              {unlocks.examUsedToday()?t.examBadgeUsed:unlocks.examUnlocked()?t.examBadgeReady:t.examBadgeFree}
             </span>
           </div>
         )}
@@ -2459,7 +2465,7 @@ export default function StudyQuiz() {
     if (quiz.type==="match") return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
         <div style={Sb.topbar} className="rv-topbar"><button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button><span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{quiz.title}</span><span/></div>
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}><MatchQuiz questions={quiz.questions} t={t} onDone={(s,total,detail)=>{setAnswers(detail||Array(total).fill(0).map((_,i)=>({isCorrect:i<s})));setScreen("results");}}/></div>
         <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);newMat();}}/>
@@ -2468,7 +2474,7 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
         <div style={Sb.topbar} className="rv-topbar">
           <button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button>
           <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{quiz.title}</span>
@@ -2518,7 +2524,7 @@ export default function StudyQuiz() {
   if (screen==="results" && quiz) return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro} bottom={false}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
       <div style={{background:"linear-gradient(145deg,#1e1b4b,#4f46e5)",padding:"36px 20px 28px",textAlign:"center"}}>
         <div style={{fontSize:50,marginBottom:8}}>{badge.emoji}</div>
         <h2 style={{margin:"0 0 4px",fontSize:22,fontWeight:700,color:"#fff"}}>{badge.text}</h2>
@@ -2530,8 +2536,8 @@ export default function StudyQuiz() {
         {srsAdded>0 && (
           <div style={{display:"flex",alignItems:"center",gap:10,background:"#ede9fe",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
             <span style={{fontSize:18}}>🔁</span>
-            <span style={{flex:1,fontSize:12.5,color:"#4338ca",lineHeight:1.4}}><strong>{srsAdded}</strong> missed question{srsAdded>1?"s":""} added to Smart Review.</span>
-            <button onClick={startReview} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Review</button>
+            <span style={{flex:1,fontSize:12.5,color:"#4338ca",lineHeight:1.4}}>{t.srsAddedMsg.replace("{n}",srsAdded).replace("{s}",srsAdded>1?"s":"")}</span>
+            <button onClick={startReview} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
           </div>
         )}
         <div style={{display:"flex",gap:10,marginBottom:16}}>
@@ -2555,7 +2561,7 @@ export default function StudyQuiz() {
         </div>
         <button style={{...Sb.btnOutline,width:"100%",marginBottom:14,borderColor:"#4f46e5",color:"#4f46e5"}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:`📤 ${t.shareQuiz}`}</button>
         {shareOpen && <ShareModal link={shareLink} err={shareErr} copied={shareCopied} onCopy={copyShare} onClose={()=>setShareOpen(false)} t={t}/>}
-        {!isPro&&adsOn&&<div style={{background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",textAlign:"center",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}>📣 Advertisement</div>}
+        {!isPro&&adsOn&&<div style={{background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",textAlign:"center",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}>📣 {t.advertisement}</div>}
         <p style={Sb.secLabel}>{t.review}</p>
         {quiz.type==="match"?
           quiz.questions.map((q,i)=>{
@@ -2593,8 +2599,8 @@ export default function StudyQuiz() {
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
         <div style={Sb.topbar} className="rv-topbar">
-          <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← Home</button>
-          <span style={{...Sb.brand,color:"#4f46e5"}}>🔁 Review</span>
+          <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
+          <span style={{...Sb.brand,color:"#4f46e5"}}>🔁 {t.srsReview}</span>
           <span style={{fontSize:12,color:"var(--color-text-secondary)",fontWeight:600}}>{done?"":`${Math.min(reviewPos+1,reviewQueue.length)}/${reviewQueue.length}`}</span>
         </div>
         {!done && <PBar v={reviewPos} max={reviewQueue.length||1}/>}
@@ -2602,38 +2608,38 @@ export default function StudyQuiz() {
           {done ? (
             <div style={{textAlign:"center",padding:"30px 0"}}>
               <div style={{fontSize:52,marginBottom:10}}>{reviewQueue.length?"🎉":"✅"}</div>
-              <h2 style={{...Sb.h2,margin:"0 0 6px"}}>{reviewQueue.length?"Review complete!":"Nothing due right now"}</h2>
+              <h2 style={{...Sb.h2,margin:"0 0 6px"}}>{reviewQueue.length?t.reviewComplete:t.nothingDue}</h2>
               <p style={{fontSize:14,color:"var(--color-text-secondary)",lineHeight:1.6,maxWidth:320,margin:"0 auto 22px"}}>
                 {reviewQueue.length
-                  ? `You reviewed ${reviewQueue.length} card${reviewQueue.length>1?"s":""}. ${srs.dueCount>0?`${srs.dueCount} more came due — keep going!`:"Come back tomorrow for your next batch."}`
-                  : "Miss a question in a quiz or exam and it lands here for spaced review. You have "+srs.totalCount+" card"+(srs.totalCount===1?"":"s")+" in your deck."}
+                  ? `${t.reviewedCards.replace("{n}",reviewQueue.length).replace("{s}",reviewQueue.length>1?"s":"")} ${srs.dueCount>0?t.moreCameDue.replace("{n}",srs.dueCount):t.comeBackTomorrow}`
+                  : t.reviewDeckInfo.replace("{n}",srs.totalCount).replace("{s}",srs.totalCount===1?"":"s")}
               </p>
               {reviewQueue.length>0 && srs.dueCount>0 &&
-                <button style={{...Sb.btnPrimary,width:"100%",marginBottom:10}} onClick={startReview}>Review {srs.dueCount} more</button>}
-              <button style={{...Sb.btnPrimary,width:"100%",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"0.5px solid var(--color-border-secondary)"}} onClick={()=>setScreen("home")}>Back to home</button>
+                <button style={{...Sb.btnPrimary,width:"100%",marginBottom:10}} onClick={startReview}>{t.reviewMore.replace("{n}",srs.dueCount)}</button>}
+              <button style={{...Sb.btnPrimary,width:"100%",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"0.5px solid var(--color-border-secondary)"}} onClick={()=>setScreen("home")}>{t.backToHome}</button>
             </div>
           ) : (
             <>
               <div style={{background:"var(--color-background-primary)",borderRadius:16,border:"0.5px solid var(--color-border-tertiary)",padding:"24px 20px",minHeight:150,display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:"var(--color-text-tertiary)",marginBottom:10,textTransform:"uppercase"}}>Question</div>
+                <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:"var(--color-text-tertiary)",marginBottom:10,textTransform:"uppercase"}}>{t.question}</div>
                 <div style={{fontSize:18,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.45,fontFamily:"'Playfair Display',Georgia,serif"}}>{card.front}</div>
                 {reviewShown && (
                   <div className="slide-up" style={{marginTop:18,paddingTop:16,borderTop:"0.5px solid var(--color-border-tertiary)"}}>
-                    <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:"#16a34a",marginBottom:8,textTransform:"uppercase"}}>Answer</div>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:"#16a34a",marginBottom:8,textTransform:"uppercase"}}>{t.answerWord}</div>
                     <div style={{fontSize:15,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.5}}>{card.back||"—"}</div>
                     {card.explanation && <p style={{margin:"12px 0 0",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.55}}>{card.explanation}</p>}
                   </div>
                 )}
               </div>
               {!reviewShown ? (
-                <button style={{...Sb.btnPrimary,width:"100%",marginTop:18}} onClick={()=>setReviewShown(true)}>Show answer</button>
+                <button style={{...Sb.btnPrimary,width:"100%",marginTop:18}} onClick={()=>setReviewShown(true)}>{t.showAnswer}</button>
               ) : (
                 <div style={{display:"flex",gap:10,marginTop:18}}>
-                  <button style={{flex:1,background:"#fef2f2",border:"1.5px solid #fca5a5",color:"#b91c1c",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>gradeCard(false)}>✗ Again</button>
-                  <button style={{flex:1,background:"#16a34a",border:"none",color:"#fff",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>gradeCard(true)}>✓ Got it</button>
+                  <button style={{flex:1,background:"#fef2f2",border:"1.5px solid #fca5a5",color:"#b91c1c",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>gradeCard(false)}>{t.againBtn}</button>
+                  <button style={{flex:1,background:"#16a34a",border:"none",color:"#fff",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>gradeCard(true)}>{t.gotIt}</button>
                 </div>
               )}
-              <p style={{textAlign:"center",fontSize:11,color:"var(--color-text-tertiary)",marginTop:14,lineHeight:1.5}}>"Again" brings it back soon · "Got it" schedules it further out</p>
+              <p style={{textAlign:"center",fontSize:11,color:"var(--color-text-tertiary)",marginTop:14,lineHeight:1.5}}>{t.reviewHint}</p>
             </>
           )}
         </div>
@@ -2644,15 +2650,15 @@ export default function StudyQuiz() {
   if(screen==="exam_setup") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
       <div style={Sb.topbar} className="rv-topbar">
-        <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← Back</button>
+        <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← {t.backWord}</button>
         <span style={{...Sb.brand,color:"#4f46e5"}}>{t.examModeLabel}</span>
-        <span style={{fontSize:10,background:isPro?"#f59e0b":"#4f46e5",color:"#fff",borderRadius:8,padding:"2px 8px",fontWeight:700,whiteSpace:"nowrap"}}>{isPro?"PRO":"1 FREE / DAY"}</span>
+        <span style={{fontSize:10,background:isPro?"#f59e0b":"#4f46e5",color:"#fff",borderRadius:8,padding:"2px 8px",fontWeight:700,whiteSpace:"nowrap"}}>{isPro?"PRO":t.oneFreePerDay}</span>
       </div>
       <div className="rv-exam-body" style={{padding:"20px 16px 40px"}}>
         <p style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:20,lineHeight:1.6}}>{t.examModeSub}</p>
-        <p style={Sb.secLabel}>EXAM TYPE</p>
+        <p style={Sb.secLabel}>{t.examType}</p>
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:22}}>
           {[{id:"mcq",icon:"📋",title:t.fullMCQ,desc:t.fullMCQDesc},{id:"written",icon:"✍️",title:t.fullWritten,desc:t.fullWrittenDesc},{id:"custom",icon:"🎛️",title:t.customMix,desc:t.customMixDesc}].filter(m=>isPro||m.id!=="custom").map(m=>(
             <div key={m.id} onClick={()=>setExamMode(m.id)} className="exam-type-card" style={{display:"flex",alignItems:"center",gap:14,borderRadius:12,padding:"14px 16px",cursor:"pointer",border:"1.5px solid "+(examMode===m.id?"#4f46e5":"var(--color-border-tertiary)"),background:examMode===m.id?"#ede9fe":"var(--color-background-primary)",transition:"all 0.18s",boxShadow:examMode===m.id?"0 4px 16px #4f46e533":"none"}}>
@@ -2668,7 +2674,7 @@ export default function StudyQuiz() {
             {isPro ? (
               <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>questions</span>
+                  <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>{t.questionsLow}</span>
                   <span style={{fontWeight:700,fontSize:18,color:"#4f46e5"}}>{Math.min(Math.max(parseInt(examTotalQ)||1,1),100)}</span>
                 </div>
                 <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(examTotalQ)||1,1),100)} onChange={e=>setExamTotalQ(e.target.value)} style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}/>
@@ -2677,10 +2683,10 @@ export default function StudyQuiz() {
             ) : (
               <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>Free daily exam</span>
-                  <span style={{fontWeight:700,fontSize:18,color:"#4f46e5"}}>20 questions</span>
+                  <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>{t.freeDailyExam}</span>
+                  <span style={{fontWeight:700,fontSize:18,color:"#4f46e5"}}>{t.examFreeQCount}</span>
                 </div>
-                <p style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.5,margin:"8px 0 0"}}>Upgrade to Pro for up to 100 questions, custom sections and unlimited exams.</p>
+                <p style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.5,margin:"8px 0 0"}}>{t.upgradeExamNote}</p>
               </div>
             )}
           </div>
@@ -2688,8 +2694,8 @@ export default function StudyQuiz() {
         {examMode==="custom"&&(
           <div style={{marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <p style={{...Sb.secLabel,margin:0}}>EXAM SECTIONS</p>
-              {examSections.length<5&&<button onClick={addSection} style={{background:"#ede9fe",border:"1px solid #a5b4fc",color:"#4f46e5",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+ Add Section</button>}
+              <p style={{...Sb.secLabel,margin:0}}>{t.examSectionsLbl}</p>
+              {examSections.length<5&&<button onClick={addSection} style={{background:"#ede9fe",border:"1px solid #a5b4fc",color:"#4f46e5",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t.addSectionBtn}</button>}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {examSections.map((sec,si)=>{
@@ -2697,30 +2703,30 @@ export default function StudyQuiz() {
                 return (
                   <div key={sec.id} style={{background:"var(--color-background-primary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)",overflow:"hidden"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",background:si%2===0?"#f5f3ff":"#fef3c7"}}>
-                      <span style={{fontWeight:700,fontSize:13,color:si%2===0?"#4f46e5":"#92400e"}}>Section {si+1}</span>
+                      <span style={{fontWeight:700,fontSize:13,color:si%2===0?"#4f46e5":"#92400e"}}>{t.sectionNum.replace("{n}",si+1)}</span>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:11,fontWeight:600,color:"var(--color-text-secondary)"}}>{secMarks} marks</span>
+                        <span style={{fontSize:11,fontWeight:600,color:"var(--color-text-secondary)"}}>{secMarks} {t.marksWord}</span>
                         {examSections.length>1&&<button onClick={()=>removeSection(sec.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",fontSize:16,lineHeight:1,padding:"0 2px"}}>✕</button>}
                       </div>
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:12,padding:"12px 14px"}}>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 96px",gap:8,alignItems:"end"}}>
                         <div>
-                          <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>QUESTION TYPE</div>
+                          <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>{t.questionTypeLbl}</div>
                           <select value={sec.type} onChange={e=>updateSection(sec.id,"type",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:13,padding:"7px 8px",fontFamily:"inherit",outline:"none"}}>
-                            <option value="mcq">Multiple Choice</option>
-                            <option value="written">Written (Open)</option>
-                            <option value="fill">Fill in Blank</option>
+                            <option value="mcq">{t.quizTypes.mcq}</option>
+                            <option value="written">{t.qtWrittenOpen}</option>
+                            <option value="fill">{t.quizTypes.fill}</option>
                           </select>
                         </div>
                         <div>
-                          <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>MARKS/Q</div>
+                          <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>{t.marksPerQLbl}</div>
                           <input type="number" min={0.5} max={20} step={0.5} value={sec.marksPerQ} onChange={e=>updateSection(sec.id,"marksPerQ",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
                         </div>
                       </div>
                       <div>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                          <span style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)"}}>QUESTIONS</span>
+                          <span style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)"}}>{t.questionsUpperLbl}</span>
                           <span style={{fontWeight:700,fontSize:14,color:"#4f46e5"}}>{Math.min(Math.max(parseInt(sec.count)||1,1),100)}</span>
                         </div>
                         <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(sec.count)||1,1),100)} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}/>
@@ -2728,35 +2734,35 @@ export default function StudyQuiz() {
                       </div>
                     </div>
                     <div style={{padding:"6px 14px 10px",fontSize:11,color:"var(--color-text-secondary)"}}>
-                      {parseInt(sec.count)||0} {sec.type==="mcq"?"multiple choice":sec.type==="fill"?"fill-in-blank":"written"} questions × {parseFloat(sec.marksPerQ)||1} marks = <strong>{secMarks} marks</strong>
+                      {parseInt(sec.count)||0} {sec.type==="mcq"?t.typeMcqLower:sec.type==="fill"?t.typeFillLower:t.typeWrittenLower} {t.questionsLow} × {parseFloat(sec.marksPerQ)||1} {t.marksWord} = <strong>{secMarks} {t.marksWord}</strong>
                     </div>
                   </div>
                 );
               })}
             </div>
             <div style={{marginTop:12,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:13,color:"rgba(255,255,255,0.8)"}}>Total exam</span>
-              <span style={{fontSize:15,fontWeight:700,color:"#fff"}}>{sectionTotalQs} questions · {sectionTotalMarks} marks</span>
+              <span style={{fontSize:13,color:"rgba(255,255,255,0.8)"}}>{t.totalExamLbl}</span>
+              <span style={{fontSize:15,fontWeight:700,color:"#fff"}}>{sectionTotalQs} {t.questionsLow} · {sectionTotalMarks} {t.marksWord}</span>
             </div>
           </div>
         )}
         {examMode && (
           <div style={{marginBottom:22}}>
-            <p style={Sb.secLabel}>TIMER</p>
+            <p style={Sb.secLabel}>{t.timerLbl}</p>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"var(--color-background-primary)",borderRadius:12,padding:"12px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
               <div>
-                <div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>⏱ Enable Timer</div>
-                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>Add a countdown to the whole exam</div>
+                <div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.enableTimer}</div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{t.timerDesc}</div>
               </div>
               <Toggle on={examTimerOn} onChange={setExamTimerOn}/>
             </div>
             {examTimerOn && (
               <div style={{marginTop:10,background:"var(--color-background-primary)",borderRadius:12,padding:"12px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
                 <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-                  <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>Total exam time (minutes):</span>
+                  <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>{t.totalExamTime}</span>
                   <input type="number" min={5} max={180} value={examTimerMin} onChange={e=>setExamTimerMin(e.target.value)} style={{width:80,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:16,fontWeight:700,padding:"7px 10px",fontFamily:"inherit",outline:"none",textAlign:"center"}}/>
                 </div>
-                <p style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.5,margin:"10px 0 0"}}>Timer applies to the entire exam. Unanswered questions when time expires are marked as 0.</p>
+                <p style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.5,margin:"10px 0 0"}}>{t.timerNote}</p>
               </div>
             )}
           </div>
@@ -2789,7 +2795,7 @@ export default function StudyQuiz() {
           })}
         </div>
         {error&&<div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {error}</div>}
-        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions || "Get more questions"}</button>}
+        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions}</button>}
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#312e81,#4f46e5)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
@@ -2803,9 +2809,9 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
         <div style={Sb.topbar} className="rv-topbar">
-          <button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>Exit</button>
+          <button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.examExitBtn}</button>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.examProgress} {examIdx+1}/{examQs.length}</span>
             {examTimerOn && examTimeLeft!=null && (
@@ -2813,29 +2819,29 @@ export default function StudyQuiz() {
             )}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            {examTimerOn && !examTimeUp && <button onClick={()=>setExamPaused(true)} title="Pause" style={{background:"none",border:"1px solid var(--color-border-secondary)",borderRadius:8,padding:"3px 9px",fontSize:13,cursor:"pointer",color:"var(--color-text-secondary)",fontFamily:"inherit"}}>⏸</button>}
+            {examTimerOn && !examTimeUp && <button onClick={()=>setExamPaused(true)} title={t.pauseLbl} style={{background:"none",border:"1px solid var(--color-border-secondary)",borderRadius:8,padding:"3px 9px",fontSize:13,cursor:"pointer",color:"var(--color-text-secondary)",fontFamily:"inherit"}}>⏸</button>}
             <span style={{fontSize:11,color:answered===examQs.length?"#16a34a":"var(--color-text-tertiary)",fontWeight:600}}>{answered}/{examQs.length}</span>
           </div>
         </div>
         <div style={{height:4,background:"var(--color-border-tertiary)"}}><div style={{height:"100%",background:"#94a3b8",width:((examIdx/examQs.length)*100)+"%",transition:"width 0.3s"}}/></div>
         {examReview && (
           <div style={{background:"#f0fdf4",borderBottom:"1px solid #86efac",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-            <span style={{fontSize:12,color:"#15803d",fontWeight:600}}>Review mode — change any answer, then submit</span>
-            <button onClick={()=>submitExam()} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>✓ Final Submit</button>
+            <span style={{fontSize:12,color:"#15803d",fontWeight:600}}>{t.reviewModeNote}</span>
+            <button onClick={()=>submitExam()} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>{t.finalSubmit}</button>
           </div>
         )}
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}>
           {q.section&&(examIdx===0||examQs[examIdx-1]?.section!==q.section)&&(
             <div style={{background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}} className="fade-in">
-              <span style={{fontWeight:700,fontSize:14,color:"#fff"}}>Section {q.section}</span>
+              <span style={{fontWeight:700,fontSize:14,color:"#fff"}}>{t.sectionNum.replace("{n}",q.section)}</span>
               {examMode==="custom"&&examSections[q.section-1]&&(
-                <span style={{fontSize:11,color:"rgba(255,255,255,0.75)"}}>{examSections[q.section-1].count} Qs · {(parseInt(examSections[q.section-1].count)||0)*(parseFloat(examSections[q.section-1].marksPerQ)||1)} marks</span>
+                <span style={{fontSize:11,color:"rgba(255,255,255,0.75)"}}>{t.qsAndMarks.replace("{q}",examSections[q.section-1].count).replace("{m}",(parseInt(examSections[q.section-1].count)||0)*(parseFloat(examSections[q.section-1].marksPerQ)||1))}</span>
               )}
             </div>
           )}
           <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-            <span style={{background:q.type==="mcq"?"#ede9fe":"#fef3c7",color:q.type==="mcq"?"#4f46e5":"#92400e",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{q.type==="mcq"?"Multiple Choice":q.type==="fill"?"Fill in Blank":"Written"}</span>
-            {examAns[examIdx]!==undefined&&<span style={{background:"#f0fdf4",color:"#16a34a",borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:600}}>Answered</span>}
+            <span style={{background:q.type==="mcq"?"#ede9fe":"#fef3c7",color:q.type==="mcq"?"#4f46e5":"#92400e",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{q.type==="mcq"?t.quizTypes.mcq:q.type==="fill"?t.quizTypes.fill:t.writtenWord}</span>
+            {examAns[examIdx]!==undefined&&<span style={{background:"#f0fdf4",color:"#16a34a",borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:600}}>{t.answeredWord}</span>}
           </div>
           <h3 style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:"0 0 20px"}}>{q.question}</h3>
           {q.type==="mcq"&&(
@@ -2853,16 +2859,16 @@ export default function StudyQuiz() {
           {q.type==="fill"&&<FillBlank key={examIdx} q={q} isLast={isLast} t={t} onNext={ok=>{setExamAns(prev=>({...prev,[examIdx]:ok?q.answer:"__wrong__"}));if(isLast)submitExam();else setExamIdx(i=>i+1);}}/>}
           {q.type!=="fill"&&(
             <div style={{display:"flex",gap:10,marginTop:20}}>
-              {examIdx>0&&<button onClick={prevExam} style={{...Sb.btnOutline,padding:"13px 20px",fontSize:13}}>← Prev</button>}
+              {examIdx>0&&<button onClick={prevExam} style={{...Sb.btnOutline,padding:"13px 20px",fontSize:13}}>← {t.prev}</button>}
               <button onClick={nextExam} style={{...Sb.btnPrimary,flex:1,margin:0,background:isLast?"#16a34a":"#4f46e5",fontSize:14}}>{isLast?t.submitExam:t.next}</button>
             </div>
           )}
-          {isLast&&q.type!=="fill"&&<p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>Review your answers above before submitting.</p>}
+          {isLast&&q.type!=="fill"&&<p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>{t.reviewBeforeSubmit}</p>}
         </div>
         <ExitModal show={showExitConfirm}
-          title="Are you sure you want to exit?"
-          message="Your exam progress will be lost and cannot be recovered."
-          stayLabel="Continue Exam" leaveLabel="Exit" stayGreen
+          title={t.examExitTitle}
+          message={t.examExitMsg}
+          stayLabel={t.examContinue} leaveLabel={t.examExitBtn} stayGreen
           onStay={()=>setShowExitConfirm(false)}
           onLeave={()=>{setShowExitConfirm(false);try{sessionStorage.removeItem("revyy_exam")}catch{ /* ignore */ };setScreen("exam_setup");}}/>
 
@@ -2871,11 +2877,11 @@ export default function StudyQuiz() {
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:560,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
             <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"26px 22px",maxWidth:330,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.25)"}}>
               <div style={{fontSize:34,marginBottom:8}}>📋</div>
-              <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>Submit your exam?</h3>
-              <p style={{margin:"0 0 18px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>You still have <strong style={{color:"#4f46e5"}}>{fmtClock(examTimeLeft||0)}</strong> remaining. Review your answers before submitting?</p>
+              <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{t.submitExamQ}</h3>
+              <p style={{margin:"0 0 18px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.submitStillHave} <strong style={{color:"#4f46e5"}}>{fmtClock(examTimeLeft||0)}</strong> {t.submitReviewBefore}</p>
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                <button onClick={()=>{setShowSubmitPrompt(false);setExamReview(true);setExamIdx(0);}} style={{...Sb.btnPrimary,width:"100%",margin:0,background:"#4f46e5",fontSize:14}}>Review Answers</button>
-                <button onClick={()=>{setShowSubmitPrompt(false);submitExam();}} style={{width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Submit Now</button>
+                <button onClick={()=>{setShowSubmitPrompt(false);setExamReview(true);setExamIdx(0);}} style={{...Sb.btnPrimary,width:"100%",margin:0,background:"#4f46e5",fontSize:14}}>{t.reviewAnswersBtn}</button>
+                <button onClick={()=>{setShowSubmitPrompt(false);submitExam();}} style={{width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.submitNowBtn}</button>
               </div>
             </div>
           </div>
@@ -2892,7 +2898,7 @@ export default function StudyQuiz() {
     <div style={{...Sb.root,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 24px",textAlign:"center",minHeight:"100vh"}}><style>{CSS}</style>
       <div style={{fontSize:52,marginBottom:16}}>🤖</div>
       <h2 style={{...Sb.h2,textAlign:"center"}}>{t.evaluating}</h2>
-      <p style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:24}}>AI is reading and grading each written answer</p>
+      <p style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:24}}>{t.aiGradingMsg}</p>
       <div style={{display:"flex",flexDirection:"column",gap:12,alignItems:"flex-start"}}>
         {t.evalSteps.map((s,i)=>(<div key={i} className={"step step-"+i} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:"var(--color-text-secondary)",opacity:0}}><span style={{width:8,height:8,borderRadius:"50%",background:"#4f46e5",flexShrink:0,display:"block"}}/>{s}</div>))}
       </div>
@@ -2909,14 +2915,14 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>🎉 Welcome to Revyy Pro! You now have full access.</div>}
+      {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
         {showConfetti&&<Confetti/>}
         <div style={{background:theme.bg,padding:"40px 20px 32px",textAlign:"center"}}>
           <div style={{fontSize:56,marginBottom:8}}>{theme.emoji}</div>
           <h2 style={{margin:"0 0 8px",fontSize:24,fontWeight:700,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif"}}>{theme.title}</h2>
           <div style={{fontSize:52,fontWeight:900,color:"#fff",letterSpacing:-2,fontFamily:"'Playfair Display',Georgia,serif"}}>{pct}%</div>
           <div style={{fontSize:13,color:"rgba(255,255,255,0.7)",marginTop:4}}>
-            {(Math.round(total*10)/10)+" / "+totalPossible+(examMode==="custom"?" marks":" pts")} · {t.passMark}
+            {(Math.round(total*10)/10)+" / "+totalPossible+(examMode==="custom"?" "+t.marksSuffix:" "+t.ptsSuffix)} · {t.passMark}
           </div>
           {excellent&&<div style={{marginTop:12,fontSize:28,letterSpacing:4}}>🎉🎓🎉</div>}
           <p style={{margin:"14px 0 0",fontSize:14,color:"rgba(255,255,255,0.88)",lineHeight:1.6,maxWidth:300,marginLeft:"auto",marginRight:"auto"}}>{theme.msg}</p>
@@ -2925,12 +2931,12 @@ export default function StudyQuiz() {
           {srsAdded>0 && (
             <div style={{display:"flex",alignItems:"center",gap:10,background:"#ede9fe",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
               <span style={{fontSize:18}}>🔁</span>
-              <span style={{flex:1,fontSize:12.5,color:"#4338ca",lineHeight:1.4}}><strong>{srsAdded}</strong> question{srsAdded>1?"s":""} to review added to Smart Review.</span>
-              <button onClick={startReview} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Review</button>
+              <span style={{flex:1,fontSize:12.5,color:"#4338ca",lineHeight:1.4}}>{t.srsAddedMsg.replace("{n}",srsAdded).replace("{s}",srsAdded>1?"s":"")}</span>
+              <button onClick={startReview} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
             </div>
           )}
           <div style={{display:"flex",gap:10,marginBottom:18}}>
-            {[{v:(Math.round(total*10)/10)+"/"+totalPossible,l:t.examScore},{v:pct+"%",l:"Score"},{v:passed?"PASS":"FAIL",l:"Result"}].map(({v,l},i)=>(
+            {[{v:(Math.round(total*10)/10)+"/"+totalPossible,l:t.examScore},{v:pct+"%",l:t.scoreLbl},{v:passed?t.passLbl:t.failLbl,l:t.resultLbl}].map(({v,l},i)=>(
               <div key={i} style={{flex:1,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 6px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
                 <div style={{fontSize:15,fontWeight:700,color:i===2?(passed?"#16a34a":"#dc2626"):"var(--color-text-primary)"}}>{v}</div>
                 <div style={{fontSize:10,color:"var(--color-text-secondary)",marginTop:2}}>{l}</div>
@@ -2940,8 +2946,8 @@ export default function StudyQuiz() {
           {(examTimeUsedSec!=null || examTimerOn) && (
             <div style={{display:"flex",gap:10,marginBottom:18}}>
               {[
-                {v: examTimeExpired ? "Time Expired" : (examTimeUsedSec!=null ? Math.floor(examTimeUsedSec/60)+" min "+(examTimeUsedSec%60)+" sec" : "—"), l:"Time Used", red:examTimeExpired},
-                {v: examAnsweredCount+" / "+examQs.length, l:"Questions Answered"},
+                {v: examTimeExpired ? t.timeExpiredLbl : (examTimeUsedSec!=null ? Math.floor(examTimeUsedSec/60)+" min "+(examTimeUsedSec%60)+" sec" : "—"), l:t.timeUsedLbl, red:examTimeExpired},
+                {v: examAnsweredCount+" / "+examQs.length, l:t.answeredLbl},
               ].map(({v,l,red},i)=>(
                 <div key={i} style={{flex:1,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 6px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
                   <div style={{fontSize:14,fontWeight:700,color:red?"#dc2626":"var(--color-text-primary)"}}>{v}</div>
@@ -2952,7 +2958,7 @@ export default function StudyQuiz() {
           )}
           {examMode==="custom"&&examSections.length>1&&(
             <div style={{background:"var(--color-background-primary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)",marginBottom:16,overflow:"hidden"}}>
-              <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:11,fontWeight:700,color:"var(--color-text-secondary)",letterSpacing:1}}>SECTION BREAKDOWN</div>
+              <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",fontSize:11,fontWeight:700,color:"var(--color-text-secondary)",letterSpacing:1}}>{t.sectionBreakdown}</div>
               {examSections.map((sec,si)=>{
                 const secQs=examQs.map((q,i)=>({q,i})).filter(({q})=>q.section===si+1);
                 const earned=secQs.reduce((s,{q,i})=>s+(examEvals?.[i]?.score||0)*(q.marksPerQ||1),0);
@@ -2963,8 +2969,8 @@ export default function StudyQuiz() {
                   <div key={si} style={{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:si<examSections.length-1?"0.5px solid var(--color-border-tertiary)":undefined,gap:12}}>
                     <span style={{width:22,height:22,borderRadius:"50%",background:si%2===0?"#ede9fe":"#fef3c7",color:si%2===0?"#4f46e5":"#92400e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{si+1}</span>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)"}}>Section {si+1}: {sec.type==="mcq"?"Multiple Choice":sec.type==="fill"?"Fill in Blank":"Written"}</div>
-                      <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{secQs.length} Qs × {sec.marksPerQ} marks</div>
+                      <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)"}}>{t.sectionNum.replace("{n}",si+1)}: {sec.type==="mcq"?t.quizTypes.mcq:sec.type==="fill"?t.quizTypes.fill:t.writtenWord}</div>
+                      <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{t.qsTimesMarks.replace("{n}",secQs.length).replace("{m}",sec.marksPerQ)}</div>
                     </div>
                     <div style={{textAlign:"right"}}>
                       <div style={{fontSize:14,fontWeight:700,color:col}}>{Math.round(earned*10)/10}/{possible}</div>
@@ -2995,7 +3001,7 @@ export default function StudyQuiz() {
             return (
               <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"13px 13px 13px 10px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:"3px solid "+col}} className="fade-in">
                 <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}>
-                  <span style={{fontSize:9,fontWeight:700,background:q.type==="mcq"?"#ede9fe":"#fef3c7",color:q.type==="mcq"?"#4f46e5":"#92400e",borderRadius:8,padding:"2px 6px",flexShrink:0,marginTop:2}}>{q.type==="mcq"?"MCQ":q.type==="fill"?"FILL":"WRITTEN"}</span>
+                  <span style={{fontSize:9,fontWeight:700,background:q.type==="mcq"?"#ede9fe":"#fef3c7",color:q.type==="mcq"?"#4f46e5":"#92400e",borderRadius:8,padding:"2px 6px",flexShrink:0,marginTop:2}}>{q.type==="mcq"?t.badgeMcq:q.type==="fill"?t.badgeFill:t.badgeWritten}</span>
                   <span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,flex:1}}>{q.question}</span>
                 </div>
                 {q.type==="mcq"&&examAns[i]!==undefined&&(
@@ -3006,8 +3012,8 @@ export default function StudyQuiz() {
                 )}
                 {q.type!=="mcq"&&(
                   <div style={{paddingLeft:8,marginBottom:4}}>
-                    <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:3,fontStyle:"italic"}}>Your answer: "{examAns[i]||"(no answer)"}"</div>
-                    <div style={{fontSize:12,color:"#16a34a",fontWeight:500}}>Model: {q.answer}</div>
+                    <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:3,fontStyle:"italic"}}>{t.yourAns} "{examAns[i]||t.noAnswerLbl}"</div>
+                    <div style={{fontSize:12,color:"#16a34a",fontWeight:500}}>{t.modelLabel} {q.answer}</div>
                   </div>
                 )}
                 {ev?.feedback&&<div style={{background:bg,border:"0.5px solid "+bdr,borderRadius:8,padding:"7px 10px",fontSize:12,color:col,marginTop:6,lineHeight:1.5}}>{ev.feedback}</div>}
@@ -3026,7 +3032,7 @@ export default function StudyQuiz() {
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
       <div style={Sb.topbar} className="rv-topbar">
-        <button style={Sb.backBtn} onClick={()=>setScreen(homePlan?"plan":"home")}>← {homePlan?t.coachYourPlan:"Home"}</button>
+        <button style={Sb.backBtn} onClick={()=>setScreen(homePlan?"plan":"home")}>← {homePlan?t.coachYourPlan:t.homeWord}</button>
         <span style={Sb.brand}>{t.coachTitle}</span>
         <span/>
       </div>
@@ -3090,7 +3096,7 @@ export default function StudyQuiz() {
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
         <div style={Sb.topbar} className="rv-topbar">
-          <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← Home</button>
+          <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
           <span style={Sb.brand}>{t.coachTitle}</span>
           <button onClick={openPlanSetup} title={t.coachCreate} style={{background:"none",border:"none",fontSize:20,lineHeight:1,cursor:"pointer",color:"var(--color-text-secondary)",padding:0,fontWeight:400}}>＋</button>
         </div>
@@ -3188,7 +3194,7 @@ export default function StudyQuiz() {
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
       <div style={Sb.topbar} className="rv-topbar">
-        <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← Back</button>
+        <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← {t.backWord}</button>
         <span style={Sb.brand}>{t.mockTitle}</span><span/>
       </div>
       <div className="rv-center-narrow" style={{padding:"22px 16px 40px"}}>
@@ -3222,7 +3228,7 @@ export default function StudyQuiz() {
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
         <div style={Sb.topbar} className="rv-topbar">
-          <button style={Sb.backBtn} onClick={()=>setScreen("mock_select")}>← Back</button>
+          <button style={Sb.backBtn} onClick={()=>setScreen("mock_select")}>← {t.backWord}</button>
           <span style={Sb.brand}>{t.mockTitle}</span><span/>
         </div>
         <div className="rv-center-narrow" style={{padding:"22px 16px 40px"}}>
