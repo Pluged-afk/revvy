@@ -762,7 +762,7 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
 function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, t }) {
   const s = t.set || {};
   const { user, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
-  const { lang, setLang } = useLang();      // language control lives here now
+  // Language is edited on the draft (like every other setting) and applied on Save.
   const acctSrs = useSRS();                 // review-deck stats for the header
   const acctStats = useStudyStats();        // streak + accuracy
   const clerk = useClerk();                 // "manage login & security"
@@ -870,8 +870,8 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           <SettingRow label={s.animations} desc={s.animationsDesc}>
             <Toggle on={draft.animations} onChange={v=>update("animations",v)}/>
           </SettingRow>
-          <SettingRow label="🌍 Language" desc={LANGS[lang]?.name}>
-            <select value={lang} onChange={e=>setLang(e.target.value)} style={{border:"0.5px solid var(--color-border-secondary)",borderRadius:8,background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:13,padding:"6px 8px",fontFamily:"inherit",outline:"none",maxWidth:150,cursor:"pointer"}}>
+          <SettingRow label={"🌍 "+(s.language||"Language")} desc={LANGS[draft.lang]?.name}>
+            <select value={draft.lang} onChange={e=>update("lang",e.target.value)} style={{border:"0.5px solid var(--color-border-secondary)",borderRadius:8,background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:13,padding:"6px 8px",fontFamily:"inherit",outline:"none",maxWidth:150,cursor:"pointer"}}>
               {Object.entries(LANGS).map(([code,l])=><option key={code} value={code}>{l.flag} {l.name}</option>)}
             </select>
           </SettingRow>
@@ -1229,7 +1229,7 @@ function ActivatingOverlay({ show }) {
 
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
-  const { t, lang } = useLang(); // language control now lives inside the account panel
+  const { t, lang, setLang } = useLang(); // language control now lives inside the account panel
   const dev = useDev();
   const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack } = useAuth();
   const navigate = useNavigate();
@@ -1897,16 +1897,18 @@ export default function StudyQuiz() {
     return {};
   };
 
-  const openSettings  = ()  => { setSettingsDraft({...settings}); setShowSettings(true); };
+  const openSettings  = ()  => { setSettingsDraft({...settings, lang}); setShowSettings(true); };
   const cancelSettings= ()  => { setSettingsDraft(null); setShowSettings(false); };
   const applySettings = ()  => {
     if(!settingsDraft) return;
-    setSettings(settingsDraft);
-    setSoundOn(settingsDraft.sound);
-    setDiff(settingsDraft.defaultDiff);
-    setNumQ(settingsDraft.defaultQCount);
-    SoundEngine.setVolume(settingsDraft.volume);
-    window.storage.set("revyy_settings",JSON.stringify(settingsDraft)).catch(()=>{});
+    const { lang:draftLang, ...rest } = settingsDraft;   // language is applied via its own context, not stored in settings
+    setSettings(rest);
+    setSoundOn(rest.sound);
+    setDiff(rest.defaultDiff);
+    setNumQ(rest.defaultQCount);
+    SoundEngine.setVolume(rest.volume);
+    if(draftLang && draftLang!==lang) setLang(draftLang);
+    window.storage.set("revyy_settings",JSON.stringify(rest)).catch(()=>{});
     setSettingsDraft(null);
     setShowSettings(false);
   };

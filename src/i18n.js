@@ -258,6 +258,7 @@ const T_EN = {
     title:"Settings",
     secAppearance:"APPEARANCE", secSound:"SOUND", secHaptics:"HAPTICS", secBehaviour:"QUIZ BEHAVIOUR",
     secSubscription:"SUBSCRIPTION", secAccount:"ACCOUNT",
+    language:"Language",
     theme:"Theme", themeFollows:"Follows your device", themeLight:"Forced light mode", themeDark:"Forced dark mode", segAuto:"Auto",
     fontSize:"Font Size", fontCompact:"Compact",
     animations:"Animations", animationsDesc:"Disable for reduced motion",
@@ -699,6 +700,7 @@ const T_LANGS = {
     "pauseLbl":"暂停",
     "notEvaluated":"未评估",
     "set":{
+      "language":"语言",
       "title":"设置",
       "secAppearance":"外观",
       "secSound":"声音",
@@ -1213,6 +1215,7 @@ const T_LANGS = {
     "pauseLbl":"विराम",
     "notEvaluated":"मूल्यांकन नहीं किया गया",
     "set":{
+      "language":"भाषा",
       "title":"सेटिंग्स",
       "secAppearance":"दिखावट",
       "secSound":"ध्वनि",
@@ -1724,6 +1727,7 @@ const T_LANGS = {
     "pauseLbl":"Pausa",
     "notEvaluated":"No evaluado",
     "set":{
+      "language":"Idioma",
       "title":"Ajustes",
       "secAppearance":"APARIENCIA",
       "secSound":"SONIDO",
@@ -2220,6 +2224,7 @@ const T_LANGS = {
     "accountLbl":"Compte",
     "notEvaluated":"Non évalué",
     "set":{
+      "language":"Langue",
       "title":"Paramètres",
       "secAppearance":"APPARENCE",
       "secSound":"SON",
@@ -2728,6 +2733,7 @@ const T_LANGS = {
     "pauseLbl":"إيقاف مؤقت",
     "notEvaluated":"لم يتم التقييم",
     "set":{
+      "language":"اللغة",
       "title":"الإعدادات",
       "secAppearance":"المظهر",
       "secSound":"الصوت",
@@ -3238,6 +3244,7 @@ const T_LANGS = {
     "pauseLbl":"Pausar",
     "notEvaluated":"Não avaliado",
     "set":{
+      "language":"Idioma",
       "title":"Definições",
       "secAppearance":"APARÊNCIA",
       "secSound":"SOM",
@@ -3749,6 +3756,7 @@ const T_LANGS = {
     "pauseLbl":"Пауза",
     "notEvaluated":"Не оценено",
     "set":{
+      "language":"Язык",
       "title":"Настройки",
       "secAppearance":"ВНЕШНИЙ ВИД",
       "secSound":"ЗВУК",
@@ -4255,6 +4263,7 @@ const T_LANGS = {
     "pauseLbl":"Jeda",
     "notEvaluated":"Tidak dievaluasi",
     "set":{
+      "language":"Bahasa",
       "title":"Pengaturan",
       "secAppearance":"TAMPILAN",
       "secSound":"SUARA",
@@ -4764,6 +4773,7 @@ const T_LANGS = {
     "pauseLbl":"Pausieren",
     "notEvaluated":"Nicht bewertet",
     "set":{
+      "language":"Sprache",
       "title":"Einstellungen",
       "secAppearance":"DARSTELLUNG",
       "secSound":"TON",
@@ -5275,6 +5285,7 @@ const T_LANGS = {
     "pauseLbl":"一時停止",
     "notEvaluated":"未評価",
     "set":{
+      "language":"言語",
       "title":"設定",
       "secAppearance":"外観",
       "secSound":"サウンド",
@@ -5787,6 +5798,7 @@ const T_LANGS = {
     "pauseLbl":"Duraklat",
     "notEvaluated":"Değerlendirilmedi",
     "set":{
+      "language":"Dil",
       "title":"Ayarlar",
       "secAppearance":"GÖRÜNÜM",
       "secSound":"SES",
@@ -6298,6 +6310,7 @@ const T_LANGS = {
     "pauseLbl":"일시중지",
     "notEvaluated":"평가되지 않음",
     "set":{
+      "language":"언어",
       "title":"설정",
       "secAppearance":"화면",
       "secSound":"소리",
@@ -6809,6 +6822,7 @@ const T_LANGS = {
     "pauseLbl":"Tạm dừng",
     "notEvaluated":"Chưa được đánh giá",
     "set":{
+      "language":"Ngôn ngữ",
       "title":"Cài đặt",
       "secAppearance":"GIAO DIỆN",
       "secSound":"ÂM THANH",
@@ -7318,6 +7332,7 @@ const T_LANGS = {
     "pauseLbl":"Pausa",
     "notEvaluated":"Non valutato",
     "set":{
+      "language":"Lingua",
       "title":"Impostazioni",
       "secAppearance":"ASPETTO",
       "secSound":"AUDIO",
@@ -7826,6 +7841,7 @@ const T_LANGS = {
     "pauseLbl":"ชั่งช้า",
     "notEvaluated":"ยังไม่ได้ประเมิน",
     "set":{
+      "language":"ภาษา",
       "title":"การตั้งค่า",
       "secAppearance":"การแสดงผล",
       "secSound":"เสียง",
@@ -8337,6 +8353,7 @@ const T_LANGS = {
     "pauseLbl":"Pauza",
     "notEvaluated":"Nie oceniono",
     "set":{
+      "language":"Język",
       "title":"Ustawienia",
       "secAppearance":"WYGLĄD",
       "secSound":"DŹWIĘK",
@@ -8831,6 +8848,7 @@ const T_LANGS = {
     "pauseLbl":"Pauzeren",
     "notEvaluated":"Niet beoordeeld",
     "set":{
+      "language":"Taal",
       "title":"Instellingen",
       "secAppearance":"WEERGAVE",
       "secSound":"GELUID",
@@ -9338,6 +9356,7 @@ const T_LANGS = {
     "pauseLbl":"Paus",
     "notEvaluated":"Inte utvärderad",
     "set":{
+      "language":"Språk",
       "title":"Inställningar",
       "secAppearance":"UTSEENDE",
       "secSound":"LJUD",
@@ -9848,6 +9867,7 @@ const T_LANGS = {
     "pauseLbl":"הצהר",
     "notEvaluated":"לא הוערך",
     "set":{
+      "language":"שפה",
       "title":"הגדרות",
       "secAppearance":"מראה",
       "secSound":"צליל",
