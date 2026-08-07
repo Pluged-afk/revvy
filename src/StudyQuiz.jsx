@@ -660,6 +660,61 @@ function ShareModal({ link, err, copied, onCopy, onClose, t }) {
   );
 }
 
+// ── In-app contact / bug report ───────────────────────────────────────
+// Posts to the same /api/contact endpoint as the marketing contact form, so a
+// user can reach us without leaving the app. Pre-fills the signed-in email and
+// attaches lightweight diagnostics (path, language, user agent) to the message.
+function ContactModal({ defaultEmail, onClose, t }) {
+  const [email, setEmail] = useState(defaultEmail || "");
+  const [msg, setMsg] = useState("");
+  const [state, setState] = useState("idle"); // idle | sending | sent | error
+  const [err, setErr] = useState("");
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) && msg.trim().length > 0;
+  const submit = async () => {
+    if (!valid || state === "sending") return;
+    setState("sending"); setErr("");
+    const ctx = `\n\n— sent from the app —\npath: ${location.pathname} · lang: ${document.documentElement.lang} · ${navigator.userAgent}`;
+    try {
+      const r = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: email.trim(), email: email.trim(), message: msg.trim() + ctx }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(d.error || t.reportError); setState("error"); return; }
+      setState("sent");
+    } catch { setErr(t.reportError); setState("error"); }
+  };
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:600,display:"flex",alignItems:"flex-end"}} onClick={onClose}>
+      <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"26px 20px 36px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box"}}>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:34,marginBottom:6}}>🐛</div>
+          <h3 style={{margin:"0 0 6px",fontSize:19,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{t.reportTitle}</h3>
+          <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.reportSub}</p>
+        </div>
+        {state === "sent" ? (
+          <div style={{textAlign:"center",padding:"14px 0 4px"}}>
+            <div style={{fontSize:40,marginBottom:8}}>🙌</div>
+            <p style={{fontSize:14,color:"var(--color-text-primary)",fontWeight:600,margin:"0 0 16px",lineHeight:1.5}}>{t.reportSuccess}</p>
+            <button onClick={onClose} style={{...Sb.btnPrimary,width:"100%"}}>{t.reportDone}</button>
+          </div>
+        ) : (
+          <>
+            {err && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,marginBottom:12}}>{err}</div>}
+            <label style={{display:"block",fontSize:12,fontWeight:600,color:"var(--color-text-secondary)",marginBottom:5}}>{t.reportEmail}</label>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" style={{width:"100%",borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",fontSize:13,padding:"11px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+            <label style={{display:"block",fontSize:12,fontWeight:600,color:"var(--color-text-secondary)",marginBottom:5}}>{t.reportMessage}</label>
+            <textarea value={msg} onChange={e=>setMsg(e.target.value)} placeholder={t.reportPlaceholder} rows={5} style={{width:"100%",borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",fontSize:13,padding:"11px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box",resize:"vertical",marginBottom:14}}/>
+            <button onClick={submit} disabled={!valid||state==="sending"} style={{...Sb.btnPrimary,width:"100%",opacity:(!valid||state==="sending")?0.5:1}}>{state==="sending"?t.reportSending:t.reportSend}</button>
+            <button onClick={onClose} style={{...Sb.btnGhost,width:"100%",fontSize:13,marginTop:8}}>{t.notNow}</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Settings helpers ──────────────────────────────────────────────────
 function Toggle({ on, onChange, disabled }) {
   return (
@@ -777,6 +832,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
   const [adBusy, setAdBusy] = useState(false);
   const [packBusy, setPackBusy] = useState("");
   const [showPacks, setShowPacks] = useState(false);
+  const [showContact, setShowContact] = useState(false);
   useEffect(() => { refreshUsage?.(); }, [refreshUsage]);
   const onWatchAd = async () => { if (adBusy) return; setAdBusy(true); await watchAd?.(); setAdBusy(false); };
   const onBuyPack = async (pack) => { if (packBusy) return; setPackBusy(pack); const r = await buyPack?.(pack); if (r?.error) setPackBusy(""); };
@@ -941,6 +997,14 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
               border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"9px",
               fontSize:12,color:"var(--color-text-tertiary)",cursor:"pointer",fontFamily:"inherit",display:"block"}}>
             {s.resetAll}
+          </button>
+
+          <SectionLabel label={s.secHelp}/>
+          <button onClick={()=>setShowContact(true)}
+            style={{margin:"4px 18px 8px",width:"calc(100% - 36px)",display:"flex",alignItems:"center",justifyContent:"space-between",
+              background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"13px 16px",
+              fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
+            <span>🐛 {s.reportBug}</span><span style={{color:"var(--color-text-tertiary)",fontSize:18}}>›</span>
           </button>
 
           {signedIn ? (<>
@@ -1109,6 +1173,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
         />
       )}
       {showPacks && <PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
+      {showContact && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowContact(false)} t={t}/>}
     </div>
   );
 }
