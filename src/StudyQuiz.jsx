@@ -137,6 +137,14 @@ const THEME_DARK = `
 `;
 
 // ── Claude API ────────────────────────────────────────────────────────
+// The AI proxy + file upload spend the server's Anthropic key, so both require
+// a signed-in user. StudyQuiz registers Clerk's getToken here so these
+// module-level request helpers can attach a fresh bearer token to every call.
+let _getToken = null;
+async function authHeader() {
+  try { const t = await _getToken?.(); return t ? { Authorization: `Bearer ${t}` } : {}; }
+  catch { return {}; }
+}
 async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
   const typeMap = {
     mcq:   `Multiple choice: exactly 4 options. "correct" is 0-based index of the right answer.`,
@@ -156,7 +164,7 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
   const maxTokens = Math.min(Math.max(Math.round(numQ * 220) + 2000, 4000), 32000);
 
   const res = await fetch("/api/anthropic", {
-    method:"POST", headers:{"Content-Type":"application/json"},
+    method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
     body: JSON.stringify({ model:AI_MODEL, max_tokens:maxTokens,
       system:"You are an expert educator. Return ONLY valid raw JSON, no markdown.",
       messages:[{ role:"user", content:[...blocks,{type:"text",text:prompt}] }] }),
@@ -183,7 +191,7 @@ function stripFences(t) {
 // the "Explain why" feature on wrong answers.
 async function callClaudeText(prompt, max = 400) {
   const res = await fetch("/api/anthropic", {
-    method:"POST", headers:{"Content-Type":"application/json"},
+    method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
     body: JSON.stringify({ model:AI_MODEL, max_tokens:max,
       system:"You are a warm, encouraging tutor. Reply in plain text, 2-4 sentences, no markdown, no headings.",
       messages:[{ role:"user", content:[{type:"text",text:prompt}] }] }),
@@ -226,7 +234,7 @@ Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${
 The "questions" array MUST contain ${section.count} items.`;
   const maxTokens = Math.min(section.count * 450 + 3000, 60000); // roomy — data questions run long
   const res = await fetch("/api/anthropic", {
-    method:"POST", headers:{"Content-Type":"application/json"},
+    method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
     body: JSON.stringify({ model:AI_MODEL, max_tokens:maxTokens,
       system:"You are an expert standardized-test writer. Return ONLY valid raw JSON, no markdown.",
       messages:[{ role:"user", content:[{type:"text",text:prompt}] }] }),
@@ -1232,6 +1240,9 @@ export default function StudyQuiz() {
   const { t, lang, setLang } = useLang(); // language control now lives inside the account panel
   const dev = useDev();
   const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack } = useAuth();
+  // Expose Clerk's getToken to the module-level AI-proxy / upload helpers so
+  // every request to /api/anthropic and /api/upload-file carries a bearer token.
+  useEffect(() => { _getToken = getToken; return () => { _getToken = null; }; }, [getToken]);
   const navigate = useNavigate();
   // Approach B: the quiz app is browsable without an account, but generating a
   // quiz requires sign-in. Returns true (and sends the visitor to sign-up) when
@@ -1606,7 +1617,7 @@ export default function StudyQuiz() {
       });
       const res = await fetch("/api/upload-file", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeader()) },
         body: JSON.stringify({ blobUrl: blob.url, filename: f.name, contentType: f.type }),
       });
       const data = await res.json().catch(() => ({}));
@@ -1616,7 +1627,7 @@ export default function StudyQuiz() {
       // Direct path (free, and small Pro files).
       const res = await fetch("/api/upload-file", {
         method: "POST",
-        headers: { "Content-Type": f.type || "application/octet-stream", "x-filename": encodeURIComponent(f.name) },
+        headers: { "Content-Type": f.type || "application/octet-stream", "x-filename": encodeURIComponent(f.name), ...(await authHeader()) },
         body: f,
       });
       const data = await res.json().catch(() => ({}));
@@ -1694,7 +1705,7 @@ export default function StudyQuiz() {
       }));
       const attempt=async(scale)=>{
         const { prompt, marksMap }=buildPrompt(scale);
-        const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
+        const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json", ...(await authHeader())},
           body:JSON.stringify({model:AI_MODEL,max_tokens:maxTokens,
             system:"You are an expert exam setter. Return ONLY valid raw JSON, no markdown.",
             messages:[{role:"user",content:[...blocks,{type:"text",text:prompt}]}]})});
@@ -1746,7 +1757,7 @@ export default function StudyQuiz() {
     // ~120 tokens of feedback per written answer; cap at 10k.
     const evalMaxTokens=Math.min(Math.max(writtenIdxs.length*120+1000,2000),10000);
     try{
-      const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},
+      const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json", ...(await authHeader())},
         body:JSON.stringify({model:AI_MODEL,max_tokens:evalMaxTokens,
           system:"Evaluate student exam answers. Return ONLY raw JSON.",
           messages:[{role:"user",content:[{type:"text",text:evalPrompt}]}]})});

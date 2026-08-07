@@ -23,6 +23,7 @@ export default async function handler(req, res) {
 
   if (!name || !email || !message) return res.status(400).json({ error: "Name, email and message are required." });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Please enter a valid email address." });
+  if (name.length > 200 || email.length > 200) return res.status(400).json({ error: "Name or email is too long." });
   if (message.length > 5000) return res.status(400).json({ error: "Message is too long (max 5000 characters)." });
 
   const subject = `Contact form — ${name}`;

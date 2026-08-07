@@ -1,4 +1,5 @@
 import { del } from "@vercel/blob";
+import { verifyToken } from "@clerk/backend";
 
 // Uploads a file to the Anthropic Files API and returns its file_id.
 //
@@ -40,6 +41,14 @@ export default async function handler(req, res) {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
+  // Require a signed-in user — this uploads to the Anthropic Files API on the
+  // server's key, so it must not be callable anonymously.
+  const authz = req.headers.authorization || "";
+  const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Sign in to upload files." });
+  try { await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY }); }
+  catch { return res.status(401).json({ error: "Invalid session." }); }
+
   const KEY = process.env.ANTHROPIC_API_KEY;
   if (!KEY) return res.status(500).json({ error: "Server missing ANTHROPIC_API_KEY." });
 

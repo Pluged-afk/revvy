@@ -1,8 +1,13 @@
 import sql from "./db.js";
 
 // One-time provisioning: creates the profiles table and ensures the
-// clerk_user_id column exists. Hit GET /api/init-db once after deploy.
+// clerk_user_id column exists. Protected by INIT_DB_SECRET so it can't be
+// triggered anonymously — run: GET /api/init-db?secret=<INIT_DB_SECRET>.
+// Returns 404 without the secret so the endpoint isn't discoverable.
 export default async function handler(req, res) {
+  const secret = process.env.INIT_DB_SECRET;
+  const provided = (req.query && req.query.secret) || (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  if (!secret || provided !== secret) return res.status(404).json({ error: "Not found" });
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS profiles (
@@ -52,6 +57,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, message: "profiles + study_data + shared_quizzes tables ready" });
   } catch (e) {
     console.error("[init-db]", e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "Initialization failed." });
   }
 }

@@ -11,6 +11,8 @@
 // Requires ANTHROPIC_API_KEY in the server environment (Vercel → Settings →
 // Environment Variables — NOT prefixed with VITE_).
 
+import { verifyToken } from "@clerk/backend";
+
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
 export default async function handler(req, res) {
@@ -18,6 +20,14 @@ export default async function handler(req, res) {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: { message: "Method not allowed" } });
   }
+
+  // Require a signed-in user — this proxy spends the server's Anthropic key,
+  // so it must never be callable anonymously (client usage limits aren't a gate).
+  const authz = req.headers.authorization || "";
+  const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  if (!token) return res.status(401).json({ error: { message: "Sign in to use this feature." } });
+  try { await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY }); }
+  catch { return res.status(401).json({ error: { message: "Invalid session." } }); }
 
   const KEY = process.env.ANTHROPIC_API_KEY;
   if (!KEY) return res.status(500).json({ error: { message: "Server missing ANTHROPIC_API_KEY." } });

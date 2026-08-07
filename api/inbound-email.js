@@ -28,9 +28,14 @@ export default async function handler(req, res) {
 
   const raw = (await readRaw(req)).toString("utf8");
 
-  // Optional signature check — only enforced when a secret is configured.
+  // Signature is mandatory (fail closed): if the secret isn't configured, reject
+  // everything so this endpoint can't be abused as an open email relay.
   const secret = process.env.RESEND_WEBHOOK_SECRET;
-  if (secret && !verifySvix(secret, req.headers, raw)) {
+  if (!secret) {
+    console.error("[inbound] RESEND_WEBHOOK_SECRET not configured — rejecting");
+    return res.status(503).json({ error: "Inbound email not configured." });
+  }
+  if (!verifySvix(secret, req.headers, raw)) {
     console.error("[inbound] signature verification failed");
     return res.status(401).json({ error: "Invalid signature." });
   }
