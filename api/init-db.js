@@ -32,6 +32,9 @@ export default async function handler(req, res) {
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bonus_questions_remaining INTEGER DEFAULT 0`;
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ad_watches_today INTEGER DEFAULT 0`;
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_ad_reset_date DATE`;
+    // Mock-exam daily cap (Pro-only, account-tied).
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS mocks_used_today INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_mock_reset_date DATE`;
     await sql`CREATE INDEX IF NOT EXISTS profiles_clerk_idx ON profiles (clerk_user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS profiles_email_idx ON profiles (email)`;
     await sql`CREATE INDEX IF NOT EXISTS profiles_stripe_cust_idx ON profiles (stripe_customer_id)`;

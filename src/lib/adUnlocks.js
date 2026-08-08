@@ -19,12 +19,6 @@ const HOUR = 3600 * 1000;
 const EXAM_AD_DATE = "exam_ad_date";     // date the unlock ad was watched
 const EXAM_USED_DATE = "exam_used_date"; // date the free exam was generated
 
-// Standardized mock exams are Pro-only and expensive to generate (a full ACT is
-// ~215 questions), so Pro users get a generous per-day cap to bound cost.
-export const MOCK_DAILY_CAP = 2;
-const MOCK_DATE = "mock_used_date";      // date the count below applies to
-const MOCK_COUNT = "mock_used_count";    // mocks generated so far today
-
 export const UNLOCK_FEATURES = {
   flashcard:   { until: "flashcard_unlocked_until",   daily: false },
   fillinblank: { until: "fillinblank_unlocked_until", dateKey: "fillinblank_ad_used_date", daily: true },
@@ -126,22 +120,8 @@ export function useAdUnlocks(isPro) {
     setNow(Date.now());
   }, []);
 
-  // ── Mock exams (Pro): capped per day to bound generation cost ──
-  const mocksToday = useCallback(() => (getStr(MOCK_DATE) === today() ? getNum(MOCK_COUNT) : 0), [now]);
-  const mocksLeftToday = useCallback(() => Math.max(0, MOCK_DAILY_CAP - mocksToday()), [mocksToday]);
-  // Count one mock against today's allowance (call after a successful generation).
-  const consumeMock = useCallback(() => {
-    try {
-      const used = getStr(MOCK_DATE) === today() ? getNum(MOCK_COUNT) : 0;
-      localStorage.setItem(MOCK_DATE, today());
-      localStorage.setItem(MOCK_COUNT, String(used + 1));
-    } catch { /* ignore */ }
-    setNow(Date.now());
-  }, []);
-
   return {
     isUnlocked, canUnlock, usedToday, remainingMs, remainingLabel, unlock,
     examUnlocked, examCanWatch, examUsedToday, examWatchedToday, unlockExam, consumeExam,
-    mocksToday, mocksLeftToday, consumeMock, mockDailyCap: MOCK_DAILY_CAP,
   };
 }

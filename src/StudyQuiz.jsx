@@ -1323,7 +1323,7 @@ export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const { t, lang, setLang } = useLang(); // language control now lives inside the account panel
   const dev = useDev();
-  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack } = useAuth();
+  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack, consumeMock } = useAuth();
   // Expose Clerk's getToken to the module-level AI-proxy / upload helpers so
   // every request to /api/anthropic and /api/upload-file carries a bearer token.
   useEffect(() => { _getToken = getToken; return () => { _getToken = null; }; }, [getToken]);
@@ -1413,6 +1413,7 @@ export default function StudyQuiz() {
   // ── Standardized mock exams (ACT) — self-contained, per-section timed ──
   const [mockPresetId, setMockPresetId] = useState("act");
   const [mock, setMock] = useState(null);
+  const [mockTilt, setMockTilt] = useState("standard"); // one difficulty tilt for the whole form, reused per section
   const [mockSecIdx, setMockSecIdx] = useState(0);
   const [mockQIdx, setMockQIdx] = useState(0);
   const [mockAns, setMockAns] = useState([]); // [secIdx] => [selected index per question]
@@ -1441,12 +1442,28 @@ export default function StudyQuiz() {
   // Begin the next section from the between-section break — this is what starts
   // the next section's timer, so finishing one section never rolls straight into
   // the next with the clock already running.
-  const startNextSection = () => {
+  const startNextSection = async () => {
     if (!mock) return;
     const ni = mockSecIdx + 1;
     if (ni >= mock.sections.length) { setScreen("mock_results"); return; }
-    setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(mock.sections[ni].minutes * 60);
-    setScreen("mock_run");
+    // Already built (e.g. retry after a failed build) — just start it.
+    if (mock.sections[ni].questions.length) {
+      setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(mock.sections[ni].minutes * 60); setScreen("mock_run"); return;
+    }
+    // Build this section on demand — cheaper when a user stops early, and each
+    // generation is small and focused instead of all sections at once.
+    setMockGenErr(""); setScreen("mock_gen");
+    try {
+      const exam = getMock(mock.presetId) || MOCK_EXAMS[0];
+      const spec = exam.sections[ni];
+      const qs = await callMockSection(exam, spec, mockTilt);
+      if (!qs.length) throw new Error("section");
+      setMock(m => ({ ...m, sections: m.sections.map((s, i) => i === ni ? { ...s, questions: qs } : s) }));
+      setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(spec.minutes * 60);
+      setScreen("mock_run");
+    } catch {
+      setMockGenErr(t.mockSectionGenFail); setScreen("mock_break");
+    }
   };
   useEffect(() => { submitSectionRef.current = submitSection; }); // keep latest closure
   // Per-section countdown: one interval per section, auto-submits at 0.
@@ -2196,23 +2213,27 @@ export default function StudyQuiz() {
   const startMock = async () => {
     if (requireLogin()) return;
     if (!isPro) { setShowProModal(true); return; }
-    if (unlocks.mocksLeftToday() <= 0) { setMockGenErr(t.mockDailyLimit.replace("{n}", unlocks.mockDailyCap)); return; }
+    setMockGenErr("");
+    // Server-enforced, account-tied daily cap: atomically reserve one mock.
+    const cap = await consumeMock();
+    if (!cap || cap.allowed === false) { setMockGenErr(t.mockDailyLimit.replace("{n}", cap?.mock_daily_cap ?? 2)); return; }
     const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
-    setMockGenErr(""); setScreen("mock_gen");
+    setScreen("mock_gen");
     try {
-      // One difficulty tilt for the whole form (luck of the draw) — the learner
-      // can't choose it. Weighted: ~25% easier, ~50% standard, ~25% harder.
+      // One difficulty tilt for the whole form (luck of the draw), reused per
+      // section. Weighted: ~25% easier, ~50% standard, ~25% harder.
       const tilt = ["easier", "standard", "standard", "harder"][Math.floor(Math.random() * 4)];
-      const settled = await Promise.allSettled(exam.sections.map((s) => callMockSection(exam, s, tilt)));
-      const usable = exam.sections
-        .map((s, i) => ({ ...s, questions: settled[i].status === "fulfilled" ? settled[i].value : [] }))
-        .filter((s) => s.questions.length);
-      if (!usable.length) throw new Error("Couldn't generate the exam — please try again.");
+      setMockTilt(tilt);
+      // Build ONLY the first section now; the rest are built on demand as the
+      // user proceeds — faster start, and no cost for sections never reached.
+      const qs = await callMockSection(exam, exam.sections[0], tilt);
+      if (!qs.length) throw new Error("Couldn't generate the exam — please try again.");
       submittedSecRef.current = -1;
-      setMock({ presetId: exam.id, name: exam.name, scaleMin: exam.scaleMin, scaleMax: exam.scaleMax, sections: usable });
-      setMockSecIdx(0); setMockQIdx(0); setMockAns(usable.map(() => []));
-      setMockSecResults([]); setMockSecTimeLeft(usable[0].minutes * 60);
-      unlocks.consumeMock();   // count this mock against today's Pro allowance
+      setMock({ presetId: exam.id, name: exam.name, scaleMin: exam.scaleMin, scaleMax: exam.scaleMax,
+        sections: exam.sections.map((s, i) => ({ ...s, questions: i === 0 ? qs : [] })) });
+      setMockSecIdx(0); setMockQIdx(0);
+      setMockAns(exam.sections.map(() => []));
+      setMockSecResults([]); setMockSecTimeLeft(exam.sections[0].minutes * 60);
       setScreen("mock_run");
     } catch (e) {
       setMockGenErr(e.message || "Generation failed. Please try again.");
@@ -3371,7 +3392,7 @@ export default function StudyQuiz() {
           {isPro
             ? <button style={{...Sb.btnPrimary,width:"100%"}} onClick={startMock}>🎓 {t.mockStart}</button>
             : <button style={{...Sb.btnPrimary,width:"100%",background:"#f59e0b"}} onClick={()=>{if(requireLogin())return;setShowProModal(true);}}>⭐ {t.mockProOnly}</button>}
-          {isPro && <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>{t.mockLeftLabel.replace("{n}",unlocks.mocksLeftToday()).replace("{cap}",unlocks.mockDailyCap)}</p>}
+          {isPro && usage && <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>{t.mockLeftLabel.replace("{n}",usage.mocks_remaining ?? 2).replace("{cap}",usage.mock_daily_cap ?? 2)}</p>}
           <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:12,lineHeight:1.5}}>{t.mockDisclaimer}</p>
         </div>
         {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
@@ -3457,9 +3478,10 @@ export default function StudyQuiz() {
             <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"16px 18px",maxWidth:360,width:"100%",boxSizing:"border-box",marginBottom:20}}>
               <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:6}}>{t.mockUpNext}</div>
               <div style={{fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{next.name}</div>
-              <div style={{fontSize:12.5,color:"var(--color-text-secondary)",marginTop:4}}>{next.questions.length} {t.questionsLow} · {next.minutes} min</div>
+              <div style={{fontSize:12.5,color:"var(--color-text-secondary)",marginTop:4}}>{next.count} {t.questionsLow} · {next.minutes} min</div>
             </div>
           )}
+          {mockGenErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,maxWidth:360,width:"100%",boxSizing:"border-box"}}>⚠️ {mockGenErr}</div>}
           <button onClick={startNextSection} style={{...Sb.btnPrimary,maxWidth:360,width:"100%",margin:0}}>{t.mockStartNext}</button>
         </div>
       </div>
@@ -3491,7 +3513,7 @@ export default function StudyQuiz() {
             <button style={{...Sb.btnOutline,flex:1}} onClick={()=>setScreen("upload")}>{t.newMat}</button>
           </div>
           <p style={Sb.secLabel}>{t.review}</p>
-          {mock.sections.map((sec,si)=>(
+          {mock.sections.map((sec,si)=> sec.questions.length===0 ? null : (
             <div key={si}>
               <div style={{fontSize:12,fontWeight:700,color:"var(--color-text-secondary)",margin:"14px 0 8px",letterSpacing:0.3}}>{sec.name.toUpperCase()}</div>
               {sec.questions.map((q,i)=>{

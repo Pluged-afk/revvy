@@ -144,6 +144,23 @@ export function AuthProvider({ children }) {
     } catch (e) { return { allowed: false, error: e.message }; }
   }, [getToken]);
 
+  // Pro: reserve one of today's mock exams (server-enforced, account-tied).
+  // Returns { allowed, mocks_used_today, mock_daily_cap, ... }.
+  const consumeMock = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token) return { allowed: false, error: "Not signed in." };
+      const res = await fetch("/api/usage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "consume-mock" }),
+      });
+      const u = await res.json().catch(() => ({}));
+      if (u && typeof u.mocks_used_today === "number") setUsage(u);
+      return u;
+    } catch (e) { return { allowed: false, error: e.message }; } // fail-closed: don't generate a costly mock on error
+  }, [getToken]);
+
   // Pro users: buy a question pack (one-time). Redirects to Stripe Checkout.
   const buyPack = useCallback(async (pack) => {
     try {
@@ -225,7 +242,7 @@ export function AuthProvider({ children }) {
     user, isPro: effIsPro, loading: loading || !isLoaded,
     subStatus, subPlan, periodEnd, cancelAtPeriodEnd, getToken,
     signOut, deleteAccount, reauthenticate, setProStatus, refreshProfile, startCheckout, openPortal,
-    usage, refreshUsage, consumeQuestions, watchAd, buyPack,
+    usage, refreshUsage, consumeQuestions, watchAd, buyPack, consumeMock,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
