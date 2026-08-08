@@ -158,10 +158,11 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
-  // output and the proxy streams, so a high ceiling is safe; capped at 32k.
+  // output and the proxy streams, so a high ceiling is safe; capped at 48k.
   // max_tokens is a ceiling, not a charge — you're billed only for tokens
-  // actually generated.
-  const maxTokens = Math.min(Math.max(Math.round(numQ * 220) + 2000, 4000), 32000);
+  // actually generated. Generous per-question budget so a 100-question set
+  // never truncates mid-generation.
+  const maxTokens = Math.min(Math.max(Math.round(numQ * 260) + 3000, 4000), 48000);
 
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
@@ -171,7 +172,15 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
   });
   if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`Error ${res.status}`); }
   const raw = stripFences(await readStream(res));
-  return JSON.parse(raw);
+  try { return JSON.parse(raw); }
+  catch {
+    // Truncated on a big set (hit the token ceiling): salvage the questions that
+    // completed by closing the array + object after the last complete object,
+    // so the generate loop keeps a partial set instead of losing everything.
+    const cut = raw.lastIndexOf("}");
+    if (cut > 0) { try { return JSON.parse(raw.slice(0, cut + 1) + "]}"); } catch { /* fall through */ } }
+    throw new Error("Unexpected format");
+  }
 }
 
 // Read the streamed plain-text response from /api/anthropic into one string.
@@ -224,8 +233,8 @@ async function callMockSection(exam, section, tilt) {
     : tilt === "harder"
     ? "OVERALL DIFFICULTY: a harder form of this exam — lean toward more challenging questions with subtle, close distractors, as tough test forms are."
     : "OVERALL DIFFICULTY: an authentic exam form — span the full real range, from a few easy questions to several genuinely hard ones.";
-  const prompt = `You are writing a realistic ${exam.name} practice exam section for a student.
-SECTION: ${section.name}. Generate EXACTLY ${section.count} multiple-choice questions.
+  const prompt = `You are assembling a realistic ${exam.name} practice exam section that should feel indistinguishable from a genuine ${exam.name} form. Draw on your knowledge of actual ${exam.name} exams — real past papers and official practice tests — and produce a MIX of questions closely modeled on real ${exam.name} questions you know and new ones you write in the exact same style. Match the authentic topics, difficulty spread, phrasing, and question formats faithfully — don't invent an artificial style.
+SECTION: ${section.name}. Provide EXACTLY ${section.count} multiple-choice questions.
 ${section.instr}
 ${diff} Do NOT make every question the same difficulty — this is a real, un-adjustable test, so vary it like the actual exam.
 Each question needs: "question" (the full stem, with any passage/data/context written into it as text), "options" (an array of exactly ${nOpt} answer choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary the skills/topics across the section and make every distractor plausible.
@@ -1752,7 +1761,7 @@ export default function StudyQuiz() {
     }
 
     // Exams carry model answers/explanations → ~200 tokens/Q. Cap at 20k.
-    const maxTokens = Math.min(Math.max(Math.round(totalQ*200)+2000, 6000), 20000);
+    const maxTokens = Math.min(Math.max(Math.round(totalQ*260)+3000, 6000), 48000);
 
     // Build the prompt; `scale` (≤1) shrinks the question counts for a retry.
     const buildPrompt=(scale)=>{
@@ -1794,7 +1803,16 @@ export default function StudyQuiz() {
             system:"You are an expert exam setter. Return ONLY valid raw JSON, no markdown.",
             messages:[{role:"user",content:[...blocks,{type:"text",text:prompt}]}]})});
         if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||"Error "+res.status);}
-        return { parsed: JSON.parse(stripFences(await readStream(res))), marksMap };
+        const raw = stripFences(await readStream(res));
+        let parsed;
+        try { parsed = JSON.parse(raw); }
+        catch {
+          // Salvage a truncated big exam: close after the last complete question.
+          const cut = raw.lastIndexOf("}");
+          if (cut < 0) throw new Error("parse");
+          parsed = JSON.parse(raw.slice(0, cut + 1) + "]}");
+        }
+        return { parsed, marksMap };
       };
       let parsed, marksMap;
       try { ({ parsed, marksMap }=await attempt(1)); }
