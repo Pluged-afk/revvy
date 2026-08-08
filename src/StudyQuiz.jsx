@@ -2196,6 +2196,7 @@ export default function StudyQuiz() {
   const startMock = async () => {
     if (requireLogin()) return;
     if (!isPro) { setShowProModal(true); return; }
+    if (unlocks.mocksLeftToday() <= 0) { setMockGenErr(t.mockDailyLimit.replace("{n}", unlocks.mockDailyCap)); return; }
     const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
     setMockGenErr(""); setScreen("mock_gen");
     try {
@@ -2211,6 +2212,7 @@ export default function StudyQuiz() {
       setMock({ presetId: exam.id, name: exam.name, scaleMin: exam.scaleMin, scaleMax: exam.scaleMax, sections: usable });
       setMockSecIdx(0); setMockQIdx(0); setMockAns(usable.map(() => []));
       setMockSecResults([]); setMockSecTimeLeft(usable[0].minutes * 60);
+      unlocks.consumeMock();   // count this mock against today's Pro allowance
       setScreen("mock_run");
     } catch (e) {
       setMockGenErr(e.message || "Generation failed. Please try again.");
@@ -3369,6 +3371,7 @@ export default function StudyQuiz() {
           {isPro
             ? <button style={{...Sb.btnPrimary,width:"100%"}} onClick={startMock}>🎓 {t.mockStart}</button>
             : <button style={{...Sb.btnPrimary,width:"100%",background:"#f59e0b"}} onClick={()=>{if(requireLogin())return;setShowProModal(true);}}>⭐ {t.mockProOnly}</button>}
+          {isPro && <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>{t.mockLeftLabel.replace("{n}",unlocks.mocksLeftToday()).replace("{cap}",unlocks.mockDailyCap)}</p>}
           <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:12,lineHeight:1.5}}>{t.mockDisclaimer}</p>
         </div>
         {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
