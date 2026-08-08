@@ -228,11 +228,12 @@ async function callMockSection(exam, section, tilt) {
 SECTION: ${section.name}. Generate EXACTLY ${section.count} multiple-choice questions.
 ${section.instr}
 ${diff} Do NOT make every question the same difficulty — this is a real, un-adjustable test, so vary it like the actual exam.
-Each question needs: "question" (the full stem, with any passage/data/context written into it as text — no external images), "options" (an array of exactly ${nOpt} answer choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary the skills/topics across the section and make every distractor plausible.
+Each question needs: "question" (the full stem, with any passage/data/context written into it as text), "options" (an array of exactly ${nOpt} answer choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary the skills/topics across the section and make every distractor plausible.
+DIAGRAMS: when a question genuinely needs a figure to be answerable — a geometry diagram, a coordinate graph, a bar/line chart, a number line, or a labelled scientific figure — add an "svg" field containing a SELF-CONTAINED inline SVG that draws it accurately to the numbers in the question and is consistent with your correct answer. Use a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text> with clear labels and units, and SINGLE quotes for attributes (e.g. <circle cx='50' cy='50' r='40'/>) so the JSON stays valid. Never include <script>, event handlers, external images, links or fonts. Most questions need NO figure — omit "svg" entirely for those; never add a decorative one.
 CRITICAL — accuracy: for any question involving a calculation or data, work the answer out fully yourself FIRST, then set "correct" to the index of the option that exactly matches your computed result; double-check every calculation and unit. Every question must have exactly ONE clearly correct option, and its "explanation" must agree with that option. Discard any question you are not certain is correct.
-Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."}]}
+Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"...","svg":"OPTIONAL — an inline <svg>…</svg>, only when a figure is required"}]}
 The "questions" array MUST contain ${section.count} items.`;
-  const maxTokens = Math.min(section.count * 450 + 3000, 60000); // roomy — data questions run long
+  const maxTokens = Math.min(section.count * 500 + 4000, 64000); // roomy — data/diagram questions run long
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
     body: JSON.stringify({ model:AI_MODEL, max_tokens:maxTokens,
@@ -258,7 +259,16 @@ The "questions" array MUST contain ${section.count} items.`;
     q.options.every((o) => typeof o === "string" && o.trim().length) &&
     Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length &&
     String(q.explanation || "").length <= 400
-  );
+  ).map((q) => {
+    // Keep an optional figure only if it's a clean, self-contained <svg>. It is
+    // rendered inside an <img> data-URI (which can't run scripts) as defence in
+    // depth, and this strips anything scriptable before it ever gets there.
+    const s = typeof q.svg === "string" ? q.svg.trim() : "";
+    const safe = /^<svg[\s>]/i.test(s) && s.length < 8000 &&
+      !/<script|<foreignobject|\son\w+\s*=|javascript:/i.test(s);
+    const base = { question: q.question, options: q.options, correct: q.correct, explanation: q.explanation };
+    return safe ? { ...base, svg: s } : base;
+  });
 }
 
 function readText(f)   { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error("Read failed")); r.readAsText(f); }); }
@@ -1414,11 +1424,20 @@ export default function StudyQuiz() {
     setMockSecResults((prev) => { const n = [...prev]; n[mockSecIdx] = { sectionId: sec.id, name: sec.name, raw, count: sec.questions.length, scaled }; return n; });
     setShowMockSubmit(false);
     if (mockSecIdx + 1 < mock.sections.length) {
-      const ni = mockSecIdx + 1;
-      setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(mock.sections[ni].minutes * 60);
+      setScreen("mock_break");   // pause between sections; the next timer only starts from the break screen
     } else {
       setScreen("mock_results");
     }
+  };
+  // Begin the next section from the between-section break — this is what starts
+  // the next section's timer, so finishing one section never rolls straight into
+  // the next with the clock already running.
+  const startNextSection = () => {
+    if (!mock) return;
+    const ni = mockSecIdx + 1;
+    if (ni >= mock.sections.length) { setScreen("mock_results"); return; }
+    setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(mock.sections[ni].minutes * 60);
+    setScreen("mock_run");
   };
   useEffect(() => { submitSectionRef.current = submitSection; }); // keep latest closure
   // Per-section countdown: one interval per section, auto-submits at 0.
@@ -3369,6 +3388,7 @@ export default function StudyQuiz() {
         <div className="rv-center-narrow" style={{padding:"16px 16px 32px"}}>
           <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:10}}>{t.question} {mockQIdx+1} {t.outOf} {sec.questions.length}</div>
           <h3 style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:16.5,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.5,margin:0,whiteSpace:"pre-wrap"}}>{q.question}</h3>
+          {q.svg && <div style={{margin:"14px 0 2px",display:"flex",justifyContent:"center"}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.svg)} style={{maxWidth:"100%",maxHeight:300,background:"#fff",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)",padding:10,boxSizing:"border-box"}}/></div>}
           <div style={{display:"flex",flexDirection:"column",gap:9,marginTop:16}}>
             {q.options.map((opt,i)=>{
               const chosen = sel===i;
@@ -3398,6 +3418,29 @@ export default function StudyQuiz() {
             </div>
           </div>
         )}
+      </div>
+    );
+  }
+
+  // ── MOCK EXAM: rest between sections ──────────────────────────────
+  if (screen==="mock_break" && mock) {
+    const next = mock.sections[mockSecIdx+1];
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        <div className="rv-center-narrow" style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"40px 20px"}}>
+          <div style={{fontSize:52,marginBottom:12}}>☕</div>
+          <h2 style={{...Sb.h2,margin:"0 0 6px"}}>{t.mockBreakTitle}</h2>
+          <p style={{fontSize:14,color:"var(--color-text-secondary)",lineHeight:1.6,maxWidth:340,margin:"0 auto 6px"}}>{t.mockBreakSub}</p>
+          <div style={{fontSize:12,color:"var(--color-text-tertiary)",marginBottom:24}}>{t.mockSectionDone.replace("{n}",mockSecIdx+1).replace("{total}",mock.sections.length)}</div>
+          {next && (
+            <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"16px 18px",maxWidth:360,width:"100%",boxSizing:"border-box",marginBottom:20}}>
+              <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:6}}>{t.mockUpNext}</div>
+              <div style={{fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{next.name}</div>
+              <div style={{fontSize:12.5,color:"var(--color-text-secondary)",marginTop:4}}>{next.questions.length} {t.questionsLow} · {next.minutes} min</div>
+            </div>
+          )}
+          <button onClick={startNextSection} style={{...Sb.btnPrimary,maxWidth:360,width:"100%",margin:0}}>{t.mockStartNext}</button>
+        </div>
       </div>
     );
   }
