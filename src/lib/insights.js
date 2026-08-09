@@ -52,6 +52,21 @@ export function computeReadiness({ cards = [], stats = {}, plan = null } = {}) {
   return { score: Math.max(0, Math.min(100, score)), label };
 }
 
+// Per-topic mastery from the accumulated topic stats (seen + correct across all
+// quizzes and exams). Returns [{ topic, mastery 0–100, seen, correct, weak }]
+// sorted weakest-first. `weak` = enough attempts and still under the bar, i.e.
+// worth drilling.
+export function topicMastery(topicStats = {}, { minSeen = 4, weakBelow = 70 } = {}) {
+  const out = [];
+  for (const v of Object.values(topicStats || {})) {
+    const seen = v?.seen || 0;
+    if (seen < 1) continue;
+    const mastery = Math.round(((v.correct || 0) / seen) * 100);
+    out.push({ topic: (v.label || "").trim(), mastery, seen, correct: v.correct || 0, weak: seen >= minSeen && mastery < weakBelow });
+  }
+  return out.filter((t) => t.topic).sort((a, b) => a.mastery - b.mastery || b.seen - a.seen);
+}
+
 // Topics you're weakest on, from the review deck. A topic is weak when it has
 // unlearned or overdue cards; ranked by how many. Returns up to `limit`
 // {topic, weak, total}. Empty when there isn't enough tagged signal yet.

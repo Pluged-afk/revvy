@@ -46,5 +46,6 @@ export function useSRS() {
     removeCard: study?.removeCard || (() => {}),
     clearAll: study?.clearAll || (() => {}),
     examDate, setExamDate: study?.setExamDate || (() => {}), daysToExam,
+    topicStats: study?.topicStats || {}, recordTopics: study?.recordTopics || (() => {}),
   };
 }

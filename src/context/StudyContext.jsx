@@ -28,8 +28,9 @@ function normStats(s) {
   };
 }
 function emptyData() {
-  return { cards: [], examDate: null, stats: normStats({}), plans: [], updatedAt: 0 };
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, updatedAt: 0 };
 }
+const asTopicStats = (t) => (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
 
 // Load from the new blob, falling back to (and migrating) the pre-sync keys so
 // existing users keep their deck, streak and exam date.
@@ -41,6 +42,7 @@ function loadLocal() {
       examDate: blob.examDate || null,
       stats: normStats(blob.stats),
       plans: Array.isArray(blob.plans) ? blob.plans : [],
+      topicStats: asTopicStats(blob.topicStats),
       updatedAt: blob.updatedAt || 0,
     };
   }
@@ -50,6 +52,7 @@ function loadLocal() {
     examDate: safeParse(localStorage.getItem("revyy_srs_exam_date"), null),
     stats: normStats(safeParse(localStorage.getItem("revyy_stats_v1"), {})),
     plans: [],
+    topicStats: {},
     updatedAt: 0,
   };
 }
@@ -82,6 +85,11 @@ function mergeStudy(server, local) {
 
   const ss = normStats(server.stats), ls = normStats(local.stats);
   const laterActive = (ss.lastActive || "") >= (ls.lastActive || "") ? ss : ls;
+  // Topic stats: per topic keep the side with more attempts (avoids double-count).
+  const ts = { ...asTopicStats(server.topicStats) };
+  for (const [k, v] of Object.entries(asTopicStats(local.topicStats))) {
+    if (!ts[k] || (v.seen || 0) > (ts[k].seen || 0)) ts[k] = v;
+  }
   return {
     cards: [...byFront.values()],
     examDate: server.examDate || local.examDate || null,
@@ -93,6 +101,7 @@ function mergeStudy(server, local) {
       lastActive: laterActive.lastActive,
     },
     plans: [...byId.values()],
+    topicStats: ts,
     updatedAt: Date.now(),
   };
 }
@@ -227,6 +236,23 @@ export function StudyProvider({ children }) {
     });
   }, [commit]);
 
+  // Record per-topic outcomes (seen + correct) from a finished quiz/exam. Powers
+  // the mastery view and "drill weak spots". Ignores blank / "general" topics.
+  const recordTopics = useCallback((rows) => {
+    const clean = (rows || [])
+      .map((r) => ({ key: String(r.topic || "").trim().toLowerCase(), label: String(r.topic || "").trim(), correct: !!r.correct }))
+      .filter((r) => r.key && r.key !== "general");
+    if (!clean.length) return;
+    commit((p) => {
+      const ts = { ...asTopicStats(p.topicStats) };
+      for (const r of clean) {
+        const g = ts[r.key] || { label: r.label, seen: 0, correct: 0, lastSeen: 0 };
+        ts[r.key] = { label: g.label || r.label, seen: (g.seen || 0) + 1, correct: (g.correct || 0) + (r.correct ? 1 : 0), lastSeen: Date.now() };
+      }
+      return { ...p, topicStats: ts };
+    });
+  }, [commit]);
+
   // ── Study plans ──
   const savePlan = useCallback((plan) => {
     commit((p) => ({ ...p, plans: [...(p.plans || []).filter((x) => x.id !== plan.id), plan] }));
@@ -246,8 +272,8 @@ export function StudyProvider({ children }) {
   }, [commit]);
 
   const value = {
-    cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans,
-    addMissed, grade, removeCard, clearAll, setExamDate, recordSession,
+    cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans, topicStats: data.topicStats,
+    addMissed, grade, removeCard, clearAll, setExamDate, recordSession, recordTopics,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };
   return <StudyContext.Provider value={value}>{children}</StudyContext.Provider>;

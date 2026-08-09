@@ -11,7 +11,7 @@ import { useSRS, toCard } from "./lib/srs.js";
 import { useStudyStats } from "./lib/stats.js";
 import { usePlans } from "./context/StudyContext.jsx";
 import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, dayState } from "./lib/planner.js";
-import { computeReadiness, weakTopics } from "./lib/insights.js";
+import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scaledScore, compositeScore, compositeMax } from "./lib/mockExams.js";
 
 // ── Limits ────────────────────────────────────────────────────────────
@@ -1479,6 +1479,7 @@ export default function StudyQuiz() {
   const homePlan = sortedPlans.find(p=>!isPlanComplete(p)) || sortedPlans[0] || null;
   const activePlan = plans.find(p=>p.id===activePlanId) || homePlan;
   const topicsWeak = weakTopics(srs.cards); // weak areas from the review deck
+  const mastery = topicMastery(srs.topicStats); // per-topic mastery across all quizzes/exams
   // Best-effort browser reminder — fires only while Revyy is open in the tab
   // (real push arrives with the mobile app). Schedules the plan's reminder time.
   useEffect(() => {
@@ -1525,11 +1526,13 @@ export default function StudyQuiz() {
       const missed = quiz.questions.filter((_, i) => answers[i] && answers[i].isCorrect === false).map(toCard);
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
       stats.recordSession(answers.length, answers.filter((a) => a && a.isCorrect).length);
+      srs.recordTopics(quiz.questions.map((q, i) => ({ topic: q.topic, correct: answers[i]?.isCorrect === true })));
     } else if (screen === "exam_results" && examEvals && srsAddedRef.current !== examEvals) {
       srsAddedRef.current = examEvals;
       const missed = examQs.filter((_, i) => (examEvals[i]?.score ?? 0) < 1).map(toCard);
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
       stats.recordSession(examEvals.length, examEvals.filter((e) => (e?.score ?? 0) >= 1).length);
+      srs.recordTopics(examQs.map((q, i) => ({ topic: q.topic, correct: (examEvals[i]?.score ?? 0) >= 1 })));
     }
   }, [screen, quiz, answers, examEvals, examQs, srs, stats]);
   // ── Exam timer ──
@@ -2142,6 +2145,44 @@ export default function StudyQuiz() {
     }
   },[isPro,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,requireLogin]);
 
+  // Generate a fresh MCQ quiz focused on the topics the learner is weakest on —
+  // no upload needed. Uses accumulated topic mastery + sample missed questions to
+  // steer the model (and avoid repeating ones they've already seen).
+  const drillWeakSpots = useCallback(async () => {
+    if (requireLogin()) return;
+    const ranked = topicMastery(srs.topicStats);
+    const picks = (ranked.filter(t => t.weak).length ? ranked.filter(t => t.weak) : ranked).slice(0, 6);
+    if (!picks.length) return;
+    const n = 10;
+    setError(""); setLimitHit(false);
+    const consumed = await consumeQuestions(n);
+    if (consumed && consumed.allowed === false) {
+      setLimitHit(true);
+      setError(isPro ? `Daily limit reached — grab a question pack for more.` : `Daily question limit reached. Watch an ad for +10, buy a question pack, or upgrade to Pro.`);
+      setScreen("upload"); return; // upload screen shows the error + pack/ad options
+    }
+    setScreen("loading");
+    try {
+      const keys = new Set(picks.map(x => x.topic.toLowerCase()));
+      const samples = (srs.cards || []).filter(c => keys.has(String(c.topic || "").toLowerCase())).slice(0, 12).map(c => c.front);
+      const material = `The student is weak on these topics: ${picks.map(x => x.topic).join(", ")}.\nWrite fresh multiple-choice practice questions spread across these topics that genuinely test understanding, not just recall.${samples.length ? `\nDo NOT reuse these exact questions they have already seen:\n- ${samples.join("\n- ")}` : ""}`;
+      const blocks = [{ type: "text", text: material }];
+      let res = null, lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let r = null;
+        try { r = await callClaude({ blocks, numQ: n, diff, type: "mcq", uiLangName: LANGS[lang]?.name }); } catch (e1) { lastErr = e1; }
+        if (r?.questions?.length) { if (!res || r.questions.length > res.questions.length) res = r; if (res.questions.length >= n) break; }
+      }
+      if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
+      setQuiz({ ...res, type: "mcq" });
+      setQIdx(0); setAnswers([]); setSelected(null);
+      setScreen("quiz");
+    } catch (err) {
+      setError(err.message.includes("parse") ? t.errAiFormat : err.message);
+      setScreen("upload");
+    }
+  }, [requireLogin, srs.topicStats, srs.cards, consumeQuestions, diff, lang, t, isPro]);
+
   const pick    = i => { if(selected===null){ setSelected(i); haptic(); } };
   const nextQ   = (isCorrect, detail) => {
     // `detail` carries what the learner picked (e.g. {selected} for MCQ) so the
@@ -2311,11 +2352,32 @@ export default function StudyQuiz() {
               style={{border:"0.5px solid var(--color-border-secondary)",borderRadius:8,padding:"5px 8px",fontSize:12,fontFamily:"inherit",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",outline:"none",colorScheme:srs.dueCount>0?"dark":"light"}}/>
           </div>
         </div>
-        {/* Weak-topic nudge — from the review deck */}
-        {topicsWeak.length>0 && (
-          <div style={{display:"flex",alignItems:"center",gap:10,background:"#fff7ed",border:"0.5px solid #fed7aa",borderRadius:12,padding:"10px 14px",marginBottom:18}}>
-            <span style={{fontSize:16,flexShrink:0}}>🎯</span>
-            <div style={{flex:1,fontSize:12,color:"#9a3412",lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis"}}>{t.weakestLabel}: <strong>{topicsWeak.map(x=>x.label).join(", ")}</strong></div>
+        {/* Topic mastery — per-topic strength across all quizzes/exams, with a
+            one-tap drill on the weakest topics (no upload needed). */}
+        {mastery.length>0 && (
+          <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+              <span style={{fontSize:22,flexShrink:0}}>📊</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.masteryTitle}</div>
+                <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.masterySub}</div>
+              </div>
+            </div>
+            {mastery.slice(0,4).map((tp,i)=>{
+              const col = tp.mastery>=70?"#16a34a":tp.mastery>=40?"#f59e0b":"#dc2626";
+              return (
+                <div key={i} style={{marginBottom:9}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginBottom:3,gap:8}}>
+                    <span style={{color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tp.topic}</span>
+                    <span style={{fontWeight:700,color:col,flexShrink:0}}>{tp.mastery}%</span>
+                  </div>
+                  <div style={{height:6,borderRadius:6,background:"var(--color-background-secondary)",overflow:"hidden"}}>
+                    <div style={{height:"100%",width:tp.mastery+"%",background:col,borderRadius:6,transition:"width 0.3s"}}/>
+                  </div>
+                </div>
+              );
+            })}
+            {mastery.some(t=>t.weak) && <button onClick={drillWeakSpots} style={{...Sb.btnPrimary,width:"100%",marginTop:6,fontSize:13}}>🎯 {t.drillWeak}</button>}
           </div>
         )}
         {/* AI Study Coach — day-by-day exam plan */}
