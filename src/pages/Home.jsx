@@ -25,11 +25,13 @@ const QUIZ_EXAMPLES = [
     options: ["Treaty of Versailles", "Treaty of Tordesillas", "Congress of Vienna", "Treaty of Ghent"],
   },
   {
-    subject: "Chemistry", progress: "Question 8 of 10", pct: 80, answered: true, correct: 1,
+    // A missed answer, to show the correction: your pick marked wrong, the
+    // right answer revealed, with an explanation of why.
+    subject: "Chemistry", progress: "Question 8 of 10", pct: 80, answered: true, correct: 1, chosen: 2,
     pills: ["Easy", "Multiple choice"],
     q: "What is the pH of a neutral aqueous solution at 25 °C?",
     options: ["0", "7", "14", "1"],
-    explanation: "At 25 °C pure water has equal concentrations of H+ and OH- ions, which corresponds to a neutral pH of exactly 7.",
+    explanation: "A pH of 14 is strongly basic. A neutral solution has equal H+ and OH- concentrations, which at 25 °C gives a pH of exactly 7.",
   },
 ];
 
@@ -72,18 +74,29 @@ function QuizCarousel() {
               <div className="qpills">{ex.pills.map((p) => <span className="qpill" key={p}>{p}</span>)}</div>
               <h3 className="qq">{ex.q}</h3>
               {ex.options.map((opt, oi) => {
-                const correct = ex.answered && oi === ex.correct;
+                let cls = "qopt", mark = null;
+                if (ex.answered) {
+                  if (oi === ex.correct) { cls += " correct"; mark = "✓"; }
+                  else if (oi === ex.chosen) { cls += " wrong"; mark = "✗"; }
+                  else cls += " faded";
+                }
                 return (
-                  <div className={"qopt" + (correct ? " correct" : "")} key={oi}>
+                  <div className={cls} key={oi}>
                     <span className="k">{LETTERS[oi]}</span>
                     <span className="lbl">{opt}</span>
-                    {correct && <span className="tick">✓</span>}
+                    {mark && <span className="tick">{mark}</span>}
                   </div>
                 );
               })}
-              {ex.answered && (
-                <div className="qexpl"><b>Correct</b><p>{ex.explanation}</p></div>
-              )}
+              {ex.answered && (() => {
+                const missed = ex.chosen != null && ex.chosen !== ex.correct;
+                return (
+                  <div className={"qexpl" + (missed ? " wrong" : "")}>
+                    <b>{missed ? "Not quite" : "Correct"}</b>
+                    <p>{ex.explanation}</p>
+                  </div>
+                );
+              })()}
               <div className={"qnext" + (ex.answered ? "" : " off")}>
                 {ex.answered ? "Next question" : "Select an answer"}
               </div>

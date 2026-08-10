@@ -173,15 +173,20 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 .qopt .tick { margin-left: auto; font-size: 13px; }
 .qopt.correct { border-color: #22c55e; background: #f0fdf4; color: #15803d; }
 .qopt.correct .k { background: #16a34a; color: #fff; }
+.qopt.wrong { border-color: #ef4444; background: #fef2f2; color: #b91c1c; }
+.qopt.wrong .k { background: #dc2626; color: #fff; }
+.qopt.faded { opacity: 0.5; }
 .qexpl { border-radius: 10px; padding: 11px 13px; margin-top: 4px; background: #f0fdf4; border: 0.5px solid #86efac; color: #15803d; }
 .qexpl b { font-size: 13px; }
 .qexpl p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: #3f6d52; }
+.qexpl.wrong { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
+.qexpl.wrong p { color: #9c3b2e; }
 .qnext { width: 100%; margin-top: 16px; border: none; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600; font-family: 'Fraunces', Georgia, serif; color: #fff; background: var(--indigo); }
 .qnext.off { background: var(--paper-3); color: var(--faint); }
-.qnav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; }
-.qarrow { width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color .15s, background .15s; }
-.qarrow:hover { border-color: var(--ink); background: var(--paper-2); }
-.qarrow:active { transform: scale(0.94); }
+.qnav { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; }
+.qarrow { width: 30px; height: 30px; flex-shrink: 0; border: none; border-radius: 50%; background: none; color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: color .15s, background .15s; }
+.qarrow:hover { color: var(--ink); background: var(--paper-2); }
+.qarrow:active { transform: scale(0.9); }
 .qdots { display: flex; gap: 7px; justify-content: center; align-items: center; }
 .qdots button { width: 8px; height: 8px; padding: 0; border: none; border-radius: 50%; background: #d9d0be; cursor: pointer; transition: width .2s, background .2s; }
 .qdots button.on { background: var(--clay); width: 20px; border-radius: 4px; }
