@@ -107,6 +107,31 @@ const PATHS = {
     </>
   ),
   chevron: <path d="M9.5 5.5l6.5 6.5-6.5 6.5" />,
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2.4M12 19.1v2.4M4.4 4.4l1.7 1.7M17.9 17.9l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.4 19.6l1.7-1.7M17.9 6.1l1.7-1.7" />
+    </>
+  ),
+  moon: <path d="M20 14.6A8.5 8.5 0 1 1 9.4 4 6.7 6.7 0 0 0 20 14.6z" />,
+  chart: (
+    <>
+      <path d="M3.5 20.5h17" />
+      <path d="M7 20.5v-6.5M12 20.5V8.5M17 20.5v-9.5" />
+    </>
+  ),
+  compass: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M15.6 8.4l-2.3 4.9-4.9 2.3 2.3-4.9z" />
+    </>
+  ),
+  target: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="3.6" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 24, stroke = 1.6, className, style }) {

@@ -13,6 +13,12 @@ import { usePlans } from "./context/StudyContext.jsx";
 import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, dayState } from "./lib/planner.js";
 import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scaledScore, compositeScore, compositeMax } from "./lib/mockExams.js";
+import Icon from "./components/Icon.jsx";
+
+// Clean line icons for the home "what you can upload" grid, matched to the
+// fixed feature order (PDF, Images, Text, Quiz types, Explanations, Languages)
+// so we don't depend on the emoji stored in the translation data.
+const FEAT_ICONS = ["notes", "camera", "pencil", "layers", "chat", "globe"];
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
@@ -1694,6 +1700,13 @@ export default function StudyQuiz() {
     });
   };
 
+  // Live light/dark toggle (also reachable without an account, since full
+  // settings are behind sign-in). Resolves "system" to the OS preference.
+  const isDarkTheme = settings.theme==="dark"
+    || (settings.theme!=="light" && typeof window!=="undefined" && window.matchMedia
+        && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const toggleTheme = () => updateSetting("theme", isDarkTheme ? "light" : "dark");
+
   // ── Feature access (free users unlock via 1-hour ad windows) ─────────
   const QTYPE_FEATURE = { cards:"flashcard", fill:"fillinblank", match:"matchterms" };
   const canUseQType = useCallback((type) => type==="mcq" || isPro || unlocks.isUnlocked(QTYPE_FEATURE[type]), [isPro, unlocks]);
@@ -2341,6 +2354,10 @@ export default function StudyQuiz() {
               {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
               <DevBadge/></span>
             <div className="rv-hero-tools">
+              <button onClick={toggleTheme} title={isDarkTheme?"Light mode":"Dark mode"} aria-label="Toggle dark mode"
+                style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,0.16)",border:"1.5px solid rgba(255,255,255,0.35)",color:"#fff",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <Icon name={isDarkTheme?"sun":"moon"} size={17}/>
+              </button>
               {user ? (
                 <button onClick={()=>openSettings()} title={t.accountLbl} aria-label={t.accountLbl}
                   style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,0.16)",border:"1.5px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -2361,7 +2378,7 @@ export default function StudyQuiz() {
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
         <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4338ca,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 16px rgba(67,56,202,0.3)":"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <span style={{fontSize:24,flexShrink:0}}>🔁</span>
+            <span style={{flexShrink:0,display:"flex",color:srs.dueCount>0?"#fff":"#4338ca"}}><Icon name="repeat" size={23}/></span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:14,color:srs.dueCount>0?"#fff":"var(--color-text-primary)"}}>{t.srsTitle}</div>
               <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:srs.dueCount>0?"rgba(255,255,255,0.85)":"var(--color-text-secondary)"}}>
@@ -2388,7 +2405,7 @@ export default function StudyQuiz() {
         {mastery.length>0 && (
           <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-              <span style={{fontSize:22,flexShrink:0}}>📊</span>
+              <span style={{flexShrink:0,display:"flex",color:"#4338ca"}}><Icon name="chart" size={21}/></span>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.masteryTitle}</div>
                 <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.masterySub}</div>
@@ -2408,14 +2425,14 @@ export default function StudyQuiz() {
                 </div>
               );
             })}
-            {mastery.some(t=>t.weak) && <button onClick={drillWeakSpots} style={{...Sb.btnPrimary,width:"100%",marginTop:6,fontSize:13}}>🎯 {t.drillWeak}</button>}
+            {mastery.some(t=>t.weak) && <button onClick={drillWeakSpots} style={{...Sb.btnPrimary,width:"100%",marginTop:6,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="target" size={15}/>{t.drillWeak}</button>}
           </div>
         )}
         {/* AI Study Coach, day-by-day exam plan */}
         {!homePlan ? (
           <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <span style={{fontSize:24,flexShrink:0}}>🧭</span>
+              <span style={{flexShrink:0,display:"flex",color:"#4338ca"}}><Icon name="compass" size={23}/></span>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.coachTitle}</div>
                 <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.coachTagline}</div>
@@ -2434,7 +2451,7 @@ export default function StudyQuiz() {
           return (
             <div style={{background:due?"linear-gradient(135deg,#4338ca,#6366f1)":"var(--color-background-primary)",border:due?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:due?"0 4px 16px rgba(67,56,202,0.3)":"none"}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <span style={{fontSize:24,flexShrink:0}}>🧭</span>
+                <span style={{flexShrink:0,display:"flex",color:due?"#fff":"#4338ca"}}><Icon name="compass" size={23}/></span>
                 <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>{setActivePlanId(homePlan.id);setConfirmDelPlan(false);setScreen("plan");}}>
                   <div style={{fontWeight:700,fontSize:14,color:due?"#fff":"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{homePlan.title}</div>
                   <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:due?"rgba(255,255,255,0.85)":"var(--color-text-secondary)"}}>
@@ -2456,9 +2473,9 @@ export default function StudyQuiz() {
         })()}
         <p style={Sb.secLabel}>{t.whatUpload}</p>
         <div className="rv-feat-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
-          {[...t.features.filter(([icon])=>icon!=="🔗"), t.langFeature].map(([icon,title,sub],i)=>(
+          {[...t.features.filter(([icon])=>icon!=="🔗"), t.langFeature].map(([,title,sub],i)=>(
             <div key={i} style={Sb.fCard}>
-              <span style={{fontSize:22}}>{icon}</span>
+              <span style={{width:34,height:34,borderRadius:9,background:"var(--color-sel-tint)",color:"#4338ca",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:2}}><Icon name={FEAT_ICONS[i]||"notes"} size={19}/></span>
               <span style={{fontSize:13,fontWeight:600,color:"var(--color-text-primary)"}}>{title}</span>
               <span style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.4}}>{sub}</span>
             </div>
@@ -2476,7 +2493,7 @@ export default function StudyQuiz() {
           )}
           <div style={{...Sb.planCard,border:"2px solid #f59e0b",background:"#fffbeb",position:"relative",overflow:"hidden"}}>
             <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,#f59e0b,#fbbf24)"}}/>
-            <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:"#92400e"}}>✦ {t.proLabel}</div>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:"#92400e",display:"inline-flex",alignItems:"center",gap:5}}><Icon name="spark" size={13}/>{t.proLabel}</div>
             <div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:4}}>{t.proPrice}</div>
             <div style={{fontSize:11,color:"#78350f",lineHeight:1.7}}>{t.proDesc}</div>
             {isPro ? (
@@ -2507,6 +2524,7 @@ export default function StudyQuiz() {
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           {isPro && <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"2px 7px",fontWeight:700}}>PRO</span>}
           <button onClick={()=>setSoundOn(s=>!s)} title={soundOn?t.soundOn:t.soundOff} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",opacity:soundOn?1:0.4}}>{soundOn?"🔊":"🔇"}</button>
+          <button onClick={toggleTheme} title={isDarkTheme?"Light mode":"Dark mode"} aria-label="Toggle dark mode" style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",color:"var(--color-text-secondary)",display:"flex",alignItems:"center"}}><Icon name={isDarkTheme?"sun":"moon"} size={16}/></button>
           <button onClick={()=>openSettings()} title={t.set.title} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",color:"var(--color-text-secondary)"}}>⚙️</button>
         </div>
       </div>
