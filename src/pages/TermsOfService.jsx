@@ -2,12 +2,12 @@ import { Link } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
 
 export default function TermsOfService() {
-  usePageMeta("Terms of Service — Revyy", "The terms that govern your use of Revyy.");
+  usePageMeta("Terms of Service · Revyy", "The terms that govern your use of Revyy.");
   return (
     <section className="section">
       <div className="container legal">
         <h1>Terms of Service</h1>
-        <p className="updated">Last updated: January 2025</p>
+        <p className="updated">Last updated: August 2026</p>
 
         <p>
           These Terms of Service ("Terms") govern your use of Revyy. By accessing or using the
@@ -25,8 +25,8 @@ export default function TermsOfService() {
 
         <h2>2. Free and Pro plans</h2>
         <ul>
-          <li><strong>Free plan</strong> — includes a limited number of questions per day and a subset of features, available at no cost.</li>
-          <li><strong>Pro plan</strong> — a paid subscription with a higher daily question allowance, all quiz types, Exam Mode and an ad-free experience.</li>
+          <li><strong>Free plan:</strong> a limited number of questions per day and a subset of features, available at no cost.</li>
+          <li><strong>Pro plan:</strong> a paid subscription with a higher daily question allowance, all quiz types, exam mode and an ad-free experience.</li>
           <li>We may adjust plan limits or features over time, with notice of material changes where reasonable.</li>
         </ul>
 

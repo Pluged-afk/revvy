@@ -1,36 +1,41 @@
 import { Link } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
 import AdSlot from "../components/AdSlot.jsx";
+import Icon from "../components/Icon.jsx";
 
 const VALUES = [
-  { icon: "🎓", title: "Student First", desc: "Every feature is built around real study needs — not buzzwords or busywork." },
-  { icon: "🔒", title: "Privacy Focused", desc: "Your data stays yours. We don't sell it, and we don't keep your uploaded files." },
-  { icon: "⚡", title: "Constantly Improving", desc: "New quiz types, languages and improvements ship almost every week." },
+  { icon: "check", title: "Students first", desc: "Every feature comes from a real study problem, not a buzzword or busywork." },
+  { icon: "lock", title: "Privacy by default", desc: "Your data stays yours. We do not sell it, and we do not keep the files you upload." },
+  { icon: "bolt", title: "Always improving", desc: "New quiz types, languages and fixes ship most weeks. If something is off, it usually gets sorted quickly." },
 ];
 
 export default function About() {
-  usePageMeta("About — Revyy", "Revyy started as a personal tool to get ready for exams — built to test yourself before the real thing.");
+  usePageMeta(
+    "About Revyy",
+    "Revyy started as one student's tool for getting ready for exams: a fast way to test yourself on your own notes before the real thing."
+  );
   return (
     <>
-      <section className="hero" style={{ padding: "84px 0 90px" }}>
+      <section className="hero" style={{ padding: "72px 0 32px" }}>
         <div className="container">
           <span className="eyebrow">About</span>
           <h1>Built by a student, for students</h1>
-          <p className="hero-sub">Revyy started as a personal tool to get ready for exams — built to test yourself before the real thing.</p>
+          <p className="hero-sub">Revyy started as a personal tool for getting ready for exams: a way to test yourself on your own notes before the real thing.</p>
         </div>
       </section>
 
       <section className="section">
         <div className="container prose">
           <p className="lead">
-            Revyy was built out of frustration with boring study methods. I wanted a
-            tool that could take any material and instantly make it interactive — so I built it.
+            Revyy came out of frustration with study methods that felt productive but never
+            actually worked. I wanted something that could take any material and turn it into
+            practice on the spot, so I built it.
           </p>
           <p>
-            Re-reading notes and highlighting textbooks felt productive but never stuck.
-            What actually worked was testing myself — but making good practice questions by
-            hand took hours I didn't have. Revyy closes that gap: drop in your material and
-            get a focused, accurate quiz in seconds, so you can spend your time practising
+            Rereading notes and highlighting textbooks felt like studying, but almost none of it
+            stuck. What worked was testing myself. The catch was that writing good practice
+            questions by hand took hours I did not have. Revyy closes that gap. Drop in your
+            material and get a focused, accurate quiz in seconds, so your time goes on practising
             instead of preparing to practise.
           </p>
         </div>
@@ -38,15 +43,15 @@ export default function About() {
 
       <section className="section section-soft">
         <div className="container">
-          <div className="section-head">
-            <div className="section-label">Our mission</div>
-            <h2>Studying that's faster, smarter, and actually enjoyable</h2>
-            <p>Our mission is to make studying faster, smarter, and actually enjoyable for every student.</p>
+          <div className="section-head center">
+            <div className="section-label">What we care about</div>
+            <h2>Study time that goes further</h2>
+            <p>The goal is simple: spend less time getting ready to study, and more time actually learning.</p>
           </div>
           <div className="grid grid-3">
             {VALUES.map((v) => (
               <div key={v.title} className="card">
-                <div className="card-icon">{v.icon}</div>
+                <div className="card-icon"><Icon name={v.icon} size={26} stroke={1.5} /></div>
                 <h3>{v.title}</h3>
                 <p>{v.desc}</p>
               </div>
@@ -60,7 +65,7 @@ export default function About() {
       <section className="section">
         <div className="container">
           <div className="section-head">
-            <div className="section-label">The founder</div>
+            <div className="section-label">The person behind it</div>
             <h2>Meet the maker</h2>
           </div>
           <div className="founder">
@@ -68,7 +73,7 @@ export default function About() {
               <span>P</span>
               <img
                 src="/plug.jpg"
-                alt="Plug"
+                alt="Plug, the creator of Revyy"
                 onError={(e) => {
                   console.error("[About] founder avatar failed to load:", e.currentTarget.src);
                   e.currentTarget.remove();   // reveal the "P" fallback behind it
@@ -77,16 +82,16 @@ export default function About() {
             </div>
             <div>
               <h3>Plug</h3>
-              <div className="role">Creator &amp; Student</div>
+              <div className="role">Creator and student</div>
               <p>
-                I always wanted a way to assess and test myself before sitting the real exam — so
-                I built Revyy to do exactly that. I'm constantly updating it and making sure it
-                works great. If you have any suggestions or run into any issues, feel free to reach out.
+                I always wanted a way to test myself before sitting the real exam, so I built Revyy
+                to do exactly that. I keep updating it and making sure it works well. If you have a
+                suggestion or run into a problem, please reach out. I read everything.
               </p>
             </div>
           </div>
           <div style={{ textAlign: "center", marginTop: 40 }}>
-            <Link to="/app" className="btn btn-primary btn-lg">Try Revyy Free →</Link>
+            <Link to="/app" className="btn btn-primary btn-lg">Try Revyy free <Icon name="arrow" size={18} /></Link>
           </div>
         </div>
       </section>

@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
 import AdSlot from "../components/AdSlot.jsx";
-import { getPost, POSTS } from "../data/posts.js";
+import Icon from "../components/Icon.jsx";
+import { getPost, readTime, POSTS } from "../data/posts.js";
 
 const SITE = "https://revyy.app";
 
@@ -24,7 +25,7 @@ function useArticleJsonLd(post) {
           "datePublished": post.date,
           "dateModified": post.date,
           "image": `${SITE}/og-image.svg`,
-          "author": { "@type": "Organization", "name": "Revyy", "url": SITE },
+          "author": { "@type": "Person", "name": "Plug", "url": `${SITE}/about` },
           "publisher": {
             "@type": "Organization",
             "name": "Revyy",
@@ -73,8 +74,8 @@ export default function BlogPost() {
   const post = getPost(slug);
 
   usePageMeta(
-    post ? `${post.title} — Revyy` : "Article not found — Revyy",
-    post ? post.description : "The article you're looking for could not be found."
+    post ? `${post.title} · Revyy` : "Article not found · Revyy",
+    post ? post.description : "The article you are looking for could not be found."
   );
   useArticleJsonLd(post);
 
@@ -83,8 +84,8 @@ export default function BlogPost() {
       <section className="section">
         <div className="container prose" style={{ textAlign: "center" }}>
           <h1>Article not found</h1>
-          <p>We couldn't find that article. It may have moved or been removed.</p>
-          <Link to="/blog" className="btn btn-primary">← Back to the blog</Link>
+          <p>We could not find that article. It may have moved or been removed.</p>
+          <Link to="/blog" className="btn btn-primary">Back to the blog</Link>
         </div>
       </section>
     );
@@ -95,23 +96,28 @@ export default function BlogPost() {
 
   return (
     <>
-      <article className="section">
-        <div className="container prose">
-          <div style={{ marginBottom: 18 }}>
-            <Link to="/blog" className="link-arrow">← All articles</Link>
+      <article className="section section-tight">
+        <div className="container article">
+          <div style={{ marginBottom: 20 }}>
+            <Link to="/blog" className="link-arrow" style={{ color: "var(--muted)" }}>All articles</Link>
           </div>
-          <div className="section-label" style={{ marginBottom: 12 }}>
-            {fmtDate(post.date)} · {post.readMins} min read
+          <div className="article-meta">
+            <span>{fmtDate(post.date)}</span>
+            <span aria-hidden="true">·</span>
+            <span>{readTime(post)} min read</span>
+            <span aria-hidden="true">·</span>
+            <span className="byline">by Plug</span>
           </div>
           <h1>{post.title}</h1>
           <p className="lead">{post.description}</p>
+          <hr className="divider" />
 
           {post.body.map((block, i) => (
             <Block key={i} block={block} />
           ))}
 
-          <div style={{ marginTop: 44, textAlign: "center" }}>
-            <Link to="/app" className="btn btn-primary btn-lg">Turn your notes into a quiz →</Link>
+          <div style={{ marginTop: 40 }}>
+            <Link to="/app" className="btn btn-primary btn-lg">Turn your notes into a quiz <Icon name="arrow" size={18} /></Link>
           </div>
         </div>
       </article>
@@ -121,15 +127,16 @@ export default function BlogPost() {
       <section className="section section-soft">
         <div className="container">
           <div className="section-head">
-            <h2>Keep reading</h2>
+            <div className="section-label">Read next</div>
+            <h2>More on studying well</h2>
           </div>
-          <div className="grid grid-3">
+          <div className="more-grid">
             {more.map((p) => (
-              <Link key={p.slug} to={`/blog/${p.slug}`} className="card" style={{ textDecoration: "none" }}>
-                <div className="section-label" style={{ marginBottom: 10 }}>{p.readMins} min read</div>
+              <Link key={p.slug} to={`/blog/${p.slug}`} className="card" style={{ textDecoration: "none", display: "flex", flexDirection: "column" }}>
+                <div className="meta" style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>{readTime(p)} min read</div>
                 <h3>{p.title}</h3>
-                <p>{p.description}</p>
-                <span className="link-arrow" style={{ marginTop: "auto" }}>Read more →</span>
+                <p style={{ marginBottom: 12 }}>{p.description}</p>
+                <span className="link-arrow" style={{ marginTop: "auto" }}>Read the article <Icon name="arrow" size={16} /></span>
               </Link>
             ))}
           </div>

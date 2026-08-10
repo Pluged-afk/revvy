@@ -8,8 +8,8 @@ export default function Footer() {
         <div className="footer-top">
           <div className="footer-brand">
             <span className="nav-logo"><RevyyMark /> Revyy</span>
-            <p>Your AI exam-prep coach. Turn any material into quizzes and mock exams, then review your weak spots until exam day.</p>
-            <div className="footer-tagline">Built with ❤️ for students everywhere</div>
+            <p>Revyy turns your own notes into quizzes and mock exams, then keeps bringing back whatever you get wrong until exam day.</p>
+            <div className="footer-tagline">A small tool made to make revision less of a slog.</div>
           </div>
 
           <div className="footer-col">

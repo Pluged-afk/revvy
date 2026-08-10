@@ -1,40 +1,39 @@
 import { Link } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
 import AdSlot from "../components/AdSlot.jsx";
-import { POSTS } from "../data/posts.js";
+import Icon from "../components/Icon.jsx";
+import { POSTS, readTime } from "../data/posts.js";
 
 const fmtDate = (iso) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
 export default function Blog() {
   usePageMeta(
-    "Study Guides & Revision Tips — Revyy Blog",
-    "Evidence-based study techniques, revision strategies and exam tips to help you learn more in less time."
+    "Study Guides and Revision Tips: The Revyy Blog",
+    "Practical, evidence-based study techniques, revision strategies and exam tips to help you learn more in less time."
   );
   return (
     <>
-      <section className="hero" style={{ padding: "84px 0 70px" }}>
+      <section className="hero" style={{ padding: "72px 0 28px" }}>
         <div className="container">
-          <span className="eyebrow">Blog</span>
-          <h1>Study smarter, not longer</h1>
+          <span className="eyebrow">The blog</span>
+          <h1>Notes on studying that actually works</h1>
           <p className="hero-sub">
-            Evidence-based study techniques, revision strategies and exam tips — written to help
-            you learn more in less time.
+            Short, practical write-ups on the study methods with real evidence behind them, and how
+            to fit them into a normal week of revision.
           </p>
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section-tight">
         <div className="container">
-          <div className="grid grid-3">
+          <div className="post-list">
             {POSTS.map((p) => (
-              <Link key={p.slug} to={`/blog/${p.slug}`} className="card" style={{ textDecoration: "none" }}>
-                <div className="section-label" style={{ marginBottom: 10 }}>
-                  {fmtDate(p.date)} · {p.readMins} min read
-                </div>
-                <h3>{p.title}</h3>
+              <Link key={p.slug} to={`/blog/${p.slug}`} className="post-row">
+                <div className="meta">{fmtDate(p.date)} · {readTime(p)} min read</div>
+                <h2>{p.title}</h2>
                 <p>{p.description}</p>
-                <span className="link-arrow" style={{ marginTop: "auto" }}>Read more →</span>
+                <span className="link-arrow">Read the article <Icon name="arrow" size={16} /></span>
               </Link>
             ))}
           </div>
@@ -45,12 +44,12 @@ export default function Blog() {
 
       <section className="section section-soft">
         <div className="container">
-          <div className="section-head">
-            <h2>Put these techniques into practice</h2>
-            <p>Turn your own notes into active-recall quizzes in seconds with Revyy.</p>
+          <div className="section-head center">
+            <h2>Reading about it is a start. Testing yourself is the point.</h2>
+            <p>Turn a page of your own notes into a quiz and put any of these techniques to work.</p>
           </div>
           <div style={{ textAlign: "center" }}>
-            <Link to="/app" className="btn btn-primary btn-lg">Try Revyy Free →</Link>
+            <Link to="/app" className="btn btn-primary btn-lg">Make a quiz from your notes <Icon name="arrow" size={18} /></Link>
           </div>
         </div>
       </section>

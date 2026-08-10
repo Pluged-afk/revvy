@@ -2,12 +2,12 @@ import { Link } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
 
 export default function PrivacyPolicy() {
-  usePageMeta("Privacy Policy — Revyy", "How Revyy collects, uses, and protects your data.");
+  usePageMeta("Privacy Policy · Revyy", "How Revyy collects, uses, and protects your data.");
   return (
     <section className="section">
       <div className="container legal">
         <h1>Privacy Policy</h1>
-        <p className="updated">Last updated: January 2025</p>
+        <p className="updated">Last updated: August 2026</p>
 
         <p>
           This Privacy Policy explains what information Revyy ("we", "us") collects when you
@@ -17,10 +17,10 @@ export default function PrivacyPolicy() {
 
         <h2>1. Data we collect</h2>
         <ul>
-          <li><strong>Study material you provide</strong> — PDFs, images, text and links you upload to generate a quiz.</li>
-          <li><strong>Account &amp; usage data</strong> — basic settings (such as language and theme) and counters like the number of quizzes generated, stored locally in your browser.</li>
-          <li><strong>Payment data</strong> — if you subscribe to Pro, billing details are handled by our payment provider; we never see or store your full card number.</li>
-          <li><strong>Technical data</strong> — standard log information such as browser type and approximate region, used to keep the service secure and reliable.</li>
+          <li><strong>Study material you provide:</strong> PDFs, images, text and links you upload to generate a quiz.</li>
+          <li><strong>Account and usage data:</strong> basic settings (such as language and theme) and counters like the number of quizzes generated, stored locally in your browser.</li>
+          <li><strong>Payment data:</strong> if you subscribe to Pro, billing details are handled by our payment provider. We never see or store your full card number.</li>
+          <li><strong>Technical data:</strong> standard log information such as browser type and approximate region, used to keep the service secure and reliable.</li>
         </ul>
 
         <h2>2. How we use it</h2>
@@ -54,7 +54,7 @@ export default function PrivacyPolicy() {
         <p>
           Pro subscriptions are processed by Stripe, our payment provider. Your card details are
           collected and stored by Stripe under their privacy policy and are never seen or stored
-          by Revyy — we only receive confirmation of your subscription status.
+          by Revyy. We only receive confirmation of your subscription status.
         </p>
 
         <h2>6. Your rights</h2>

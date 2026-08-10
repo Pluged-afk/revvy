@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
+import Icon from "../components/Icon.jsx";
 
 export default function Contact() {
-  usePageMeta("Contact — Revyy", "Questions, feedback, or feature ideas? Get in touch with the Revyy team.");
+  usePageMeta("Contact Revyy", "Questions, feedback, or an idea for a feature? Get in touch with Revyy.");
   const [form, setForm] = useState({ name: "", email: "", message: "" });
   const [status, setStatus] = useState("idle"); // idle | sending | sent | error
   const [errMsg, setErrMsg] = useState("");
@@ -28,7 +29,7 @@ export default function Contact() {
       setForm({ name: "", email: "", message: "" }); // clear after sending
     } catch (err) {
       setStatus("error");
-      setErrMsg(err?.message || "Something went wrong. Please try again or email us directly.");
+      setErrMsg(err?.message || "Something went wrong. Please try again, or email us directly.");
     }
   };
 
@@ -36,20 +37,20 @@ export default function Contact() {
 
   return (
     <>
-      <section className="hero" style={{ padding: "84px 0 90px" }}>
+      <section className="hero" style={{ padding: "72px 0 32px" }}>
         <div className="container">
           <span className="eyebrow">Contact</span>
           <h1>Get in touch</h1>
-          <p className="hero-sub">Questions, feedback, or feature ideas? We'd love to hear from you.</p>
+          <p className="hero-sub">Questions, feedback, or an idea for a feature? Send it over. A real person reads these.</p>
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section-tight">
         <div className="container contact-grid">
           {/* Form */}
           <div>
             {status === "sent" && (
-              <div className="form-success">✓ Message sent! We'll reply within 24 hours.</div>
+              <div className="form-success">Thanks, your message is on its way. We usually reply within a day or two.</div>
             )}
             {status === "error" && (
               <div className="auth-error">{errMsg}</div>
@@ -65,10 +66,10 @@ export default function Contact() {
               </div>
               <div className="form-field">
                 <label htmlFor="message">Message</label>
-                <textarea id="message" required value={form.message} onChange={update("message")} placeholder="How can we help?" disabled={sending} />
+                <textarea id="message" required value={form.message} onChange={update("message")} placeholder="What is on your mind?" disabled={sending} />
               </div>
               <button type="submit" className="btn btn-primary btn-lg" disabled={sending}>
-                {sending ? "Sending…" : "Send Message →"}
+                {sending ? "Sending…" : <>Send message <Icon name="arrow" size={18} /></>}
               </button>
             </form>
           </div>
@@ -77,19 +78,19 @@ export default function Contact() {
           <div>
             <div className="contact-card" style={{ marginBottom: 18 }}>
               <h3>Email us</h3>
-              <p>Prefer email? Reach us directly:</p>
+              <p>Prefer email? Reach us directly at:</p>
               <a className="maillink" href="mailto:support@revyy.app">support@revyy.app</a>
               <p style={{ margin: "4px 0", color: "var(--muted)", fontSize: 13 }}>or</p>
               <a className="maillink" href="mailto:revyy.support@gmail.com">revyy.support@gmail.com</a>
             </div>
             <div className="contact-card" style={{ marginBottom: 18 }}>
               <h3>Response time</h3>
-              <span className="note-pill">⏱ We reply within 24 hours</span>
+              <span className="note-pill"><Icon name="clock" size={16} /> Usually a day or two</span>
             </div>
             <div className="contact-card">
               <h3>Quick links</h3>
               <p style={{ margin: 0 }}>
-                <Link to="/pricing" className="maillink">Pricing & plans</Link><br />
+                <Link to="/pricing" className="maillink">Pricing and plans</Link><br />
                 <Link to="/features" className="maillink">Feature overview</Link><br />
                 <Link to="/privacy" className="maillink">Privacy Policy</Link><br />
                 <Link to="/terms" className="maillink">Terms of Service</Link>

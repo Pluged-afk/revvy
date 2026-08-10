@@ -1,53 +1,57 @@
 import { Link } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
 import AdSlot from "../components/AdSlot.jsx";
+import Icon from "../components/Icon.jsx";
 
 const FEATURES = [
-  { icon: "📝", title: "Multiple Choice Quizzes", desc: "Classic 4-option questions, auto-graded with a clear explanation for every answer." },
-  { icon: "🃏", title: "Flashcards", desc: "Flip cards to test recall and mark what you know — perfect for memorisation." },
-  { icon: "✏️", title: "Fill in the Blank", desc: "Type the missing term to actively retrieve key facts instead of just recognising them." },
-  { icon: "🔗", title: "Match Terms", desc: "Pair terms with their definitions in a fast, interactive matching grid." },
-  { icon: "🎓", title: "Exam Mode", desc: "AI-graded mock exams with MCQ and written questions. One free exam a day; Pro is unlimited with custom papers." },
-  { icon: "💡", title: "AI Explanations", desc: "Every question comes with a concise reason why the correct answer is correct." },
-  { icon: "📄", title: "PDF & Image Upload", desc: "Lecture slides, textbooks, handwritten notes or whiteboard photos — all supported." },
-  { icon: "🌍", title: "Works in 20+ Languages", desc: "Generate and take quizzes in your language, from Spanish to Japanese to Arabic." },
+  { icon: "list", title: "Multiple choice quizzes", desc: "Classic four-option questions, graded instantly, each with a short note on why the answer is right." },
+  { icon: "layers", title: "Flashcards", desc: "Flip a card, test your recall, and mark what you knew. Good for definitions and vocabulary." },
+  { icon: "pencil", title: "Fill in the blank", desc: "Type the missing term so you actually retrieve the fact instead of just recognising it." },
+  { icon: "link", title: "Match terms", desc: "Pair terms with their definitions on a quick matching grid." },
+  { icon: "exam", title: "Exam mode", desc: "Full mock exams with multiple choice and written questions, graded for you. One free exam a day, or unlimited custom papers on Pro." },
+  { icon: "chat", title: "Explanations for every answer", desc: "A short reason the correct answer is correct, so even a wrong guess teaches you something." },
+  { icon: "upload", title: "PDF and photo upload", desc: "Lecture slides, textbook pages, handwritten notes, or a photo of a whiteboard. Revyy reads them all." },
+  { icon: "globe", title: "Works in 20+ languages", desc: "Generate and take quizzes in your own language, from Spanish to Japanese to Arabic." },
 ];
 
 const ROWS = [
-  ["Daily questions", "50 / day", "250 / day"],
+  ["Daily questions", "50 a day", "250 a day"],
   ["Multiple choice quizzes", true, true],
-  ["Flashcards, fill-in & match", "With ads", true],
-  ["Questions per quiz", "20 (50 with ad)", "Up to 100"],
-  ["Exam Mode (AI-graded)", "1 / day (ad)", "Unlimited + custom"],
-  ["File uploads", "5 MB (10 MB with ad)", "Unlimited"],
-  ["Ad-free experience", false, true],
-  ["Multi-language quizzes", true, true],
+  ["Flashcards, fill-in and match", "With ads", true],
+  ["Questions per quiz", "20 (50 with an ad)", "Up to 100"],
+  ["Mock exams, graded", "1 a day (ad)", "Unlimited and custom"],
+  ["File uploads", "5 MB (10 MB with an ad)", "Unlimited"],
+  ["Ad-free", false, true],
+  ["Quizzes in 20+ languages", true, true],
 ];
 
 function Cell({ v, pro }) {
-  if (v === true) return <span className="yes">✓</span>;
-  if (v === false) return <span className="no">—</span>;
+  if (v === true) return <span className="yes"><Icon name="check" size={17} /></span>;
+  if (v === false) return <span className="no" aria-label="Not included" style={{ display: "inline-block", width: 14, height: 2, background: "var(--faint)", borderRadius: 1, verticalAlign: "middle" }} />;
   return <span className={pro ? "pro-col" : ""}>{v}</span>;
 }
 
 export default function Features() {
-  usePageMeta("Revyy Features — AI Quiz Maker, Flashcards & Exam Mode", "Four quiz types, AI-graded exam simulation, PDF & image upload, and 20+ languages. See how Revyy turns your study material into quizzes.");
+  usePageMeta(
+    "Revyy Features: Quiz Types, Exam Mode and Uploads",
+    "Four quiz types, mock exam simulation, PDF and photo upload, and 20+ languages. See how Revyy turns your own study material into practice."
+  );
   return (
     <>
-      <section className="hero" style={{ padding: "84px 0 90px" }}>
+      <section className="hero" style={{ padding: "72px 0 32px" }}>
         <div className="container">
           <span className="eyebrow">Features</span>
-          <h1>Everything you need to study smarter</h1>
-          <p className="hero-sub">Four quiz types, full exam simulation, and AI that understands your material.</p>
+          <h1>Four ways to practise, one place to do it</h1>
+          <p className="hero-sub">Quizzes, flashcards, and full mock exams, all built from the material you upload.</p>
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section-tight">
         <div className="container">
           <div className="grid grid-4">
             {FEATURES.map((f) => (
               <div key={f.title} className="card">
-                <div className="card-icon">{f.icon}</div>
+                <div className="card-icon"><Icon name={f.icon} size={26} stroke={1.5} /></div>
                 <h3>
                   {f.title}
                   {f.pro && <span className="pro-tag">PRO</span>}
@@ -63,14 +67,14 @@ export default function Features() {
 
       <section className="section section-soft">
         <div className="container">
-          <div className="section-head">
+          <div className="section-head center">
             <div className="section-label">Compare plans</div>
-            <h2>Free vs Pro</h2>
-            <p>Start free, upgrade when you need the full toolkit.</p>
+            <h2>Free and Pro, side by side</h2>
+            <p>Start free. Move to Pro when you need more questions and unlimited exams.</p>
           </div>
           <table className="compare">
             <thead>
-              <tr><th>Feature</th><th>Free</th><th className="pro-col">Pro</th></tr>
+              <tr><th>What you get</th><th>Free</th><th className="pro-col">Pro</th></tr>
             </thead>
             <tbody>
               {ROWS.map(([label, free, pro]) => (
@@ -82,8 +86,8 @@ export default function Features() {
               ))}
             </tbody>
           </table>
-          <div style={{ textAlign: "center", marginTop: 36 }}>
-            <Link to="/pricing" className="btn btn-primary btn-lg">See pricing →</Link>
+          <div style={{ textAlign: "center", marginTop: 34 }}>
+            <Link to="/pricing" className="btn btn-primary btn-lg">See pricing <Icon name="arrow" size={18} /></Link>
           </div>
         </div>
       </section>
