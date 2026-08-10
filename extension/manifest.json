@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Revyy: Quiz any page",
+  "version": "1.0.0",
+  "description": "Turn any webpage, article, or selected text into a Revyy quiz or flashcards in one click.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["https://revyy.app/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Quiz this page with Revyy"
+  },
+  "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
+  "content_scripts": [
+    {
+      "matches": ["https://revyy.app/*"],
+      "js": ["content-revyy.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

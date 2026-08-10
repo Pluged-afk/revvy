@@ -31,7 +31,7 @@ const LETTERS      = ["A","B","C","D","E","F"];
 // question writing. ($0.80/1M in, $4/1M out vs Sonnet's $3/$15.)
 const AI_MODEL     = "claude-haiku-4-5-20251001";
 // Difficulty rubric (index 0/1/2 = Easy/Medium/Hard). The label alone barely
-// moves the model — the per-level guidance is what actually changes output.
+// moves the model, the per-level guidance is what actually changes output.
 const DIFFICULTY = [
   { name:"Easy",   guide:"Test basic recall and core definitions. Single concept per question, plain wording. For multiple choice, distractors should be clearly wrong." },
   { name:"Medium", guide:"Test understanding and application. Require connecting ideas or one reasoning step. For multiple choice, distractors should be plausible and require thought." },
@@ -55,7 +55,7 @@ function msUntil(ts)   {
 }
 
 // Haptic feedback. navigator.vibrate exists only where the Vibration API is
-// implemented — Android phones/tablets. iOS Safari and virtually all desktop
+// implemented, Android phones/tablets. iOS Safari and virtually all desktop
 // browsers don't implement it, so this is a silent no-op there (exactly the
 // "mobile/tablets only" behaviour we want). `.on` mirrors the user setting.
 const Haptics = { on:false, buzz(ms=35){ try{ if(this.on && navigator.vibrate) navigator.vibrate(ms); }catch{ /* ignore */ } } };
@@ -101,38 +101,38 @@ const SoundEngine = (() => {
 
 const THEME_LIGHT = `
   :root,[data-theme="light"] {
-    --color-background-primary:#ffffff !important;
-    --color-background-secondary:#f8fafc !important;
-    --color-background-tertiary:#f1f5f9 !important;
-    --color-background-success:#f0fdf4 !important;
-    --color-text-primary:#1e293b !important;
-    --color-text-secondary:#64748b !important;
-    --color-text-tertiary:#94a3b8 !important;
-    --color-text-success:#15803d !important;
-    --color-border-primary:#cbd5e1 !important;
-    --color-border-secondary:#e2e8f0 !important;
-    --color-border-tertiary:#f1f5f9 !important;
-    --color-border-success:#86efac !important;
-    --color-hover-tint:#f5f3ff !important;
-    --color-sel-tint:#ede9fe !important;
+    --color-background-primary:#fffdf9 !important;
+    --color-background-secondary:#f6f2ea !important;
+    --color-background-tertiary:#f2ede2 !important;
+    --color-background-success:#edf6f0 !important;
+    --color-text-primary:#231f1a !important;
+    --color-text-secondary:#6a6357 !important;
+    --color-text-tertiary:#9c9482 !important;
+    --color-text-success:#2f7355 !important;
+    --color-border-primary:#d9d0be !important;
+    --color-border-secondary:#e6dfd2 !important;
+    --color-border-tertiary:#efe9de !important;
+    --color-border-success:#bcdcc9 !important;
+    --color-hover-tint:#f4efe4 !important;
+    --color-sel-tint:#ece8f6 !important;
   }
 `;
 const THEME_DARK = `
   :root,[data-theme="dark"] {
-    --color-background-primary:#1e1e2e !important;
-    --color-background-secondary:#252535 !important;
-    --color-background-tertiary:#13131f !important;
-    --color-background-success:#052e16 !important;
-    --color-text-primary:#e2e8f0 !important;
-    --color-text-secondary:#94a3b8 !important;
-    --color-text-tertiary:#64748b !important;
-    --color-text-success:#4ade80 !important;
-    --color-border-primary:#334155 !important;
-    --color-border-secondary:#2d3748 !important;
-    --color-border-tertiary:#1e293b !important;
-    --color-border-success:#166534 !important;
-    --color-hover-tint:#2b2b45 !important;
-    --color-sel-tint:#343152 !important;
+    --color-background-primary:#241f18 !important;
+    --color-background-secondary:#2b2419 !important;
+    --color-background-tertiary:#191510 !important;
+    --color-background-success:#16281c !important;
+    --color-text-primary:#ece5d8 !important;
+    --color-text-secondary:#a79e8d !important;
+    --color-text-tertiary:#7c7463 !important;
+    --color-text-success:#6cc194 !important;
+    --color-border-primary:#463d30 !important;
+    --color-border-secondary:#372f24 !important;
+    --color-border-tertiary:#262019 !important;
+    --color-border-success:#2f5a41 !important;
+    --color-hover-tint:#322b20 !important;
+    --color-sel-tint:#322c52 !important;
   }
 `;
 
@@ -154,12 +154,12 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
   };
   // `diff` is the 0/1/2 index; map to the difficulty rubric.
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
-  const prompt = `Generate EXACTLY ${numQ} study questions from the material — not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nLANGUAGE: Write the ENTIRE quiz — every question, all answer options, the answer, the explanation, and the title/subject/topic — in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic"}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand") — used to track weak areas. Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic"}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
   // output and the proxy streams, so a high ceiling is safe; capped at 48k.
-  // max_tokens is a ceiling, not a charge — you're billed only for tokens
+  // max_tokens is a ceiling, not a charge, you're billed only for tokens
   // actually generated. Generous per-question budget so a 100-question set
   // never truncates mid-generation.
   const maxTokens = Math.min(Math.max(Math.round(numQ * 260) + 3000, 4000), 48000);
@@ -219,7 +219,7 @@ function followupAnswer({ question, correct, prior, ask }) {
   );
 }
 
-// Generate one section of a standardized mock exam from its spec (no upload) —
+// Generate one section of a standardized mock exam from its spec (no upload), 
 // authentic style, self-contained MCQs. Lenient on count: returns whatever
 // well-formed questions the model produces.
 async function callMockSection(exam, section, tilt) {
@@ -227,22 +227,22 @@ async function callMockSection(exam, section, tilt) {
   const optTemplate = Array(nOpt).fill('"..."').join(",");
   // Pure test environment: the learner can't set difficulty. Each generated
   // form gets one randomly-chosen overall difficulty (luck of the draw), and
-  // within it the questions span the authentic range — like a real exam.
+  // within it the questions span the authentic range, like a real exam.
   const diff = tilt === "easier"
-    ? "OVERALL DIFFICULTY: an easier form of this exam — lean toward more approachable questions, but still include a few genuinely hard ones."
+    ? "OVERALL DIFFICULTY: an easier form of this exam, lean toward more approachable questions, but still include a few genuinely hard ones."
     : tilt === "harder"
-    ? "OVERALL DIFFICULTY: a harder form of this exam — lean toward more challenging questions with subtle, close distractors, as tough test forms are."
-    : "OVERALL DIFFICULTY: an authentic exam form — span the full real range, from a few easy questions to several genuinely hard ones.";
-  const prompt = `You are assembling a realistic ${exam.name} practice exam section that should feel indistinguishable from a genuine ${exam.name} form. Draw on your knowledge of actual ${exam.name} exams — real past papers and official practice tests — and produce a MIX of questions closely modeled on real ${exam.name} questions you know and new ones you write in the exact same style. Match the authentic topics, difficulty spread, phrasing, and question formats faithfully — don't invent an artificial style.
+    ? "OVERALL DIFFICULTY: a harder form of this exam, lean toward more challenging questions with subtle, close distractors, as tough test forms are."
+    : "OVERALL DIFFICULTY: an authentic exam form, span the full real range, from a few easy questions to several genuinely hard ones.";
+  const prompt = `You are assembling a realistic ${exam.name} practice exam section that should feel indistinguishable from a genuine ${exam.name} form. Draw on your knowledge of actual ${exam.name} exams, real past papers and official practice tests, and produce a MIX of questions closely modeled on real ${exam.name} questions you know and new ones you write in the exact same style. Match the authentic topics, difficulty spread, phrasing, and question formats faithfully, don't invent an artificial style.
 SECTION: ${section.name}. Provide EXACTLY ${section.count} multiple-choice questions.
 ${section.instr}
-${diff} Do NOT make every question the same difficulty — this is a real, un-adjustable test, so vary it like the actual exam.
+${diff} Do NOT make every question the same difficulty, this is a real, un-adjustable test, so vary it like the actual exam.
 Each question needs: "question" (the full stem, with any passage/data/context written into it as text), "options" (an array of exactly ${nOpt} answer choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary the skills/topics across the section and make every distractor plausible.
-DIAGRAMS: when a question genuinely needs a figure to be answerable — a geometry diagram, a coordinate graph, a bar/line chart, a number line, or a labelled scientific figure — add an "svg" field containing a SELF-CONTAINED inline SVG that draws it accurately to the numbers in the question and is consistent with your correct answer. Use a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text> with clear labels and units, and SINGLE quotes for attributes (e.g. <circle cx='50' cy='50' r='40'/>) so the JSON stays valid. Never include <script>, event handlers, external images, links or fonts. Most questions need NO figure — omit "svg" entirely for those; never add a decorative one.
-CRITICAL — accuracy: for any question involving a calculation or data, work the answer out fully yourself FIRST, then set "correct" to the index of the option that exactly matches your computed result; double-check every calculation and unit. Every question must have exactly ONE clearly correct option, and its "explanation" must agree with that option. Discard any question you are not certain is correct.
-Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"...","svg":"OPTIONAL — an inline <svg>…</svg>, only when a figure is required"}]}
+DIAGRAMS: when a question genuinely needs a figure to be answerable, a geometry diagram, a coordinate graph, a bar/line chart, a number line, or a labelled scientific figure, add an "svg" field containing a SELF-CONTAINED inline SVG that draws it accurately to the numbers in the question and is consistent with your correct answer. Use a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text> with clear labels and units, and SINGLE quotes for attributes (e.g. <circle cx='50' cy='50' r='40'/>) so the JSON stays valid. Never include <script>, event handlers, external images, links or fonts. Most questions need NO figure, omit "svg" entirely for those; never add a decorative one.
+CRITICAL, accuracy: for any question involving a calculation or data, work the answer out fully yourself FIRST, then set "correct" to the index of the option that exactly matches your computed result; double-check every calculation and unit. Every question must have exactly ONE clearly correct option, and its "explanation" must agree with that option. Discard any question you are not certain is correct.
+Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"...","svg":"OPTIONAL, an inline <svg>…</svg>, only when a figure is required"}]}
 The "questions" array MUST contain ${section.count} items.`;
-  const maxTokens = Math.min(section.count * 500 + 4000, 64000); // roomy — data/diagram questions run long
+  const maxTokens = Math.min(section.count * 500 + 4000, 64000); // roomy, data/diagram questions run long
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
     body: JSON.stringify({ model:AI_MODEL, max_tokens:maxTokens,
@@ -260,7 +260,7 @@ The "questions" array MUST contain ${section.count} items.`;
   }
   const qs = Array.isArray(parsed.questions) ? parsed.questions : [];
   // Keep only well-formed MCQs. A ballooning "explanation" is the tell-tale sign
-  // the model couldn't solve the question cleanly — drop those rather than ship
+  // the model couldn't solve the question cleanly, drop those rather than ship
   // a mis-keyed or incoherent question.
   return qs.filter((q) =>
     q && typeof q.question === "string" && q.question.length > 8 &&
@@ -300,7 +300,7 @@ function Logo({ size=28 }) {
 
 // ── Sub-components ────────────────────────────────────────────────────
 function PBar({ v, max }) {
-  return <div style={{height:4,background:"var(--color-border-tertiary)",borderRadius:2}}><div style={{height:"100%",borderRadius:2,background:"#4f46e5",width:`${(v/max)*100}%`,transition:"width 0.35s"}}/></div>;
+  return <div style={{height:4,background:"var(--color-border-tertiary)",borderRadius:2}}><div style={{height:"100%",borderRadius:2,background:"#4338ca",width:`${(v/max)*100}%`,transition:"width 0.35s"}}/></div>;
 }
 
 // Sliding countdown bar shown while auto-advance waits before the next
@@ -311,7 +311,7 @@ function AutoAdvanceBar({ sec, runId, t }) {
     <div style={{marginTop:16}}>
       <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,textAlign:"center"}}>{t?.autoAdvancing||"Next question in a moment…"}</div>
       <div style={{height:4,background:"var(--color-border-tertiary)",borderRadius:2,overflow:"hidden"}}>
-        <div key={runId} style={{height:"100%",background:"#4f46e5",borderRadius:2,animation:`rvAutoBar ${sec}s linear forwards`}}/>
+        <div key={runId} style={{height:"100%",background:"#4338ca",borderRadius:2,animation:`rvAutoBar ${sec}s linear forwards`}}/>
       </div>
     </div>
   );
@@ -324,9 +324,9 @@ function Chip({ label, active, onClick, locked, small, hideBadge }) {
       fontSize:small?11:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
       border:locked?"1.5px solid #f59e0b":"1px solid",
       transition:"all 0.15s",
-      background:active?"#4f46e5":"transparent",
+      background:active?"#4338ca":"transparent",
       color:active?"#fff":locked?"#92400e":"var(--color-text-secondary)",
-      borderColor:active?"#4f46e5":locked?"#f59e0b":"var(--color-border-secondary)",
+      borderColor:active?"#4338ca":locked?"#f59e0b":"var(--color-border-secondary)",
       boxShadow:locked?"0 0 0 1px #f59e0b33, inset 0 0 0 1px #f59e0b22":undefined,
     }}>
       {label}
@@ -342,20 +342,20 @@ function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"28px 20px 36px",width:"100%",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box"}}>
         <div style={{textAlign:"center",marginBottom:14}}>
           <div style={{fontSize:42,marginBottom:6}}>⭐</div>
-          <h3 style={{margin:"0 0 4px",fontSize:21,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{t.upgradeToPro}</h3>
+          <h3 style={{margin:"0 0 4px",fontSize:21,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.upgradeToPro}</h3>
         </div>
         <div style={{background:"linear-gradient(135deg,#ede9fe,#f5f3ff)",borderRadius:12,padding:"12px 14px",marginBottom:14,fontSize:12.5,color:"#3730a3",lineHeight:1.6,textAlign:"center"}}>{t.proDesc}</div>
         {error && <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,marginBottom:14}}>{error}</div>}
         <div style={{display:"flex",gap:12,marginBottom:14}}>
-          {/* Monthly — subtle gold ring (less prominent than yearly) */}
+          {/* Monthly, subtle gold ring (less prominent than yearly) */}
           <div style={{flex:1,border:"1.5px solid #fcd34d",borderRadius:14,padding:"16px 12px",textAlign:"center"}}>
             <div style={{fontSize:12,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:"var(--color-text-secondary)",marginBottom:6}}>{t.planMonthly}</div>
             <div style={{fontSize:22,fontWeight:800,color:"var(--color-text-primary)"}}>€4.99</div>
-            <button onClick={onMonthly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginTop:14,background:"#4f46e5",fontFamily:"inherit",fontSize:13,opacity:busy?0.7:1}}>
+            <button onClick={onMonthly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginTop:14,background:"#4338ca",fontFamily:"inherit",fontSize:13,opacity:busy?0.7:1}}>
               {busy==="monthly" ? "Starting…" : t.upgradeToPro}
             </button>
           </div>
-          {/* Yearly — the standout: stronger gold ring + glow */}
+          {/* Yearly, the standout: stronger gold ring + glow */}
           <div style={{flex:1,border:"2px solid #f59e0b",background:"#fffbeb",borderRadius:14,padding:"16px 12px",textAlign:"center",boxShadow:"0 4px 16px rgba(245,158,11,0.25)"}}>
             <div style={{fontSize:12,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:"#92400e",marginBottom:6}}>{t.planYearly}</div>
             <div style={{fontSize:22,fontWeight:800,color:"#92400e"}}>€39.99</div>
@@ -388,7 +388,7 @@ function PacksModal({ onClose, buyPack, t }) {
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"26px 20px 36px",width:"100%",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box"}}>
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{fontSize:36,marginBottom:6}}>💎</div>
-          <h3 style={{margin:"0 0 6px",fontSize:20,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{t.questionPacks || "Question packs"}</h3>
+          <h3 style={{margin:"0 0 6px",fontSize:20,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.questionPacks || "Question packs"}</h3>
           <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55}}>{t.questionPacksDesc || "One-time top-ups for everyone. They never expire and are used once your daily allowance runs out. Your other plan limits (quiz types, per-quiz max, file size) still apply."}</p>
         </div>
         {QUESTION_PACKS.map((p) => (
@@ -403,7 +403,7 @@ function PacksModal({ onClose, buyPack, t }) {
               </div>
               <div style={{fontSize:11.5,color:p.best?"#b45309":"var(--color-text-secondary)",marginTop:2}}>{t[p.blurbKey]}</div>
             </div>
-            <button onClick={()=>buy(p.id)} disabled={!!busy} style={{...Sb.btnPrimary,margin:0,padding:"10px 16px",fontSize:14,minWidth:78,background:p.best?"#f59e0b":"#4f46e5",opacity:(busy&&busy!==p.id)?0.5:1}}>
+            <button onClick={()=>buy(p.id)} disabled={!!busy} style={{...Sb.btnPrimary,margin:0,padding:"10px 16px",fontSize:14,minWidth:78,background:p.best?"#f59e0b":"#4338ca",opacity:(busy&&busy!==p.id)?0.5:1}}>
               {busy===p.id ? "…" : p.price}
             </button>
           </div>
@@ -437,7 +437,7 @@ function UnlockModal({ feature, unlocks, onClose, onUpgrade, t }) {
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"24px 20px 36px",width:"100%",maxHeight:"80vh",overflowY:"auto",boxSizing:"border-box"}}>
         <div style={{textAlign:"center",marginBottom:18}}>
           <div style={{fontSize:38,marginBottom:8}}>{active ? "🔓" : "🔒"}</div>
-          <h3 style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{m.title}</h3>
+          <h3 style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{m.title}</h3>
           <p style={{margin:0,fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>
             {(()=>{const [a,b=""]=t.unlockWatchLine.split("{gives}");return <>{a}<strong style={{color:"var(--color-text-primary)"}}>{m.gives}</strong>{b}</>;})()} {m.daily ? t.unlockDaily : t.unlockUnlimited}
           </p>
@@ -458,7 +458,7 @@ function UnlockModal({ feature, unlocks, onClose, onUpgrade, t }) {
             {t.unlockUsedUp}
           </div>
         )}
-        <button onClick={onUpgrade} style={{...Sb.btnPrimary,width:"100%",marginBottom:10,fontFamily:"inherit",fontSize:14,background:"#4f46e5"}}>
+        <button onClick={onUpgrade} style={{...Sb.btnPrimary,width:"100%",marginBottom:10,fontFamily:"inherit",fontSize:14,background:"#4338ca"}}>
           ✦ {t.upgradeToPro}
         </button>
         <button onClick={onClose} style={{...Sb.btnGhost,width:"100%",fontSize:13}}>{t.notNow || "Not now"}</button>
@@ -474,9 +474,9 @@ function Flashcard({ q, onNext, isLast, t }) {
   return (
     <div>
       <div onClick={()=>setFlipped(f=>!f)} style={{cursor:"pointer"}}>
-        <div style={{background:flipped?"var(--color-background-secondary)":"var(--color-background-primary)",border:`1.5px solid ${flipped?"#4f46e5":"var(--color-border-tertiary)"}`,borderRadius:16,padding:"40px 24px",textAlign:"center",minHeight:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",transition:"all 0.25s"}}>
+        <div style={{background:flipped?"var(--color-background-secondary)":"var(--color-background-primary)",border:`1.5px solid ${flipped?"#4338ca":"var(--color-border-tertiary)"}`,borderRadius:16,padding:"40px 24px",textAlign:"center",minHeight:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",transition:"all 0.25s"}}>
           <div style={{fontSize:10,fontWeight:700,color:"var(--color-text-tertiary)",letterSpacing:1.5,marginBottom:16}}>{flipped?t.fcAnswer:t.fcQuestion}</div>
-          <div style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.5}}>{flipped?ans:q.question}</div>
+          <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.5}}>{flipped?ans:q.question}</div>
           <div style={{marginTop:20,fontSize:12,color:"var(--color-text-tertiary)"}}>{flipped?t.flipBack:t.flip}</div>
         </div>
       </div>
@@ -512,9 +512,9 @@ function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=fal
   },[checked]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div>
-      <div style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.6,marginBottom:20}}>
+      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.6,marginBottom:20}}>
         {parts[0]}
-        <span style={{display:"inline-block",borderBottom:"2px solid #4f46e5",minWidth:80,margin:"0 4px",padding:"0 6px",color:"#4f46e5",fontStyle:"italic"}}>
+        <span style={{display:"inline-block",borderBottom:"2px solid #4338ca",minWidth:80,margin:"0 4px",padding:"0 6px",color:"#4338ca",fontStyle:"italic"}}>
           {checked?(q.answer||""):(val||"\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0")}
         </span>
         {parts[1]||""}
@@ -581,7 +581,7 @@ function MatchQuiz({ questions, onDone, t }) {
           {terms.map((term,i)=>{
             const matched=matches[i]!==undefined,isSel=sel===i,isOk=checked&&results[i],isBad=checked&&!results[i]&&matched;
             const pc=pairColor(pairNo[i]);
-            const bc=isOk?"#22c55e":isBad?"#ef4444":isSel?"#4f46e5":matched?pc:"var(--color-border-tertiary)";
+            const bc=isOk?"#22c55e":isBad?"#ef4444":isSel?"#4338ca":matched?pc:"var(--color-border-tertiary)";
             return <button key={i} onClick={()=>pickTerm(i)} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:bc,background:isSel?"var(--color-sel-tint)":matched?"var(--color-background-secondary)":"var(--color-background-primary)",fontSize:12,fontWeight:600,cursor:matched||checked?"default":"pointer",color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left",transition:"all 0.15s"}}>
               {matched && <PairBadge n={pairNo[i]} color={pc}/>}
               <span style={{flex:1}}>{isOk&&"✅ "}{isBad&&"❌ "}{term}</span>
@@ -605,7 +605,7 @@ function MatchQuiz({ questions, onDone, t }) {
   );
 }
 
-// ── "Explain why" — AI tutor on a wrong answer ────────────────────────
+// ── "Explain why", AI tutor on a wrong answer ────────────────────────
 function ExplainBox({ ctx, t }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -629,7 +629,7 @@ function ExplainBox({ ctx, t }) {
     setAsking(false);
   };
   if (!open) return (
-    <button onClick={load} style={{marginTop:8,marginLeft:23,background:"none",border:"none",color:"#4f46e5",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0}}>💡 {t.explainWhy}</button>
+    <button onClick={load} style={{marginTop:8,marginLeft:23,background:"none",border:"none",color:"#4338ca",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0}}>💡 {t.explainWhy}</button>
   );
   return (
     <div style={{marginTop:8,marginLeft:23,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"10px 12px"}} className="fade-in">
@@ -646,7 +646,7 @@ function ExplainBox({ ctx, t }) {
         <div style={{display:"flex",gap:6,marginTop:10}}>
           <input value={ask} onChange={(e)=>setAsk(e.target.value)} onKeyDown={(e)=>e.key==="Enter"&&doAsk()} placeholder={t.explainAsk} disabled={asking}
             style={{flex:1,borderRadius:8,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:12.5,padding:"7px 10px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
-          <button onClick={doAsk} disabled={asking||!ask.trim()} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:(asking||!ask.trim())?0.5:1}}>{asking?"…":t.explainAskBtn}</button>
+          <button onClick={doAsk} disabled={asking||!ask.trim()} style={{background:"#4338ca",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:(asking||!ask.trim())?0.5:1}}>{asking?"…":t.explainAskBtn}</button>
         </div>
       )}
     </div>
@@ -654,14 +654,14 @@ function ExplainBox({ ctx, t }) {
 }
 
 // ── Share-a-quiz sheet ─────────────────────────────────────────────────
-function ShareModal({ link, err, copied, onCopy, onClose, t }) {
+function ShareModal({ link, err, copied, onCopy, onClose, challengeScore, t }) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={onClose}>
       <div className="slide-up" onClick={(e)=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"26px 20px 36px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box"}}>
         <div style={{textAlign:"center",marginBottom:16}}>
-          <div style={{fontSize:34,marginBottom:6}}>📤</div>
-          <h3 style={{margin:"0 0 6px",fontSize:19,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{t.shareTitle}</h3>
-          <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.shareDesc}</p>
+          <div style={{fontSize:34,marginBottom:6}}>🏆</div>
+          <h3 style={{margin:"0 0 6px",fontSize:19,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{challengeScore?t.challengeTitle:t.shareTitle}</h3>
+          <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{challengeScore?t.challengeDesc.replace("{s}",challengeScore):t.shareDesc}</p>
         </div>
         {err && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,marginBottom:12}}>{err}</div>}
         {link && (
@@ -692,7 +692,7 @@ function ContactModal({ defaultEmail, onClose, t }) {
   const submit = async () => {
     if (!valid || state === "sending") return;
     setState("sending"); setErr("");
-    const ctx = `\n\n— sent from the app —\npath: ${location.pathname} · lang: ${document.documentElement.lang} · ${navigator.userAgent}`;
+    const ctx = `\n\n, sent from the app, \npath: ${location.pathname} · lang: ${document.documentElement.lang} · ${navigator.userAgent}`;
     try {
       const r = await fetch("/api/contact", {
         method: "POST",
@@ -709,7 +709,7 @@ function ContactModal({ defaultEmail, onClose, t }) {
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"26px 20px 36px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box"}}>
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{fontSize:34,marginBottom:6}}>🐛</div>
-          <h3 style={{margin:"0 0 6px",fontSize:19,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{t.reportTitle}</h3>
+          <h3 style={{margin:"0 0 6px",fontSize:19,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.reportTitle}</h3>
           <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.reportSub}</p>
         </div>
         {state === "sent" ? (
@@ -739,7 +739,7 @@ function Toggle({ on, onChange, disabled }) {
   return (
     <div onClick={()=>!disabled&&onChange(!on)} style={{
       width:44,height:24,borderRadius:12,cursor:disabled?"not-allowed":"pointer",
-      background:on?"#4f46e5":"var(--color-border-secondary)",
+      background:on?"#4338ca":"var(--color-border-secondary)",
       position:"relative",transition:"background 0.2s",opacity:disabled?0.45:1,
     }}>
       <div style={{position:"absolute",top:2,left:on?22:2,width:20,height:20,
@@ -804,13 +804,13 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
           <span style={{fontWeight:700}}>{used} / {limit}{u.remaining != null ? ` · ${u.remaining} ${s.leftWord || "left"}` : ""}</span>
         </div>
         <div style={{height:8,background:"var(--color-background-tertiary)",borderRadius:4,overflow:"hidden"}}>
-          <div style={{height:"100%",width:pct + "%",background:pct >= 100 ? "#ef4444" : "#4f46e5",borderRadius:4,transition:"width .3s"}}/>
+          <div style={{height:"100%",width:pct + "%",background:pct >= 100 ? "#ef4444" : "#4338ca",borderRadius:4,transition:"width .3s"}}/>
         </div>
-        {/* Additional (pack) questions — shown to everyone who has any. */}
+        {/* Additional (pack) questions, shown to everyone who has any. */}
         <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:8}}>{s.usageBonus || "Extra questions (packs)"}: <strong style={{color:(u.bonus_questions_remaining > 0) ? "#16a34a" : "var(--color-text-primary)"}}>{u.bonus_questions_remaining ?? 0}</strong></div>
 
         {!isPro && <>
-          {/* The X/2 here is scoped to the +questions ad — it's not all ads. */}
+          {/* The X/2 here is scoped to the +questions ad, it's not all ads. */}
           {adsLeft > 0
             ? <button disabled={adBusy} onClick={onWatchAd} style={{marginTop:10,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:adBusy ? "default" : "pointer",fontFamily:"inherit",opacity:adBusy ? 0.6 : 1}}>
                 {adBusy ? (s.loadingAd || "Loading ad…") : `📺 ${(s.watchAdForQuestions || "Watch ad for +{n} questions").replace("{n}", u.ad_question_bonus ?? 10)} · ${u.ad_watches_today ?? 0}/${u.max_ad_watches ?? 2}`}
@@ -818,20 +818,20 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
             : <div style={{marginTop:10,width:"100%",background:"var(--color-background-tertiary)",color:"var(--color-text-tertiary)",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:600,textAlign:"center",boxSizing:"border-box"}}>
                 📵 {(s.adLimitReached || "Daily ad limit reached")} · {u.max_ad_watches ?? 2}/{u.max_ad_watches ?? 2}
               </div>}
-          <button onClick={() => startCheckout?.(STRIPE_MONTHLY_PRICE)} style={{marginTop:8,width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-            ⭐ {s.upgradeForMore || "Upgrade to Pro — 250 questions/day"}
+          <button onClick={() => startCheckout?.(STRIPE_MONTHLY_PRICE)} style={{marginTop:8,width:"100%",background:"#4338ca",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+            ⭐ {s.upgradeForMore || "Upgrade to Pro, 250 questions/day"}
           </button>
         </>}
 
-        {/* Question packs — available to all users; other limits still apply. */}
+        {/* Question packs, available to all users; other limits still apply. */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"14px 0 6px"}}>
           <span style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)"}}>{s.buyPacks || "Question packs"}</span>
-          {onOpenPacks && <button onClick={onOpenPacks} style={{fontSize:11,color:"#4f46e5",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:700,padding:0}}>{s.comparePacks || "View all →"}</button>}
+          {onOpenPacks && <button onClick={onOpenPacks} style={{fontSize:11,color:"#4338ca",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:700,padding:0}}>{s.comparePacks || "View all →"}</button>}
         </div>
         {QUESTION_PACKS.map((p) => (
           <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:6}}>
             <span style={{fontSize:13,color:"var(--color-text-primary)"}}><strong>{p.q}</strong> {s.questionsWord || "questions"} · {p.price}</span>
-            <button disabled={!!packBusy} onClick={() => onBuyPack(p.id)} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:packBusy ? "default" : "pointer",fontFamily:"inherit",opacity:(packBusy && packBusy !== p.id) ? 0.5 : 1}}>
+            <button disabled={!!packBusy} onClick={() => onBuyPack(p.id)} style={{background:"#4338ca",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:packBusy ? "default" : "pointer",fontFamily:"inherit",opacity:(packBusy && packBusy !== p.id) ? 0.5 : 1}}>
               {packBusy === p.id ? (s.opening || "…") : (s.buyBtn || "Buy")}
             </button>
           </div>
@@ -911,27 +911,27 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           padding:"16px 18px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",flexShrink:0}}>
           {signedIn && user ? (
             <div style={{display:"flex",alignItems:"center",gap:11,minWidth:0}}>
-              <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#4f46e5,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0}}>{(user.email||"?").charAt(0).toUpperCase()}</div>
+              <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#4338ca,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0}}>{(user.email||"?").charAt(0).toUpperCase()}</div>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{user.email||"Your account"}</div>
                 <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,padding:"2px 8px",borderRadius:999,color:isPro?"#422006":"var(--color-text-secondary)",background:isPro?"linear-gradient(135deg,#fde68a,#f59e0b)":"var(--color-background-tertiary)",border:isPro?"none":"0.5px solid var(--color-border-secondary)",display:"inline-block",marginTop:3}}>{isPro?"✦ PRO":t.freePlanBadge}</span>
               </div>
             </div>
           ) : (
-            <span style={{fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif",color:"var(--color-text-primary)"}}>{s.title||"Settings"}</span>
+            <span style={{fontSize:18,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{s.title||"Settings"}</span>
           )}
           <button onClick={onCancel} style={{background:"none",border:"none",fontSize:20,
             cursor:"pointer",color:"var(--color-text-secondary)",lineHeight:1,padding:"2px 6px",flexShrink:0}}>✕</button>
         </div>
 
         <div style={{flex:1,overflowY:"auto"}}>
-          {/* Your progress — makes the account a study home, not just billing */}
+          {/* Your progress, makes the account a study home, not just billing */}
           <div style={{padding:"16px 18px 6px"}}>
             <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:10}}>{t.progressTitle}</div>
             <div style={{display:"flex",gap:8}}>
               {[
                 { v: `🔥 ${acctStats.streak}`, l: t.dayStreak },
-                { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : "—", l: t.accuracyLbl },
+                { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : ", ", l: t.accuracyLbl },
                 { v: acctSrs.totalCount, l: t.inReviewLbl },
               ].map(({ v, l }, i) => (
                 <div key={i} style={{flex:1,background:"var(--color-background-secondary)",borderRadius:12,padding:"12px 4px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
@@ -940,7 +940,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 </div>
               ))}
             </div>
-            {acctSrs.dueCount > 0 && <div style={{fontSize:11.5,color:"#4f46e5",fontWeight:600,marginTop:9,textAlign:"center"}}>🔁 {acctSrs.dueCount} card{acctSrs.dueCount>1?"s":""} due for review today</div>}
+            {acctSrs.dueCount > 0 && <div style={{fontSize:11.5,color:"#4338ca",fontWeight:600,marginTop:9,textAlign:"center"}}>🔁 {acctSrs.dueCount} card{acctSrs.dueCount>1?"s":""} due for review today</div>}
           </div>
 
           <SectionLabel label={s.secAppearance}/>
@@ -969,7 +969,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
               <input type="range" min={0} max={100} step={5} value={draft.volume}
                 onChange={e=>update("volume",parseInt(e.target.value))}
                 disabled={!draft.sound}
-                style={{flex:1,accentColor:"#4f46e5",cursor:draft.sound?"pointer":"not-allowed",opacity:draft.sound?1:0.4}}/>
+                style={{flex:1,accentColor:"#4338ca",cursor:draft.sound?"pointer":"not-allowed",opacity:draft.sound?1:0.4}}/>
               <span style={{fontSize:13}}>🔊</span>
             </div>
           </SettingRow>
@@ -993,7 +993,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>1s</span>
                 <input type="range" min={1} max={15} step={1} value={draft.autoAdvanceSec||5}
                   onChange={e=>update("autoAdvanceSec",parseInt(e.target.value))}
-                  style={{flex:1,accentColor:"#4f46e5",cursor:"pointer"}}/>
+                  style={{flex:1,accentColor:"#4338ca",cursor:"pointer"}}/>
                 <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>15s</span>
               </div>
             </SettingRow>
@@ -1081,9 +1081,9 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                   <li>· {s.freeLimAds}</li>
                 </ul>
                 <button onClick={()=>{setCoErr("");setShowUpgrade(true);}}
-                  style={{width:"100%",marginTop:10,background:"#4f46e5",color:"#fff",
+                  style={{width:"100%",marginTop:10,background:"#4338ca",color:"#fff",
                     border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,
-                    cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",boxShadow:"0 2px 12px #4f46e544"}}>
+                    cursor:"pointer",fontFamily:"'Fraunces',Georgia,serif",boxShadow:"0 2px 12px #4338ca44"}}>
                   {t.upgradeToPro} →
                 </button>
                 <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"9px 0 0",lineHeight:1.5}}>{t.cancelAnytime}</p>
@@ -1130,7 +1130,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             <div style={{padding:"16px",borderRadius:12,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-secondary)",textAlign:"center"}}>
               <div style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.6,marginBottom:12}}>{t.loginPrompt}</div>
               <button onClick={()=>window.location.assign("/login")}
-                style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",boxShadow:"0 2px 12px #4f46e544"}}>
+                style={{width:"100%",background:"#4338ca",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Fraunces',Georgia,serif",boxShadow:"0 2px 12px #4338ca44"}}>
                 {t.loginOrSignup}
               </button>
             </div>
@@ -1144,10 +1144,10 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             border:"0.5px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",
             fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit",
             color:"var(--color-text-secondary)"}}>{s.cancel}</button>
-          <button onClick={onApply} style={{flex:2,background:"#4f46e5",color:"#fff",
+          <button onClick={onApply} style={{flex:2,background:"#4338ca",color:"#fff",
             border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,
-            cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",
-            boxShadow:"0 2px 12px #4f46e544"}}>✓ {s.applySave}</button>
+            cursor:"pointer",fontFamily:"'Fraunces',Georgia,serif",
+            boxShadow:"0 2px 12px #4338ca44"}}>✓ {s.applySave}</button>
         </div>
       </div>
 
@@ -1155,7 +1155,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
         <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}} onClick={closeConfirm}>
           <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:16,padding:"26px 22px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.28)"}}>
             <div style={{fontSize:38,marginBottom:10}}>⚠️</div>
-            <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{s.confirmTitle}</h3>
+            <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{s.confirmTitle}</h3>
             <p style={{margin:"0 0 16px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.55}}>{s.confirmDesc}</p>
             {requiresPassword ? (
               <div style={{textAlign:"left",marginBottom:14}}>
@@ -1204,7 +1204,7 @@ function ExitModal({ show, onStay, onLeave, message, title, stayLabel, leaveLabe
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:550,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
       <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"28px 22px",maxWidth:320,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
         <div style={{fontSize:36,marginBottom:10}}>⚠️</div>
-        <h3 style={{margin:"0 0 8px",fontSize:17,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{title||t.exitTitle||"Leave this page?"}</h3>
+        <h3 style={{margin:"0 0 8px",fontSize:17,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{title||t.exitTitle||"Leave this page?"}</h3>
         <p style={{margin:"0 0 22px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{message||t.exitMsg||"Your progress will be lost and cannot be recovered."}</p>
         <div style={{display:"flex",gap:10}}>
           <button onClick={onStay}  style={{flex:1,background:stayGreen?"#16a34a":"var(--color-background-secondary)",color:stayGreen?"#fff":"var(--color-text-primary)",border:stayGreen?"none":"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:stayGreen?700:500,cursor:"pointer",fontFamily:"inherit"}}>{stayLabel||t.stayBtn||"Stay"}</button>
@@ -1215,30 +1215,30 @@ function ExitModal({ show, onStay, onLeave, message, title, stayLabel, leaveLabe
   );
 }
 
-// Pause overlay — strong blur over the whole exam so nothing is visible/clickable.
+// Pause overlay, strong blur over the whole exam so nothing is visible/clickable.
 function PauseOverlay({ onResume }) {
   const lc=useLang(); const t=(lc&&lc.t)||{};
   return (
     <div style={{position:"fixed",inset:0,zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",background:"rgba(15,16,32,0.45)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}}>
       <div className="slide-up" style={{textAlign:"center",maxWidth:340}}>
-        <div style={{fontSize:30,fontWeight:800,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif",marginBottom:8}}>{t.examPausedTitle}</div>
+        <div style={{fontSize:30,fontWeight:800,color:"#fff",fontFamily:"'Fraunces',Georgia,serif",marginBottom:8}}>{t.examPausedTitle}</div>
         <div style={{fontSize:14,color:"rgba(255,255,255,0.85)",marginBottom:24}}>{t.progressSaved}</div>
-        <button onClick={onResume} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:14,padding:"15px 40px",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 24px rgba(79,70,229,0.4)"}}>{t.resumeExamBtn}</button>
+        <button onClick={onResume} style={{background:"#4338ca",color:"#fff",border:"none",borderRadius:14,padding:"15px 40px",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 24px rgba(67,56,202,0.4)"}}>{t.resumeExamBtn}</button>
       </div>
     </div>
   );
 }
 
-// Time's-up — non-dismissable, shown while the exam auto-submits.
+// Time's-up, non-dismissable, shown while the exam auto-submits.
 function TimeUpModal() {
   const lc=useLang(); const t=(lc&&lc.t)||{};
   return (
     <div style={{position:"fixed",inset:0,zIndex:950,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",background:"rgba(15,16,32,0.7)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
       <div style={{background:"var(--color-background-primary)",borderRadius:18,padding:"32px 26px",maxWidth:320,width:"100%",textAlign:"center",boxShadow:"0 12px 40px rgba(0,0,0,0.4)"}}>
         <div style={{fontSize:46,marginBottom:10}}>⏰</div>
-        <h3 style={{margin:"0 0 6px",fontSize:22,fontWeight:800,color:"#dc2626",fontFamily:"'Playfair Display',Georgia,serif"}}>{t.timesUp}</h3>
+        <h3 style={{margin:"0 0 6px",fontSize:22,fontWeight:800,color:"#dc2626",fontFamily:"'Fraunces',Georgia,serif"}}>{t.timesUp}</h3>
         <p style={{margin:"0 0 20px",fontSize:14,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.examSubmittingNow}</p>
-        <div style={{width:36,height:36,margin:"0 auto",border:"3px solid var(--color-border-secondary)",borderTopColor:"#4f46e5",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+        <div style={{width:36,height:36,margin:"0 auto",border:"3px solid var(--color-border-secondary)",borderTopColor:"#4338ca",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
       </div>
     </div>
   );
@@ -1253,13 +1253,13 @@ function ResumeModal({ info, onResume, onDiscard, fmtClock }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:560,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
       <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"28px 22px",maxWidth:330,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.25)"}}>
         <div style={{fontSize:36,marginBottom:10}}>📝</div>
-        <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{t.examInProgressQ}</h3>
+        <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{t.examInProgressQ}</h3>
         <p style={{margin:"0 0 20px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>
           {t.resumeQInfo.replace("{q}",info.examQs?.length||0).replace("{a}",answered)}{info.examTimerOn && info.examTimeLeft!=null ? " · "+fmtClock(info.examTimeLeft)+" left" : ""}
         </p>
         <div style={{display:"flex",gap:10}}>
           <button onClick={onDiscard} style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>{t.discardBtn}</button>
-          <button onClick={onResume} style={{flex:2,background:"#4f46e5",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.continueExamBtn}</button>
+          <button onClick={onResume} style={{flex:2,background:"#4338ca",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.continueExamBtn}</button>
         </div>
       </div>
     </div>
@@ -1269,7 +1269,7 @@ function ResumeModal({ info, onResume, onDiscard, fmtClock }) {
 function Confetti() {
   const pieces = Array.from({length:60},(_,i)=>({
     id:i, x:Math.random()*100, delay:Math.random()*2.5, dur:1.8+Math.random()*2,
-    color:["#4f46e5","#f59e0b","#22c55e","#ec4899","#3b82f6","#f97316","#8b5cf6","#06b6d4"][i%8],
+    color:["#4338ca","#f59e0b","#22c55e","#ec4899","#3b82f6","#f97316","#8b5cf6","#06b6d4"][i%8],
     size:6+Math.random()*8, shape:i%3,
   }));
   return (
@@ -1313,7 +1313,7 @@ function ActivatingOverlay({ show }) {
   return (
     <div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:18,padding:24,textAlign:"center",background:"rgba(15,16,32,0.55)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
       <div style={{width:48,height:48,borderRadius:"50%",border:"4px solid rgba(255,255,255,0.25)",borderTopColor:"#fff",animation:"spin 0.8s linear infinite"}}/>
-      <div style={{color:"#fff",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',Georgia,serif"}}>{t.activatingPro}</div>
+      <div style={{color:"#fff",fontSize:18,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif"}}>{t.activatingPro}</div>
       <div style={{color:"rgba(255,255,255,0.8)",fontSize:13.5,maxWidth:320,lineHeight:1.5}}>{t.refreshingAccount}</div>
     </div>
   );
@@ -1367,6 +1367,7 @@ export default function StudyQuiz() {
   const [numQ,         setNumQ]         = useState(10);
   const [customQ,      setCustomQ]      = useState("25");
   const [useCustomQ,   setUseCustomQ]   = useState(false);
+  const [importCount,  setImportCount]  = useState(null); // count requested by the browser extension hand-off (wins over the default-count sync)
   const [diff,         setDiff]         = useState(1);
   const [qType,        setQType]        = useState("mcq");
   const [quiz,         setQuiz]         = useState(null);
@@ -1410,7 +1411,7 @@ export default function StudyQuiz() {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr]   = useState("");
   const [shareCopied, setShareCopied] = useState(false);
-  // ── Standardized mock exams (ACT) — self-contained, per-section timed ──
+  // ── Standardized mock exams (ACT), self-contained, per-section timed ──
   const [mockPresetId, setMockPresetId] = useState("act");
   const [mock, setMock] = useState(null);
   const [mockTilt, setMockTilt] = useState("standard"); // one difficulty tilt for the whole form, reused per section
@@ -1439,18 +1440,18 @@ export default function StudyQuiz() {
       setScreen("mock_results");
     }
   };
-  // Begin the next section from the between-section break — this is what starts
+  // Begin the next section from the between-section break, this is what starts
   // the next section's timer, so finishing one section never rolls straight into
   // the next with the clock already running.
   const startNextSection = async () => {
     if (!mock) return;
     const ni = mockSecIdx + 1;
     if (ni >= mock.sections.length) { setScreen("mock_results"); return; }
-    // Already built (e.g. retry after a failed build) — just start it.
+    // Already built (e.g. retry after a failed build), just start it.
     if (mock.sections[ni].questions.length) {
       setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(mock.sections[ni].minutes * 60); setScreen("mock_run"); return;
     }
-    // Build this section on demand — cheaper when a user stops early, and each
+    // Build this section on demand, cheaper when a user stops early, and each
     // generation is small and focused instead of all sections at once.
     setMockGenErr(""); setScreen("mock_gen");
     try {
@@ -1480,7 +1481,7 @@ export default function StudyQuiz() {
   const activePlan = plans.find(p=>p.id===activePlanId) || homePlan;
   const topicsWeak = weakTopics(srs.cards); // weak areas from the review deck
   const mastery = topicMastery(srs.topicStats); // per-topic mastery across all quizzes/exams
-  // Best-effort browser reminder — fires only while Revyy is open in the tab
+  // Best-effort browser reminder, fires only while Revyy is open in the tab
   // (real push arrives with the mobile app). Schedules the plan's reminder time.
   useEffect(() => {
     if (typeof Notification==="undefined" || Notification.permission!=="granted") return;
@@ -1519,7 +1520,7 @@ export default function StudyQuiz() {
   const [examAns,     setExamAns]     = useState({});
   const [examEvals,   setExamEvals]   = useState(null);
   // When a quiz or exam finishes, add the missed questions to the review deck
-  // (once per result set — keyed on the object identity).
+  // (once per result set, keyed on the object identity).
   useEffect(() => {
     if (screen === "results" && quiz && srsAddedRef.current !== quiz) {
       srsAddedRef.current = quiz;
@@ -1604,9 +1605,39 @@ export default function StudyQuiz() {
   useEffect(()=>{ Haptics.on = settings.haptics; },[settings.haptics]);
   // Apply the saved "default difficulty / questions" to the quiz-setup controls
   // on load (and whenever the default changes) so they persist across reloads
-  // and logout/login — not only when Apply is pressed.
+  // and logout/login, not only when Apply is pressed.
   useEffect(()=>{ setDiff(settings.defaultDiff); },[settings.defaultDiff]);
-  useEffect(()=>{ setNumQ(settings.defaultQCount); },[settings.defaultQCount]);
+  // An extension-imported count (importCount) wins over the saved default, so a
+  // count picked in the extension popup survives the async settings hydration.
+  useEffect(()=>{ setNumQ(importCount ?? settings.defaultQCount); },[settings.defaultQCount, importCount]);
+
+  // Browser-extension hand-off. The Revyy extension captures a page or
+  // selection, drops it in localStorage (key "revyy_import"), then opens the
+  // app. We read it once on mount (and on the "revyy-import" nudge the extension
+  // fires if the app was already open), pre-fill the Text tab, and jump to the
+  // setup screen. The extension sets localStorage before dispatching, so we
+  // re-read from there rather than trusting the cross-world event detail.
+  useEffect(()=>{
+    const pull=()=>{
+      let raw; try{ raw=localStorage.getItem("revyy_import"); }catch{ return; }
+      if(!raw) return;
+      try{ localStorage.removeItem("revyy_import"); }catch{ /* ignore */ }
+      let p; try{ p=JSON.parse(raw); }catch{ p={ text:raw }; }
+      const text=String(p?.text||"").trim();
+      if(text.length<20) return;
+      setTab("text"); setFile(null); setError(""); setLimitHit(false);
+      setTextVal(text.slice(0,20000));
+      if(["mcq","cards","fill","match"].includes(p?.qtype)) setQType(p.qtype);
+      const c=parseInt(p?.count,10);
+      if(!isNaN(c)&&c>0){ const n=Math.min(Math.max(c,1),qCap()); setImportCount(n); setCustomQ(String(n)); }
+      setScreen("upload");
+    };
+    pull();
+    const onEvt=()=>pull();
+    window.addEventListener("revyy-import",onEvt);
+    return ()=>window.removeEventListener("revyy-import",onEvt);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
 
   // ── Theme injection into document.head ──
   // "system" resolves to light/dark via prefers-color-scheme so the CSS
@@ -1636,7 +1667,7 @@ export default function StudyQuiz() {
   },[settings.animations]);
 
   const autoAdvanceSec = Math.min(Math.max(parseInt(settings.autoAdvanceSec)||5,1),15);
-  // Auto-advance (normal MCQ quiz only — exam mode is separate): once an answer
+  // Auto-advance (normal MCQ quiz only, exam mode is separate): once an answer
   // is picked, move to the next question. With instant feedback we wait the
   // user-configured time (default 5s, up to 15s) so the result is readable and
   // a progress bar can count down; "at end" mode has nothing to read, so it
@@ -1679,7 +1710,7 @@ export default function StudyQuiz() {
     return Math.min(Math.max(n,1), qCap());
   },[useCustomQ,canCustomQ,numQ,customQ,qCap]);
 
-  // Banner-ads master switch (mirrors AdBanners) — separate from feature unlocks.
+  // Banner-ads master switch (mirrors AdBanners), separate from feature unlocks.
   const adsOn = dev.devMode && dev.ads!==null ? dev.ads : ADS_ENABLED;
   const openUpgrade = () => { setUnlockFeature(null); setShowProModal(true); };
 
@@ -1802,7 +1833,7 @@ export default function StudyQuiz() {
           return "Section "+(i+1)+": generate exactly "+desc+". Set \"section\":" +(i+1)+" on EVERY question in this section.";
         }).join("\n");
       }
-      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nLANGUAGE: Write the ENTIRE exam — every question, all options, model answers, explanations and the title — in the SAME language as the study material provided. Match the material's language exactly; do NOT translate it into English."+(LANGS[lang]?.name?" If the material is too short to tell its language, use "+LANGS[lang].name+".":"")+"\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\",\"topic\":\"2-4 word sub-topic\"}]}\nSet \"topic\" to the specific concept each question tests (2-4 words) — used to track weak areas. For written/fill: options:[], correct:0. Keep questions in section order.";
+      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nLANGUAGE: Write the ENTIRE exam, every question, all options, model answers, explanations and the title, in the SAME language as the study material provided. Match the material's language exactly; do NOT translate it into English."+(LANGS[lang]?.name?" If the material is too short to tell its language, use "+LANGS[lang].name+".":"")+"\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\",\"topic\":\"2-4 word sub-topic\"}]}\nSet \"topic\" to the specific concept each question tests (2-4 words), used to track weak areas. For written/fill: options:[], correct:0. Keep questions in section order.";
       return { prompt, marksMap };
     };
 
@@ -1872,7 +1903,7 @@ export default function StudyQuiz() {
     ).join("\n\n");
     const evalPrompt=
       "Grade the "+writtenIdxs.length+" written answers below, numbered #1 to #"+writtenIdxs.length+". "+
-      "Grade each student answer ONLY against the question and model answer under the SAME number — never carry over or mix answers between numbers. "+
+      "Grade each student answer ONLY against the question and model answer under the SAME number, never carry over or mix answers between numbers. "+
       "Each feedback must refer to that one answer only.\n"+
       "Return ONLY JSON: {\"evals\":[{\"n\":1,\"score\":1.0,\"feedback\":\"brief\"}]} with exactly one entry per number, in order.\n"+
       "score: 1=correct, 0.5=partial, 0=wrong.\n\n"+writtenLines;
@@ -1939,7 +1970,7 @@ export default function StudyQuiz() {
 
   // ── Timer effects ──
   useEffect(()=>{ timeLeftRef.current = examTimeLeft; },[examTimeLeft]);
-  // Countdown tick — only during an active, unpaused, timed exam.
+  // Countdown tick, only during an active, unpaused, timed exam.
   useEffect(()=>{
     if(screen!=="exam_run" || !examTimerOn || examPaused || examTimeUp) return;
     const id=setInterval(()=>setExamTimeLeft(s=> s===null ? null : Math.max(0, s-1)),1000);
@@ -2054,7 +2085,7 @@ export default function StudyQuiz() {
     if (!isPdf&&!isImg&&!isTxt) { setError(t.errFileType2); return; }
     try {
       if (isTxt) { const text=await readText(f); setFile({type:"text",content:text,mime:null,name:f.name,sizeMB:f.size/1024/1024}); }
-      // PDFs/images are uploaded to the Anthropic Files API at generate time —
+      // PDFs/images are uploaded to the Anthropic Files API at generate time, 
       // keep the raw File (no base64) so large files aren't inflated.
       else { setFile({type:isPdf?"pdf":"image",raw:f,mime:f.type,name:f.name,sizeMB:f.size/1024/1024}); }
       setError("");
@@ -2097,7 +2128,7 @@ export default function StudyQuiz() {
       setLimitHit(true); // offer the question-pack button under the error (all users)
       setError(
         isPro
-          ? `Daily limit reached (${consumed.daily_limit}/day). You have ${left} questions left — grab a question pack for more.`
+          ? `Daily limit reached (${consumed.daily_limit}/day). You have ${left} questions left, grab a question pack for more.`
           : left > 0
             ? `That's ${finalNumQ} questions but you only have ${left} left today. Lower the count, watch an ad for +10, buy a question pack, or go Pro.`
             : `Daily question limit reached. Watch an ad for +10, buy a question pack, or upgrade to Pro.`
@@ -2120,7 +2151,7 @@ export default function StudyQuiz() {
         blocks=[{type:"text",text:`Study material:\n\n${textVal.trim()}`}];
       }
       // Generate, then validate the count. The model sometimes returns fewer
-      // questions than asked — if so, regenerate (up to 2 extra tries) and keep
+      // questions than asked, if so, regenerate (up to 2 extra tries) and keep
       // whichever attempt produced the most questions. A parse error (usually a
       // truncated response) counts as a failed attempt rather than aborting.
       let res = null, lastErr = null;
@@ -2145,7 +2176,7 @@ export default function StudyQuiz() {
     }
   },[isPro,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,requireLogin]);
 
-  // Generate a fresh MCQ quiz focused on the topics the learner is weakest on —
+  // Generate a fresh MCQ quiz focused on the topics the learner is weakest on, 
   // no upload needed. Uses accumulated topic mastery + sample missed questions to
   // steer the model (and avoid repeating ones they've already seen).
   const drillWeakSpots = useCallback(async () => {
@@ -2158,7 +2189,7 @@ export default function StudyQuiz() {
     const consumed = await consumeQuestions(n);
     if (consumed && consumed.allowed === false) {
       setLimitHit(true);
-      setError(isPro ? `Daily limit reached — grab a question pack for more.` : `Daily question limit reached. Watch an ad for +10, buy a question pack, or upgrade to Pro.`);
+      setError(isPro ? `Daily limit reached, grab a question pack for more.` : `Daily question limit reached. Watch an ad for +10, buy a question pack, or upgrade to Pro.`);
       setScreen("upload"); return; // upload screen shows the error + pack/ad options
     }
     setScreen("loading");
@@ -2240,7 +2271,7 @@ export default function StudyQuiz() {
       const res = await fetch("/api/study", {
         method:"POST",
         headers:{ "Content-Type":"application/json", ...(token ? { Authorization:`Bearer ${token}` } : {}) },
-        body: JSON.stringify({ action:"createShare", quiz:{ title:quiz?.title, subject:quiz?.subject, type:quiz?.type, diff, questions:quiz?.questions, owner:ownerName } }),
+        body: JSON.stringify({ action:"createShare", quiz:{ title:quiz?.title, subject:quiz?.subject, type:quiz?.type, diff, questions:quiz?.questions, owner:ownerName, ownerScore:score, ownerTotal:quiz?.questions?.length||0 } }),
       });
       const d = await res.json().catch(()=>({}));
       if (!res.ok || !d.id) throw new Error();
@@ -2250,7 +2281,7 @@ export default function StudyQuiz() {
     setShareBusy(false);
   };
   const copyShare = async () => { try { await navigator.clipboard.writeText(shareLink); setShareCopied(true); setTimeout(()=>setShareCopied(false),1800); } catch { /* ignore */ } };
-  // Generate a full standardized mock (all sections, from spec — no upload).
+  // Generate a full standardized mock (all sections, from spec, no upload).
   const startMock = async () => {
     if (requireLogin()) return;
     if (!isPro) { setShowProModal(true); return; }
@@ -2266,9 +2297,9 @@ export default function StudyQuiz() {
       const tilt = ["easier", "standard", "standard", "harder"][Math.floor(Math.random() * 4)];
       setMockTilt(tilt);
       // Build ONLY the first section now; the rest are built on demand as the
-      // user proceeds — faster start, and no cost for sections never reached.
+      // user proceeds, faster start, and no cost for sections never reached.
       const qs = await callMockSection(exam, exam.sections[0], tilt);
-      if (!qs.length) throw new Error("Couldn't generate the exam — please try again.");
+      if (!qs.length) throw new Error("Couldn't generate the exam, please try again.");
       submittedSecRef.current = -1;
       setMock({ presetId: exam.id, name: exam.name, scaleMin: exam.scaleMin, scaleMax: exam.scaleMax,
         sections: exam.sections.map((s, i) => ({ ...s, questions: i === 0 ? qs : [] })) });
@@ -2327,8 +2358,8 @@ export default function StudyQuiz() {
       </div>
 
       <div className="rv-home-body" style={{padding:"20px 16px 32px"}}>
-        {/* Smart Review — spaced repetition of missed questions + exam countdown */}
-        <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4f46e5,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 16px rgba(79,70,229,0.3)":"none"}}>
+        {/* Smart Review, spaced repetition of missed questions + exam countdown */}
+        <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4338ca,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 16px rgba(67,56,202,0.3)":"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <span style={{fontSize:24,flexShrink:0}}>🔁</span>
             <div style={{flex:1,minWidth:0}}>
@@ -2340,7 +2371,7 @@ export default function StudyQuiz() {
               </div>
             </div>
             {srs.dueCount>0
-              ? <button onClick={startReview} style={{flexShrink:0,background:"#fff",color:"#4f46e5",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
+              ? <button onClick={startReview} style={{flexShrink:0,background:"#fff",color:"#4338ca",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
               : srs.totalCount>0 && <span style={{flexShrink:0,fontSize:20}}>✅</span>}
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,paddingTop:12,borderTop:srs.dueCount>0?"0.5px solid rgba(255,255,255,0.2)":"0.5px solid var(--color-border-tertiary)"}}>
@@ -2352,7 +2383,7 @@ export default function StudyQuiz() {
               style={{border:"0.5px solid var(--color-border-secondary)",borderRadius:8,padding:"5px 8px",fontSize:12,fontFamily:"inherit",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",outline:"none",colorScheme:srs.dueCount>0?"dark":"light"}}/>
           </div>
         </div>
-        {/* Topic mastery — per-topic strength across all quizzes/exams, with a
+        {/* Topic mastery, per-topic strength across all quizzes/exams, with a
             one-tap drill on the weakest topics (no upload needed). */}
         {mastery.length>0 && (
           <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
@@ -2380,7 +2411,7 @@ export default function StudyQuiz() {
             {mastery.some(t=>t.weak) && <button onClick={drillWeakSpots} style={{...Sb.btnPrimary,width:"100%",marginTop:6,fontSize:13}}>🎯 {t.drillWeak}</button>}
           </div>
         )}
-        {/* AI Study Coach — day-by-day exam plan */}
+        {/* AI Study Coach, day-by-day exam plan */}
         {!homePlan ? (
           <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -2389,7 +2420,7 @@ export default function StudyQuiz() {
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.coachTitle}</div>
                 <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.coachTagline}</div>
               </div>
-              <button onClick={openPlanSetup} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachCreate}</button>
+              <button onClick={openPlanSetup} style={{flexShrink:0,background:"#4338ca",color:"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachCreate}</button>
             </div>
           </div>
         ) : (()=>{
@@ -2401,7 +2432,7 @@ export default function StudyQuiz() {
           const dte = Math.max(0, Math.ceil((new Date(homePlan.testDate+"T00:00:00").getTime() - Date.now())/86400000));
           const countdown = dte===0 ? t.coachExamToday : t.coachExamIn.replace("{n}",dte).replace("{s}",dte===1?"":"s");
           return (
-            <div style={{background:due?"linear-gradient(135deg,#4f46e5,#6366f1)":"var(--color-background-primary)",border:due?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:due?"0 4px 16px rgba(79,70,229,0.3)":"none"}}>
+            <div style={{background:due?"linear-gradient(135deg,#4338ca,#6366f1)":"var(--color-background-primary)",border:due?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:due?"0 4px 16px rgba(67,56,202,0.3)":"none"}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
                 <span style={{fontSize:24,flexShrink:0}}>🧭</span>
                 <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>{setActivePlanId(homePlan.id);setConfirmDelPlan(false);setScreen("plan");}}>
@@ -2412,12 +2443,12 @@ export default function StudyQuiz() {
                 </div>
                 {complete
                   ? <button onClick={()=>{setActivePlanId(homePlan.id);setScreen("plan");}} style={{flexShrink:0,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachViewPlan}</button>
-                  : <button onClick={()=>startPlanDay(homePlan, nd)} style={{flexShrink:0,background:due?"#fff":"#4f46e5",color:due?"#4f46e5":"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{due?t.coachStart:t.coachContinue}</button>}
+                  : <button onClick={()=>startPlanDay(homePlan, nd)} style={{flexShrink:0,background:due?"#fff":"#4338ca",color:due?"#4338ca":"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{due?t.coachStart:t.coachContinue}</button>}
               </div>
               {!complete && day && (
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,paddingTop:12,borderTop:due?"0.5px solid rgba(255,255,255,0.2)":"0.5px solid var(--color-border-tertiary)"}}>
                   <span style={{fontSize:12,fontWeight:600,color:due?"rgba(255,255,255,0.9)":"var(--color-text-secondary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📖 {day.label}</span>
-                  <span style={{flexShrink:0,fontSize:10,fontWeight:700,letterSpacing:0.3,background:due?"rgba(255,255,255,0.2)":"#ede9fe",color:due?"#fff":"#4f46e5",borderRadius:8,padding:"3px 8px"}}>{day.format==="exam"?t.coachExamFormat:(t.quizTypes?.[day.format]||day.format)}</span>
+                  <span style={{flexShrink:0,fontSize:10,fontWeight:700,letterSpacing:0.3,background:due?"rgba(255,255,255,0.2)":"#ede9fe",color:due?"#fff":"#4338ca",borderRadius:8,padding:"3px 8px"}}>{day.format==="exam"?t.coachExamFormat:(t.quizTypes?.[day.format]||day.format)}</span>
                 </div>
               )}
             </div>
@@ -2435,7 +2466,7 @@ export default function StudyQuiz() {
         </div>
 
         <div className="rv-plans-row" style={{display:"flex",gap:10,marginBottom:18}}>
-          {/* Free card only shown to free users — hidden once Pro. */}
+          {/* Free card only shown to free users, hidden once Pro. */}
           {!isPro && (
             <div style={Sb.planCard}>
               <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{t.freeLabel}</div>
@@ -2482,7 +2513,7 @@ export default function StudyQuiz() {
       <div className="rv-upload-body" style={{padding:"18px 16px 32px"}}>
         <div className="rv-ul-left">
         {planSession && (
-          <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:14,color:"#fff"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4338ca,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:14,color:"#fff"}}>
             <span style={{fontSize:18,flexShrink:0}}>🧭</span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:12.5,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.coachSessionBanner} · {planSession.label}</div>
@@ -2493,10 +2524,10 @@ export default function StudyQuiz() {
         )}
         <h2 style={Sb.h2}>{t.uploadTitle}</h2>
         <div style={{display:"flex",gap:5,marginBottom:16}}>
-          {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4f46e5":"var(--color-border-secondary)",background:tab===id?"#4f46e5":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s"}}>{lb}</button>)}
+          {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4338ca":"var(--color-border-secondary)",background:tab===id?"#4338ca":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s"}}>{lb}</button>)}
         </div>
         {tab==="file" && (
-          <div style={{...Sb.dropzone,...(drag?{borderColor:"#4f46e5",background:"#ede9fe"}:{}),...(file?{borderStyle:"solid",borderColor:"#4f46e5"}:{})}}
+          <div style={{...Sb.dropzone,...(drag?{borderColor:"#4338ca",background:"#ede9fe"}:{}),...(file?{borderStyle:"solid",borderColor:"#4338ca"}:{})}}
             onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);loadFile(e.dataTransfer.files[0]);}}
             onClick={()=>fileRef.current.click()}>
@@ -2512,14 +2543,14 @@ export default function StudyQuiz() {
               </button>
         )}
         {tab==="photo" && (
-          <div style={{...Sb.dropzone,...(file&&file.type==="image"?{borderStyle:"solid",borderColor:"#4f46e5"}:{})}} onClick={()=>photoRef.current.click()}>
+          <div style={{...Sb.dropzone,...(file&&file.type==="image"?{borderStyle:"solid",borderColor:"#4338ca"}:{})}} onClick={()=>photoRef.current.click()}>
             <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>loadFile(e.target.files[0])}/>
             {file&&file.type==="image"?(<><div style={{fontSize:32}}>🖼️</div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{t.tapChange}</div></>):(<><div style={{fontSize:48}}>📷</div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.photoTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.photoHint}</div></>)}
           </div>
         )}
         {tab==="text" && <textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>}
         {error && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,lineHeight:1.5}}>⚠️ {error}</div>}
-        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions}</button>}
+        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4338ca"}}>💎 {t.getMoreQuestions}</button>}
         </div>
         <div className="rv-ul-right">
         <div style={Sb.settingsBox}>
@@ -2545,7 +2576,7 @@ export default function StudyQuiz() {
           <div style={{...Sb.settingRow,flexDirection:"column",alignItems:"flex-start",gap:8}}>
             <div style={{display:"flex",justifyContent:"space-between",width:"100%",alignItems:"center"}}>
               <span style={Sb.settingLabel}>{t.questions}</span>
-              <span style={{fontWeight:700,fontSize:14,color:"#4f46e5",minWidth:32,textAlign:"right"}}>{Math.min(numQ,qCap())}</span>
+              <span style={{fontWeight:700,fontSize:14,color:"#4338ca",minWidth:32,textAlign:"right"}}>{Math.min(numQ,qCap())}</span>
             </div>
             {/* Pro/unlocked: step the slider by 1 and reveal a type-in box. */}
             {canCustomQ()&&(
@@ -2559,12 +2590,12 @@ export default function StudyQuiz() {
                 <input type="range"
                   min={useCustomQ&&canCustomQ()?1:5} max={qCap()} step={useCustomQ&&canCustomQ()?1:5}
                   value={Math.min(numQ,qCap())}
-                  onChange={e=>{const v=parseInt(e.target.value);setNumQ(v);setCustomQ(String(v));if(!canCustomQ())setUseCustomQ(false);}}
-                  style={{flex:1,accentColor:"#4f46e5",cursor:"pointer"}}
+                  onChange={e=>{const v=parseInt(e.target.value);setImportCount(null);setNumQ(v);setCustomQ(String(v));if(!canCustomQ())setUseCustomQ(false);}}
+                  style={{flex:1,accentColor:"#4338ca",cursor:"pointer"}}
                 />
                 {useCustomQ&&canCustomQ()&&(
                   <input type="number" min={1} max={qCap()} inputMode="numeric" value={customQ}
-                    onChange={e=>{const s=e.target.value.replace(/[^0-9]/g,"").slice(0,3);setCustomQ(s);const n=parseInt(s,10);if(!isNaN(n))setNumQ(Math.min(Math.max(n,1),qCap()));}}
+                    onChange={e=>{const s=e.target.value.replace(/[^0-9]/g,"").slice(0,3);setImportCount(null);setCustomQ(s);const n=parseInt(s,10);if(!isNaN(n))setNumQ(Math.min(Math.max(n,1),qCap()));}}
                     onBlur={e=>{const n=Math.min(Math.max(parseInt(e.target.value,10)||1,1),qCap());setCustomQ(String(n));setNumQ(n);}}
                     style={{width:58,borderRadius:8,border:"1.5px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"8px 6px",fontFamily:"inherit",outline:"none",boxSizing:"border-box",textAlign:"center"}}/>
                 )}
@@ -2590,7 +2621,7 @@ export default function StudyQuiz() {
             </div>
           </div>
         </div>
-        {/* Usage strip — questions remaining today (server-tracked). */}
+        {/* Usage strip, questions remaining today (server-tracked). */}
         <div style={{background:isPro?"var(--color-background-secondary)":"#fffbeb",border:isPro?"0.5px solid var(--color-border-tertiary)":"1px solid #f59e0b44",borderRadius:10,padding:"10px 14px",fontSize:12,color:isPro?"var(--color-text-secondary)":"#92400e",marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
             <span><strong>{usage?.remaining ?? (isPro?250:50)}</strong> {t.questionsLeftToday} · {usage?.questions_used_today ?? 0}/{usage?.daily_limit ?? (isPro?250:50)} {t.used}{(usage?.bonus_questions_remaining>0)?` · +${usage.bonus_questions_remaining} ${t.bonusWord}`:""} · {t.maxPerQuiz.replace("{n}",isPro?PRO_MAX_Q:FREE_MAX_Q)}</span>
@@ -2601,11 +2632,11 @@ export default function StudyQuiz() {
               {adBusy?t.loadingAd:`📺 ${t.watchAdForQuestions.replace("{n}",usage?.ad_question_bonus??10)} · ${usage?.ad_watches_today??0}/${usage?.max_ad_watches??2}`}
             </button>}
         </div>
-        {isPro&&<button style={{width:"100%",marginBottom:14,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Playfair Display',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span>{t.examModeLabel}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>{t.badgeUnlimited}</span></button>}
+        {isPro&&<button style={{width:"100%",marginBottom:14,background:"#2c2870",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Fraunces',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span>{t.examModeLabel}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>{t.badgeUnlimited}</span></button>}
         {!isPro&&(
           <div
             onClick={unlocks.examUsedToday()?undefined:enterExamMode}
-            style={{background:"#f5f3ff",border:"1.5px solid "+(unlocks.examUnlocked()?"#4f46e5":"#f59e0b55"),borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:unlocks.examUsedToday()?"default":"pointer",opacity:unlocks.examUsedToday()?0.65:1}}>
+            style={{background:"#f5f3ff",border:"1.5px solid "+(unlocks.examUnlocked()?"#4338ca":"#f59e0b55"),borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:unlocks.examUsedToday()?"default":"pointer",opacity:unlocks.examUsedToday()?0.65:1}}>
             <span style={{fontSize:22,flexShrink:0}}>🎓</span>
             <div style={{flex:1}}>
               <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.examModeLabel}</div>
@@ -2613,13 +2644,13 @@ export default function StudyQuiz() {
                 {examAdBusy?t.loadingAd:unlocks.examUsedToday()?t.examAdUsed:unlocks.examUnlocked()?t.examAdUnlocked:t.examAdWatch}
               </div>
             </div>
-            <span style={{fontSize:10,background:unlocks.examUsedToday()?"#94a3b8":unlocks.examUnlocked()?"#4f46e5":"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>
+            <span style={{fontSize:10,background:unlocks.examUsedToday()?"#94a3b8":unlocks.examUnlocked()?"#4338ca":"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>
               {unlocks.examUsedToday()?t.examBadgeUsed:unlocks.examUnlocked()?t.examBadgeReady:t.examBadgeFree}
             </span>
           </div>
         )}
         <div onClick={()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }}
-          style={{background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+          style={{background:"#2c2870",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
           <span style={{fontSize:22,flexShrink:0}}>🎓</span>
           <div style={{flex:1,color:"#fff",minWidth:0}}>
             <div style={{fontWeight:700,fontSize:14}}>{t.mockCardTitle}</div>
@@ -2642,18 +2673,18 @@ export default function StudyQuiz() {
   // ── LOADING ──────────────────────────────────────────────────────
   if (screen==="loading") return (
     <div style={{...Sb.root,alignItems:"center",justifyContent:"center",padding:"0 24px",textAlign:"center",minHeight:"100vh",display:"flex",flexDirection:"column"}}><style>{CSS}</style>
-      <div className="spin-ring" style={{width:52,height:52,borderRadius:"50%",border:"4px solid var(--color-border-tertiary)",borderTopColor:"#4f46e5"}}/>
+      <div className="spin-ring" style={{width:52,height:52,borderRadius:"50%",border:"4px solid var(--color-border-tertiary)",borderTopColor:"#4338ca"}}/>
       <h2 style={{...Sb.h2,textAlign:"center",marginTop:28}}>{t.generating}</h2>
       <div style={{display:"flex",flexDirection:"column",gap:12,marginTop:24,alignItems:"flex-start"}}>
         {t.genSteps.map((s,i)=>(
           <div key={i} className={`step step-${i}`} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:"var(--color-text-secondary)",opacity:0}}>
-            <span style={{width:8,height:8,borderRadius:"50%",background:"#4f46e5",flexShrink:0,display:"block"}}/>
+            <span style={{width:8,height:8,borderRadius:"50%",background:"#4338ca",flexShrink:0,display:"block"}}/>
             {s}
           </div>
         ))}
       </div>
       <p style={{marginTop:28,maxWidth:300,fontSize:12,lineHeight:1.55,color:"var(--color-text-tertiary)"}}>
-        ⏳ {t.genNotice || "Bigger files or a high question count can make generation take a little longer — hang tight."}
+        ⏳ {t.genNotice || "Bigger files or a high question count can make generation take a little longer, hang tight."}
       </p>
     </div>
   );
@@ -2683,14 +2714,14 @@ export default function StudyQuiz() {
         <PBar v={qIdx} max={quiz.questions.length}/>
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}>
           <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-            <span style={{background:"#ede9fe",color:"#4f46e5",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.diffOpts[diff]}</span>
-            <span style={{background:"#ede9fe",color:"#4f46e5",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.quizTypes[quiz.type]}</span>
+            <span style={{background:"#ede9fe",color:"#4338ca",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.diffOpts[diff]}</span>
+            <span style={{background:"#ede9fe",color:"#4338ca",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.quizTypes[quiz.type]}</span>
           </div>
           {quiz.type==="cards"&&<Flashcard key={qIdx} q={q} isLast={isLast} t={t} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} feedback={settings.feedback} autoAdvance={settings.autoAdvance} autoSec={autoAdvanceSec} onNext={(ok,picked)=>{const u=[...answers,{isCorrect:ok,picked}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="mcq"  &&(
             <>
-              <h3 style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}</h3>
+              <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}</h3>
               <div style={{display:"flex",flexDirection:"column",gap:9,marginTop:20}}>
                 {q.options.map((opt,i)=>{
                   const isChosen=selected===i,isCorrect=q.correct===i;
@@ -2699,7 +2730,7 @@ export default function StudyQuiz() {
                     // Instant: reveal right/wrong. At-end: just mark the picked
                     // option (no correctness shown until the results review).
                     if(instant){if(isCorrect)extra={border:"1.5px solid #22c55e",background:"#f0fdf4",color:"#15803d"};else if(isChosen)extra={border:"1.5px solid #ef4444",background:"#fef2f2",color:"#b91c1c"};else extra={opacity:0.45};}
-                    else if(isChosen)extra={border:"1.5px solid #4f46e5",background:"var(--color-sel-tint)"};
+                    else if(isChosen)extra={border:"1.5px solid #4338ca",background:"var(--color-sel-tint)"};
                     else extra={opacity:0.55};
                   }
                   return <button key={i} onClick={()=>pick(i)} disabled={selected!==null} className={selected===null?"quiz-opt":""} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"13px 14px",cursor:selected!==null?"default":"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",transition:"all 0.18s",...extra}}>
@@ -2725,10 +2756,10 @@ export default function StudyQuiz() {
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro} bottom={false}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
-      <div style={{background:"linear-gradient(145deg,#1e1b4b,#4f46e5)",padding:"36px 20px 28px",textAlign:"center"}}>
+      <div style={{background:"#2c2870",padding:"36px 20px 28px",textAlign:"center"}}>
         <div style={{fontSize:50,marginBottom:8}}>{badge.emoji}</div>
         <h2 style={{margin:"0 0 4px",fontSize:22,fontWeight:700,color:"#fff"}}>{badge.text}</h2>
-        <div style={{fontSize:46,fontWeight:800,color:"#fff",letterSpacing:-1,fontFamily:"'Playfair Display',Georgia,serif"}}>{pct}%</div>
+        <div style={{fontSize:46,fontWeight:800,color:"#fff",letterSpacing:-1,fontFamily:"'Fraunces',Georgia,serif"}}>{pct}%</div>
         <div style={{fontSize:14,color:"rgba(255,255,255,0.7)",marginTop:4}}>{score} {t.outOf} {quiz.questions.length}</div>
         <div style={{fontSize:22,letterSpacing:4,marginTop:14}}>{answers.map((a,i)=><span key={i}>{a.isCorrect?"🟩":"🟥"}</span>)}</div>
       </div>
@@ -2737,7 +2768,7 @@ export default function StudyQuiz() {
           <div style={{display:"flex",alignItems:"center",gap:10,background:"#ede9fe",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
             <span style={{fontSize:18}}>🔁</span>
             <span style={{flex:1,fontSize:12.5,color:"#4338ca",lineHeight:1.4}}>{t.srsAddedMsg.replace("{n}",srsAdded).replace("{s}",srsAdded>1?"s":"")}</span>
-            <button onClick={startReview} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
+            <button onClick={startReview} style={{flexShrink:0,background:"#4338ca",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
           </div>
         )}
         <div style={{display:"flex",gap:10,marginBottom:16}}>
@@ -2749,7 +2780,7 @@ export default function StudyQuiz() {
           ))}
         </div>
         {planSession && (
-          <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:14,color:"#fff"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4338ca,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:14,color:"#fff"}}>
             <span style={{fontSize:18}}>🧭</span>
             <span style={{flex:1,fontSize:12.5,fontWeight:700,lineHeight:1.4}}>{t.coachComplete}</span>
             <button onClick={backToPlan} style={{flexShrink:0,background:"rgba(255,255,255,0.2)",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachBackToPlan}</button>
@@ -2759,8 +2790,8 @@ export default function StudyQuiz() {
           <button style={{...Sb.btnPrimary,flex:1,margin:0}} onClick={retry}>{t.retry}</button>
           <button style={{...Sb.btnOutline,flex:1}} onClick={newMat}>{t.newMat}</button>
         </div>
-        <button style={{...Sb.btnOutline,width:"100%",marginBottom:14,borderColor:"#4f46e5",color:"#4f46e5"}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:`📤 ${t.shareQuiz}`}</button>
-        {shareOpen && <ShareModal link={shareLink} err={shareErr} copied={shareCopied} onCopy={copyShare} onClose={()=>setShareOpen(false)} t={t}/>}
+        <button style={{...Sb.btnPrimary,width:"100%",margin:"0 0 14px",background:"var(--color-clay,#b5502f)"}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:`🏆 ${t.challengeFriend}`}</button>
+        {shareOpen && <ShareModal link={shareLink} err={shareErr} copied={shareCopied} onCopy={copyShare} onClose={()=>setShareOpen(false)} challengeScore={`${score}/${quiz.questions.length}`} t={t}/>}
         {!isPro&&adsOn&&<div style={{background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",textAlign:"center",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}>📣 {t.advertisement}</div>}
         <p style={Sb.secLabel}>{t.review}</p>
         {quiz.type==="match"?
@@ -2768,7 +2799,7 @@ export default function StudyQuiz() {
             const a=answers[i];
             return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"14px 14px 14px 11px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${a?.isCorrect?"#22c55e":"#ef4444"}`}} className="fade-in">
               <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{fontSize:15,flexShrink:0}}>{a?.isCorrect?"✅":"❌"}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}</span></div>
-              {!a?.isCorrect&&a&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {a.chosen||"—"}</div>}
+              {!a?.isCorrect&&a&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {a.chosen||", "}</div>}
               <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {q.answer||""}</div>
               {!a?.isCorrect&&<ExplainBox t={t} ctx={{question:q.question,correct:q.answer||"",picked:a?.chosen||"",subject:quiz.subject}}/>}
             </div>;
@@ -2778,7 +2809,7 @@ export default function StudyQuiz() {
             const a=answers[i];
             return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"14px 14px 14px 11px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${a?.isCorrect?"#22c55e":"#ef4444"}`}} className="fade-in">
               <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{fontSize:15,flexShrink:0}}>{a?.isCorrect?"✅":"❌"}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}</span></div>
-              {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="fill")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {quiz.type==="mcq"?(q.options?.[a.selected]??"—"):(a.picked||"—")}</div>}
+              {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="fill")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {quiz.type==="mcq"?(q.options?.[a.selected]??", "):(a.picked||", ")}</div>}
               <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {quiz.type==="mcq"?q.options?.[q.correct]:(q.answer||"")}</div>
               {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.55,paddingTop:8,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:23}}>{q.explanation}</div>}
               {!a?.isCorrect&&<ExplainBox t={t} ctx={{question:q.question,correct:quiz.type==="mcq"?(q.options?.[q.correct]??""):(q.answer||""),picked:quiz.type==="mcq"?(q.options?.[a?.selected]??""):(a?.picked||""),subject:quiz.subject}}/>}
@@ -2800,7 +2831,7 @@ export default function StudyQuiz() {
         <AdBanners isPro={isPro}/>
         <div style={Sb.topbar} className="rv-topbar">
           <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
-          <span style={{...Sb.brand,color:"#4f46e5"}}>🔁 {t.srsReview}</span>
+          <span style={{...Sb.brand,color:"#4338ca"}}>🔁 {t.srsReview}</span>
           <span style={{fontSize:12,color:"var(--color-text-secondary)",fontWeight:600}}>{done?"":`${Math.min(reviewPos+1,reviewQueue.length)}/${reviewQueue.length}`}</span>
         </div>
         {!done && <PBar v={reviewPos} max={reviewQueue.length||1}/>}
@@ -2822,11 +2853,11 @@ export default function StudyQuiz() {
             <>
               <div style={{background:"var(--color-background-primary)",borderRadius:16,border:"0.5px solid var(--color-border-tertiary)",padding:"24px 20px",minHeight:150,display:"flex",flexDirection:"column",justifyContent:"center"}}>
                 <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:"var(--color-text-tertiary)",marginBottom:10,textTransform:"uppercase"}}>{t.question}</div>
-                <div style={{fontSize:18,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.45,fontFamily:"'Playfair Display',Georgia,serif"}}>{card.front}</div>
+                <div style={{fontSize:18,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.45,fontFamily:"'Fraunces',Georgia,serif"}}>{card.front}</div>
                 {reviewShown && (
                   <div className="slide-up" style={{marginTop:18,paddingTop:16,borderTop:"0.5px solid var(--color-border-tertiary)"}}>
                     <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:"#16a34a",marginBottom:8,textTransform:"uppercase"}}>{t.answerWord}</div>
-                    <div style={{fontSize:15,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.5}}>{card.back||"—"}</div>
+                    <div style={{fontSize:15,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.5}}>{card.back||", "}</div>
                     {card.explanation && <p style={{margin:"12px 0 0",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.55}}>{card.explanation}</p>}
                   </div>
                 )}
@@ -2853,18 +2884,18 @@ export default function StudyQuiz() {
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← {t.backWord}</button>
-        <span style={{...Sb.brand,color:"#4f46e5"}}>{t.examModeLabel}</span>
-        <span style={{fontSize:10,background:isPro?"#f59e0b":"#4f46e5",color:"#fff",borderRadius:8,padding:"2px 8px",fontWeight:700,whiteSpace:"nowrap"}}>{isPro?"PRO":t.oneFreePerDay}</span>
+        <span style={{...Sb.brand,color:"#4338ca"}}>{t.examModeLabel}</span>
+        <span style={{fontSize:10,background:isPro?"#f59e0b":"#4338ca",color:"#fff",borderRadius:8,padding:"2px 8px",fontWeight:700,whiteSpace:"nowrap"}}>{isPro?"PRO":t.oneFreePerDay}</span>
       </div>
       <div className="rv-exam-body" style={{padding:"20px 16px 40px"}}>
         <p style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:20,lineHeight:1.6}}>{t.examModeSub}</p>
         <p style={Sb.secLabel}>{t.examType}</p>
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:22}}>
           {[{id:"mcq",icon:"📋",title:t.fullMCQ,desc:t.fullMCQDesc},{id:"written",icon:"✍️",title:t.fullWritten,desc:t.fullWrittenDesc},{id:"custom",icon:"🎛️",title:t.customMix,desc:t.customMixDesc}].filter(m=>isPro||m.id!=="custom").map(m=>(
-            <div key={m.id} onClick={()=>setExamMode(m.id)} className="exam-type-card" style={{display:"flex",alignItems:"center",gap:14,borderRadius:12,padding:"14px 16px",cursor:"pointer",border:"1.5px solid "+(examMode===m.id?"#4f46e5":"var(--color-border-tertiary)"),background:examMode===m.id?"#ede9fe":"var(--color-background-primary)",transition:"all 0.18s",boxShadow:examMode===m.id?"0 4px 16px #4f46e533":"none"}}>
+            <div key={m.id} onClick={()=>setExamMode(m.id)} className="exam-type-card" style={{display:"flex",alignItems:"center",gap:14,borderRadius:12,padding:"14px 16px",cursor:"pointer",border:"1.5px solid "+(examMode===m.id?"#4338ca":"var(--color-border-tertiary)"),background:examMode===m.id?"#ede9fe":"var(--color-background-primary)",transition:"all 0.18s",boxShadow:examMode===m.id?"0 4px 16px #4338ca33":"none"}}>
               <span style={{fontSize:26,flexShrink:0}}>{m.icon}</span>
               <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{m.title}</div><div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:2}}>{m.desc}</div></div>
-              {examMode===m.id&&<span style={{color:"#4f46e5",fontWeight:700,fontSize:18}}>✓</span>}
+              {examMode===m.id&&<span style={{color:"#4338ca",fontWeight:700,fontSize:18}}>✓</span>}
             </div>
           ))}
         </div>
@@ -2875,16 +2906,16 @@ export default function StudyQuiz() {
               <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>{t.questionsLow}</span>
-                  <span style={{fontWeight:700,fontSize:18,color:"#4f46e5"}}>{Math.min(Math.max(parseInt(examTotalQ)||1,1),100)}</span>
+                  <span style={{fontWeight:700,fontSize:18,color:"#4338ca"}}>{Math.min(Math.max(parseInt(examTotalQ)||1,1),100)}</span>
                 </div>
-                <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(examTotalQ)||1,1),100)} onChange={e=>setExamTotalQ(e.target.value)} style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}/>
+                <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(examTotalQ)||1,1),100)} onChange={e=>setExamTotalQ(e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>100</span></div>
               </div>
             ) : (
               <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>{t.freeDailyExam}</span>
-                  <span style={{fontWeight:700,fontSize:18,color:"#4f46e5"}}>{t.examFreeQCount}</span>
+                  <span style={{fontWeight:700,fontSize:18,color:"#4338ca"}}>{t.examFreeQCount}</span>
                 </div>
                 <p style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.5,margin:"8px 0 0"}}>{t.upgradeExamNote}</p>
               </div>
@@ -2895,7 +2926,7 @@ export default function StudyQuiz() {
           <div style={{marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <p style={{...Sb.secLabel,margin:0}}>{t.examSectionsLbl}</p>
-              {examSections.length<5&&<button onClick={addSection} style={{background:"#ede9fe",border:"1px solid #a5b4fc",color:"#4f46e5",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t.addSectionBtn}</button>}
+              {examSections.length<5&&<button onClick={addSection} style={{background:"#ede9fe",border:"1px solid #a5b4fc",color:"#4338ca",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t.addSectionBtn}</button>}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {examSections.map((sec,si)=>{
@@ -2903,7 +2934,7 @@ export default function StudyQuiz() {
                 return (
                   <div key={sec.id} style={{background:"var(--color-background-primary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)",overflow:"hidden"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",background:si%2===0?"#f5f3ff":"#fef3c7"}}>
-                      <span style={{fontWeight:700,fontSize:13,color:si%2===0?"#4f46e5":"#92400e"}}>{t.sectionNum.replace("{n}",si+1)}</span>
+                      <span style={{fontWeight:700,fontSize:13,color:si%2===0?"#4338ca":"#92400e"}}>{t.sectionNum.replace("{n}",si+1)}</span>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <span style={{fontSize:11,fontWeight:600,color:"var(--color-text-secondary)"}}>{secMarks} {t.marksWord}</span>
                         {examSections.length>1&&<button onClick={()=>removeSection(sec.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",fontSize:16,lineHeight:1,padding:"0 2px"}}>✕</button>}
@@ -2927,9 +2958,9 @@ export default function StudyQuiz() {
                       <div>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                           <span style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)"}}>{t.questionsUpperLbl}</span>
-                          <span style={{fontWeight:700,fontSize:14,color:"#4f46e5"}}>{Math.min(Math.max(parseInt(sec.count)||1,1),100)}</span>
+                          <span style={{fontWeight:700,fontSize:14,color:"#4338ca"}}>{Math.min(Math.max(parseInt(sec.count)||1,1),100)}</span>
                         </div>
-                        <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(sec.count)||1,1),100)} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",accentColor:"#4f46e5",cursor:"pointer"}}/>
+                        <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(sec.count)||1,1),100)} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
                         <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>100</span></div>
                       </div>
                     </div>
@@ -2940,7 +2971,7 @@ export default function StudyQuiz() {
                 );
               })}
             </div>
-            <div style={{marginTop:12,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{marginTop:12,background:"#2c2870",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:13,color:"rgba(255,255,255,0.8)"}}>{t.totalExamLbl}</span>
               <span style={{fontSize:15,fontWeight:700,color:"#fff"}}>{sectionTotalQs} {t.questionsLow} · {sectionTotalMarks} {t.marksWord}</span>
             </div>
@@ -2995,8 +3026,8 @@ export default function StudyQuiz() {
           })}
         </div>
         {error&&<div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {error}</div>}
-        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4f46e5"}}>💎 {t.getMoreQuestions}</button>}
-        <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#312e81,#4f46e5)"}} onClick={generateExam}>{t.startExam}</button>
+        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4338ca"}}>💎 {t.getMoreQuestions}</button>}
+        <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#2c2870,#4338ca)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
       {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
@@ -3032,7 +3063,7 @@ export default function StudyQuiz() {
         )}
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}>
           {q.section&&(examIdx===0||examQs[examIdx-1]?.section!==q.section)&&(
-            <div style={{background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}} className="fade-in">
+            <div style={{background:"#2c2870",borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}} className="fade-in">
               <span style={{fontWeight:700,fontSize:14,color:"#fff"}}>{t.sectionNum.replace("{n}",q.section)}</span>
               {examMode==="custom"&&examSections[q.section-1]&&(
                 <span style={{fontSize:11,color:"rgba(255,255,255,0.75)"}}>{t.qsAndMarks.replace("{q}",examSections[q.section-1].count).replace("{m}",(parseInt(examSections[q.section-1].count)||0)*(parseFloat(examSections[q.section-1].marksPerQ)||1))}</span>
@@ -3040,16 +3071,16 @@ export default function StudyQuiz() {
             </div>
           )}
           <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-            <span style={{background:q.type==="mcq"?"#ede9fe":"#fef3c7",color:q.type==="mcq"?"#4f46e5":"#92400e",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{q.type==="mcq"?t.quizTypes.mcq:q.type==="fill"?t.quizTypes.fill:t.writtenWord}</span>
+            <span style={{background:q.type==="mcq"?"#ede9fe":"#fef3c7",color:q.type==="mcq"?"#4338ca":"#92400e",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{q.type==="mcq"?t.quizTypes.mcq:q.type==="fill"?t.quizTypes.fill:t.writtenWord}</span>
             {examAns[examIdx]!==undefined&&<span style={{background:"#f0fdf4",color:"#16a34a",borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:600}}>{t.answeredWord}</span>}
           </div>
-          <h3 style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:"0 0 20px"}}>{q.question}</h3>
+          <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:"0 0 20px"}}>{q.question}</h3>
           {q.type==="mcq"&&(
             <div style={{display:"flex",flexDirection:"column",gap:9}}>
               {q.options.map((opt,i)=>{
                 const isSel=examAns[examIdx]===i;
-                return <button key={i} onClick={()=>pickExam(i)} className="quiz-opt" style={{display:"flex",alignItems:"center",gap:12,background:isSel?"#ede9fe":"var(--color-background-primary)",border:"1.5px solid "+(isSel?"#4f46e5":"var(--color-border-tertiary)"),borderRadius:12,padding:"13px 14px",cursor:"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",transition:"all 0.18s"}}>
-                  <span style={{width:28,height:28,borderRadius:"50%",background:isSel?"#4f46e5":"var(--color-background-secondary)",color:isSel?"#fff":"var(--color-text-secondary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{LETTERS[i]}</span>
+                return <button key={i} onClick={()=>pickExam(i)} className="quiz-opt" style={{display:"flex",alignItems:"center",gap:12,background:isSel?"#ede9fe":"var(--color-background-primary)",border:"1.5px solid "+(isSel?"#4338ca":"var(--color-border-tertiary)"),borderRadius:12,padding:"13px 14px",cursor:"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",transition:"all 0.18s"}}>
+                  <span style={{width:28,height:28,borderRadius:"50%",background:isSel?"#4338ca":"var(--color-background-secondary)",color:isSel?"#fff":"var(--color-text-secondary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{LETTERS[i]}</span>
                   <span style={{flex:1,textAlign:"left",lineHeight:1.4}}>{opt}</span>
                 </button>;
               })}
@@ -3060,7 +3091,7 @@ export default function StudyQuiz() {
           {q.type!=="fill"&&(
             <div style={{display:"flex",gap:10,marginTop:20}}>
               {examIdx>0&&<button onClick={prevExam} style={{...Sb.btnOutline,padding:"13px 20px",fontSize:13}}>← {t.prev}</button>}
-              <button onClick={nextExam} style={{...Sb.btnPrimary,flex:1,margin:0,background:isLast?"#16a34a":"#4f46e5",fontSize:14}}>{isLast?t.submitExam:t.next}</button>
+              <button onClick={nextExam} style={{...Sb.btnPrimary,flex:1,margin:0,background:isLast?"#16a34a":"#4338ca",fontSize:14}}>{isLast?t.submitExam:t.next}</button>
             </div>
           )}
           {isLast&&q.type!=="fill"&&<p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>{t.reviewBeforeSubmit}</p>}
@@ -3077,10 +3108,10 @@ export default function StudyQuiz() {
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:560,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
             <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"26px 22px",maxWidth:330,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.25)"}}>
               <div style={{fontSize:34,marginBottom:8}}>📋</div>
-              <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{t.submitExamQ}</h3>
-              <p style={{margin:"0 0 18px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.submitStillHave} <strong style={{color:"#4f46e5"}}>{fmtClock(examTimeLeft||0)}</strong> {t.submitReviewBefore}</p>
+              <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{t.submitExamQ}</h3>
+              <p style={{margin:"0 0 18px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.submitStillHave} <strong style={{color:"#4338ca"}}>{fmtClock(examTimeLeft||0)}</strong> {t.submitReviewBefore}</p>
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                <button onClick={()=>{setShowSubmitPrompt(false);setExamReview(true);setExamIdx(0);}} style={{...Sb.btnPrimary,width:"100%",margin:0,background:"#4f46e5",fontSize:14}}>{t.reviewAnswersBtn}</button>
+                <button onClick={()=>{setShowSubmitPrompt(false);setExamReview(true);setExamIdx(0);}} style={{...Sb.btnPrimary,width:"100%",margin:0,background:"#4338ca",fontSize:14}}>{t.reviewAnswersBtn}</button>
                 <button onClick={()=>{setShowSubmitPrompt(false);submitExam();}} style={{width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.submitNowBtn}</button>
               </div>
             </div>
@@ -3100,7 +3131,7 @@ export default function StudyQuiz() {
       <h2 style={{...Sb.h2,textAlign:"center"}}>{t.evaluating}</h2>
       <p style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:24}}>{t.aiGradingMsg}</p>
       <div style={{display:"flex",flexDirection:"column",gap:12,alignItems:"flex-start"}}>
-        {t.evalSteps.map((s,i)=>(<div key={i} className={"step step-"+i} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:"var(--color-text-secondary)",opacity:0}}><span style={{width:8,height:8,borderRadius:"50%",background:"#4f46e5",flexShrink:0,display:"block"}}/>{s}</div>))}
+        {t.evalSteps.map((s,i)=>(<div key={i} className={"step step-"+i} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:"var(--color-text-secondary)",opacity:0}}><span style={{width:8,height:8,borderRadius:"50%",background:"#4338ca",flexShrink:0,display:"block"}}/>{s}</div>))}
       </div>
     </div>
   );
@@ -3119,8 +3150,8 @@ export default function StudyQuiz() {
         {showConfetti&&<Confetti/>}
         <div style={{background:theme.bg,padding:"40px 20px 32px",textAlign:"center"}}>
           <div style={{fontSize:56,marginBottom:8}}>{theme.emoji}</div>
-          <h2 style={{margin:"0 0 8px",fontSize:24,fontWeight:700,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif"}}>{theme.title}</h2>
-          <div style={{fontSize:52,fontWeight:900,color:"#fff",letterSpacing:-2,fontFamily:"'Playfair Display',Georgia,serif"}}>{pct}%</div>
+          <h2 style={{margin:"0 0 8px",fontSize:24,fontWeight:700,color:"#fff",fontFamily:"'Fraunces',Georgia,serif"}}>{theme.title}</h2>
+          <div style={{fontSize:52,fontWeight:900,color:"#fff",letterSpacing:-2,fontFamily:"'Fraunces',Georgia,serif"}}>{pct}%</div>
           <div style={{fontSize:13,color:"rgba(255,255,255,0.7)",marginTop:4}}>
             {(Math.round(total*10)/10)+" / "+totalPossible+(examMode==="custom"?" "+t.marksSuffix:" "+t.ptsSuffix)} · {t.passMark}
           </div>
@@ -3132,7 +3163,7 @@ export default function StudyQuiz() {
             <div style={{display:"flex",alignItems:"center",gap:10,background:"#ede9fe",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
               <span style={{fontSize:18}}>🔁</span>
               <span style={{flex:1,fontSize:12.5,color:"#4338ca",lineHeight:1.4}}>{t.srsAddedMsg.replace("{n}",srsAdded).replace("{s}",srsAdded>1?"s":"")}</span>
-              <button onClick={startReview} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
+              <button onClick={startReview} style={{flexShrink:0,background:"#4338ca",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
             </div>
           )}
           <div style={{display:"flex",gap:10,marginBottom:18}}>
@@ -3146,7 +3177,7 @@ export default function StudyQuiz() {
           {(examTimeUsedSec!=null || examTimerOn) && (
             <div style={{display:"flex",gap:10,marginBottom:18}}>
               {[
-                {v: examTimeExpired ? t.timeExpiredLbl : (examTimeUsedSec!=null ? Math.floor(examTimeUsedSec/60)+" min "+(examTimeUsedSec%60)+" sec" : "—"), l:t.timeUsedLbl, red:examTimeExpired},
+                {v: examTimeExpired ? t.timeExpiredLbl : (examTimeUsedSec!=null ? Math.floor(examTimeUsedSec/60)+" min "+(examTimeUsedSec%60)+" sec" : ", "), l:t.timeUsedLbl, red:examTimeExpired},
                 {v: examAnsweredCount+" / "+examQs.length, l:t.answeredLbl},
               ].map(({v,l,red},i)=>(
                 <div key={i} style={{flex:1,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 6px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
@@ -3167,7 +3198,7 @@ export default function StudyQuiz() {
                 const col=secPct>=90?"#16a34a":secPct>=50?"#b45309":"#dc2626";
                 return (
                   <div key={si} style={{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:si<examSections.length-1?"0.5px solid var(--color-border-tertiary)":undefined,gap:12}}>
-                    <span style={{width:22,height:22,borderRadius:"50%",background:si%2===0?"#ede9fe":"#fef3c7",color:si%2===0?"#4f46e5":"#92400e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{si+1}</span>
+                    <span style={{width:22,height:22,borderRadius:"50%",background:si%2===0?"#ede9fe":"#fef3c7",color:si%2===0?"#4338ca":"#92400e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{si+1}</span>
                     <div style={{flex:1}}>
                       <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)"}}>{t.sectionNum.replace("{n}",si+1)}: {sec.type==="mcq"?t.quizTypes.mcq:sec.type==="fill"?t.quizTypes.fill:t.writtenWord}</div>
                       <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{t.qsTimesMarks.replace("{n}",secQs.length).replace("{m}",sec.marksPerQ)}</div>
@@ -3182,7 +3213,7 @@ export default function StudyQuiz() {
             </div>
           )}
           {planSession && (
-            <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:16,color:"#fff"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4338ca,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:16,color:"#fff"}}>
               <span style={{fontSize:18}}>🧭</span>
               <span style={{flex:1,fontSize:12.5,fontWeight:700,lineHeight:1.4}}>{t.coachComplete}</span>
               <button onClick={backToPlan} style={{flexShrink:0,background:"rgba(255,255,255,0.2)",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachBackToPlan}</button>
@@ -3201,7 +3232,7 @@ export default function StudyQuiz() {
             return (
               <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"13px 13px 13px 10px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:"3px solid "+col}} className="fade-in">
                 <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}>
-                  <span style={{fontSize:9,fontWeight:700,background:q.type==="mcq"?"#ede9fe":"#fef3c7",color:q.type==="mcq"?"#4f46e5":"#92400e",borderRadius:8,padding:"2px 6px",flexShrink:0,marginTop:2}}>{q.type==="mcq"?t.badgeMcq:q.type==="fill"?t.badgeFill:t.badgeWritten}</span>
+                  <span style={{fontSize:9,fontWeight:700,background:q.type==="mcq"?"#ede9fe":"#fef3c7",color:q.type==="mcq"?"#4338ca":"#92400e",borderRadius:8,padding:"2px 6px",flexShrink:0,marginTop:2}}>{q.type==="mcq"?t.badgeMcq:q.type==="fill"?t.badgeFill:t.badgeWritten}</span>
                   <span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,flex:1}}>{q.question}</span>
                 </div>
                 {q.type==="mcq"&&examAns[i]!==undefined&&(
@@ -3256,8 +3287,8 @@ export default function StudyQuiz() {
         <label style={Sb.coachLabel}>{t.coachMode}</label>
         <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
           {[["selfpaced",t.coachModeSelf,t.coachModeSelfDesc],["remind",t.coachModeRemind,t.coachModeRemindDesc]].map(([v,lbl,desc])=>(
-            <button key={v} onClick={()=>setPlanForm(f=>({...f,mode:v}))} style={{textAlign:"left",display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",borderRadius:12,border:"1.5px solid "+(planForm.mode===v?"#4f46e5":"var(--color-border-secondary)"),background:planForm.mode===v?"var(--color-sel-tint)":"var(--color-background-primary)",cursor:"pointer",fontFamily:"inherit"}}>
-              <span style={{width:18,height:18,borderRadius:"50%",border:"2px solid "+(planForm.mode===v?"#4f46e5":"var(--color-border-secondary)"),flexShrink:0,marginTop:1,background:planForm.mode===v?"#4f46e5":"transparent",boxShadow:planForm.mode===v?"inset 0 0 0 2px var(--color-background-primary)":"none"}}/>
+            <button key={v} onClick={()=>setPlanForm(f=>({...f,mode:v}))} style={{textAlign:"left",display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",borderRadius:12,border:"1.5px solid "+(planForm.mode===v?"#4338ca":"var(--color-border-secondary)"),background:planForm.mode===v?"var(--color-sel-tint)":"var(--color-background-primary)",cursor:"pointer",fontFamily:"inherit"}}>
+              <span style={{width:18,height:18,borderRadius:"50%",border:"2px solid "+(planForm.mode===v?"#4338ca":"var(--color-border-secondary)"),flexShrink:0,marginTop:1,background:planForm.mode===v?"#4338ca":"transparent",boxShadow:planForm.mode===v?"inset 0 0 0 2px var(--color-background-primary)":"none"}}/>
               <span style={{flex:1}}>
                 <span style={{display:"block",fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)"}}>{lbl}</span>
                 <span style={{display:"block",fontSize:11.5,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.45}}>{desc}</span>
@@ -3300,9 +3331,9 @@ export default function StudyQuiz() {
           <span style={Sb.brand}>{t.coachTitle}</span>
           <button onClick={openPlanSetup} title={t.coachCreate} style={{background:"none",border:"none",fontSize:20,lineHeight:1,cursor:"pointer",color:"var(--color-text-secondary)",padding:0,fontWeight:400}}>＋</button>
         </div>
-        <div style={{background:"linear-gradient(145deg,#1e1b4b,#4f46e5)",padding:"22px 20px 20px"}}>
+        <div style={{background:"#2c2870",padding:"22px 20px 20px"}}>
           <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",marginBottom:4}}>{t.coachYourPlan}</div>
-          <h2 style={{margin:0,fontSize:21,fontWeight:700,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif"}}>{activePlan.title}</h2>
+          <h2 style={{margin:0,fontSize:21,fontWeight:700,color:"#fff",fontFamily:"'Fraunces',Georgia,serif"}}>{activePlan.title}</h2>
           <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,flexWrap:"wrap"}}>
             <span style={{fontSize:12,fontWeight:700,color:"#fff",background:"rgba(255,255,255,0.18)",borderRadius:20,padding:"4px 12px"}}>🎯 {countdown}</span>
             <span style={{fontSize:12,color:"rgba(255,255,255,0.85)"}}>{t.coachProgressLbl.replace("{done}",prog.done).replace("{total}",prog.total)}</span>
@@ -3315,7 +3346,7 @@ export default function StudyQuiz() {
           {activePlan.mode==="remind" && activePlan.reminderTime && (
             <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"var(--color-text-secondary)",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:14}}>
               🔔 <span style={{flex:1}}>{t.coachReminderTime} <strong style={{color:"var(--color-text-primary)"}}>{activePlan.reminderTime}</strong></span>
-              {notifPerm!=="granted" && notifPerm!=="unsupported" && <button onClick={enableReminders} style={{background:"none",border:"none",color:"#4f46e5",fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",padding:0}}>{t.coachEnableNotif}</button>}
+              {notifPerm!=="granted" && notifPerm!=="unsupported" && <button onClick={enableReminders} style={{background:"none",border:"none",color:"#4338ca",fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",padding:0}}>{t.coachEnableNotif}</button>}
             </div>
           )}
           {rd.score!=null && (
@@ -3325,7 +3356,7 @@ export default function StudyQuiz() {
                 <span style={{fontSize:12,fontWeight:700,color:rd.score>=75?"#16a34a":rd.score>=45?"#b45309":"#dc2626"}}>{rd.label}</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <span style={{fontSize:30,fontWeight:800,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif",minWidth:58}}>{rd.score}%</span>
+                <span style={{fontSize:30,fontWeight:800,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif",minWidth:58}}>{rd.score}%</span>
                 <div style={{flex:1,height:8,background:"var(--color-background-tertiary)",borderRadius:4,overflow:"hidden"}}>
                   <div style={{height:"100%",width:rd.score+"%",background:rd.score>=75?"#16a34a":rd.score>=45?"#f59e0b":"#ef4444",borderRadius:4,transition:"width .4s"}}/>
                 </div>
@@ -3344,7 +3375,7 @@ export default function StudyQuiz() {
             const st = dayState(day);
             const isNext = i===nd;
             const pctScore = (day.status==="done" && day.total) ? Math.round((day.score/day.total)*100) : null;
-            const stColor = st==="done"?"#16a34a":st==="today"?"#4f46e5":st==="missed"?"#b45309":"var(--color-text-tertiary)";
+            const stColor = st==="done"?"#16a34a":st==="today"?"#4338ca":st==="missed"?"#b45309":"var(--color-text-tertiary)";
             const stLabel = st==="done"?t.coachDayDone:st==="today"?t.coachDayToday:st==="missed"?t.coachDayMissed:t.coachDayUpcoming;
             const dObj = new Date(day.date+"T00:00:00");
             return (
@@ -3357,7 +3388,7 @@ export default function StudyQuiz() {
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st==="done"&&"✓ "}{day.label}</div>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
-                      <span style={{fontSize:9.5,fontWeight:700,letterSpacing:0.3,background:"#ede9fe",color:"#4f46e5",borderRadius:7,padding:"2px 6px"}}>{KIND[day.kind]||day.kind}</span>
+                      <span style={{fontSize:9.5,fontWeight:700,letterSpacing:0.3,background:"#ede9fe",color:"#4338ca",borderRadius:7,padding:"2px 6px"}}>{KIND[day.kind]||day.kind}</span>
                       <span style={{fontSize:10.5,color:"var(--color-text-secondary)"}}>{day.format==="exam"?t.coachExamFormat:(t.quizTypes?.[day.format]||day.format)} · {day.numQ} Qs</span>
                       {pctScore!=null && <span style={{fontSize:10.5,fontWeight:700,color:"#16a34a"}}>· {t.coachScored.replace("{pct}",pctScore)}</span>}
                     </div>
@@ -3368,7 +3399,7 @@ export default function StudyQuiz() {
                   {day.status==="done"
                     ? <button onClick={()=>setPlanDayStatus(activePlan.id,i,"pending")} style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:9,padding:"8px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>↻ {t.coachRedo}</button>
                     : <>
-                        <button onClick={()=>startPlanDay(activePlan,i)} style={{flex:2,background:isNext?"#4f46e5":"var(--color-background-secondary)",color:isNext?"#fff":"var(--color-text-primary)",border:isNext?"none":"0.5px solid var(--color-border-secondary)",borderRadius:9,padding:"8px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>▶ {t.coachStart}</button>
+                        <button onClick={()=>startPlanDay(activePlan,i)} style={{flex:2,background:isNext?"#4338ca":"var(--color-background-secondary)",color:isNext?"#fff":"var(--color-text-primary)",border:isNext?"none":"0.5px solid var(--color-border-secondary)",borderRadius:9,padding:"8px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>▶ {t.coachStart}</button>
                         <button onClick={()=>setPlanDayStatus(activePlan.id,i,"done")} style={{flex:1,background:"none",color:"var(--color-text-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:9,padding:"8px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✓ {t.coachMarkDone}</button>
                       </>}
                 </div>
@@ -3406,7 +3437,7 @@ export default function StudyQuiz() {
         {MOCK_EXAMS.map(exam=>(
           <div key={exam.id} onClick={()=>{setMockPresetId(exam.id);setMockGenErr("");setScreen("mock_intro");}}
             style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:10,cursor:"pointer"}} className="exam-type-card">
-            <div style={{width:46,height:46,borderRadius:11,background:"linear-gradient(135deg,#1e1b4b,#4f46e5)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"#fff",fontWeight:800,fontSize:13,letterSpacing:0.2,fontFamily:"'Playfair Display',Georgia,serif"}}>{exam.name.split("/")[0].slice(0,4)}</div>
+            <div style={{width:46,height:46,borderRadius:11,background:"#2c2870",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"#fff",fontWeight:800,fontSize:13,letterSpacing:0.2,fontFamily:"'Fraunces',Georgia,serif"}}>{exam.name.split("/")[0].slice(0,4)}</div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:15,color:"var(--color-text-primary)"}}>{exam.name}</div>
               <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:1}}>{exam.blurb}</div>
@@ -3465,7 +3496,7 @@ export default function StudyQuiz() {
   // ── MOCK EXAM: generating ─────────────────────────────────────────
   if (screen==="mock_gen") return (
     <div style={{...Sb.root,alignItems:"center",justifyContent:"center",padding:"0 24px",textAlign:"center",minHeight:"100vh",display:"flex",flexDirection:"column"}}><style>{CSS}</style>
-      <div className="spin-ring" style={{width:52,height:52,borderRadius:"50%",border:"4px solid var(--color-border-tertiary)",borderTopColor:"#4f46e5"}}/>
+      <div className="spin-ring" style={{width:52,height:52,borderRadius:"50%",border:"4px solid var(--color-border-tertiary)",borderTopColor:"#4338ca"}}/>
       <h2 style={{...Sb.h2,textAlign:"center",marginTop:28}}>{t.mockBuilding}</h2>
       <p style={{marginTop:12,maxWidth:320,fontSize:13,lineHeight:1.55,color:"var(--color-text-secondary)"}}>{t.mockBuildingSub}</p>
     </div>
@@ -3486,18 +3517,18 @@ export default function StudyQuiz() {
         <div style={Sb.topbar} className="rv-topbar">
           <span style={{fontSize:13,fontWeight:700,color:"var(--color-text-primary)"}}>{sec.name}</span>
           <span style={{fontSize:11,color:"var(--color-text-secondary)"}}>{t.mockSection} {mockSecIdx+1}/{mock.sections.length}</span>
-          <span className={low?"rv-timer-flash":""} style={{fontSize:15,fontWeight:800,color:low?"#dc2626":"#4f46e5",fontVariantNumeric:"tabular-nums"}}>{mm}:{String(ss).padStart(2,"0")}</span>
+          <span className={low?"rv-timer-flash":""} style={{fontSize:15,fontWeight:800,color:low?"#dc2626":"#4338ca",fontVariantNumeric:"tabular-nums"}}>{mm}:{String(ss).padStart(2,"0")}</span>
         </div>
         <PBar v={mockQIdx} max={sec.questions.length}/>
         <div className="rv-center-narrow" style={{padding:"16px 16px 32px"}}>
           <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:10}}>{t.question} {mockQIdx+1} {t.outOf} {sec.questions.length}</div>
-          <h3 style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:16.5,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.5,margin:0,whiteSpace:"pre-wrap"}}>{q.question}</h3>
+          <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:16.5,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.5,margin:0,whiteSpace:"pre-wrap"}}>{q.question}</h3>
           {q.svg && <div style={{margin:"14px 0 2px",display:"flex",justifyContent:"center"}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.svg)} style={{maxWidth:"100%",maxHeight:300,background:"#fff",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)",padding:10,boxSizing:"border-box"}}/></div>}
           <div style={{display:"flex",flexDirection:"column",gap:9,marginTop:16}}>
             {q.options.map((opt,i)=>{
               const chosen = sel===i;
-              return <button key={i} onClick={()=>pick(i)} style={{display:"flex",alignItems:"center",gap:12,background:chosen?"var(--color-sel-tint)":"var(--color-background-primary)",border:`1.5px solid ${chosen?"#4f46e5":"var(--color-border-tertiary)"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left"}}>
-                <span style={{width:26,height:26,borderRadius:"50%",background:chosen?"#4f46e5":"var(--color-background-secondary)",color:chosen?"#fff":"var(--color-text-primary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{LETTERS[i]}</span>
+              return <button key={i} onClick={()=>pick(i)} style={{display:"flex",alignItems:"center",gap:12,background:chosen?"var(--color-sel-tint)":"var(--color-background-primary)",border:`1.5px solid ${chosen?"#4338ca":"var(--color-border-tertiary)"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left"}}>
+                <span style={{width:26,height:26,borderRadius:"50%",background:chosen?"#4338ca":"var(--color-background-secondary)",color:chosen?"#fff":"var(--color-text-primary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{LETTERS[i]}</span>
                 <span style={{flex:1,lineHeight:1.4}}>{opt}</span>
               </button>;
             })}
@@ -3539,7 +3570,7 @@ export default function StudyQuiz() {
           {next && (
             <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"16px 18px",maxWidth:360,width:"100%",boxSizing:"border-box",marginBottom:20}}>
               <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:6}}>{t.mockUpNext}</div>
-              <div style={{fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Playfair Display',Georgia,serif"}}>{next.name}</div>
+              <div style={{fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{next.name}</div>
               <div style={{fontSize:12.5,color:"var(--color-text-secondary)",marginTop:4}}>{next.count} {t.questionsLow} · {next.minutes} min</div>
             </div>
           )}
@@ -3556,9 +3587,9 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
-        <div style={{background:"linear-gradient(145deg,#1e1b4b,#4f46e5)",padding:"34px 20px 26px",textAlign:"center"}}>
+        <div style={{background:"#2c2870",padding:"34px 20px 26px",textAlign:"center"}}>
           <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"rgba(255,255,255,0.7)",textTransform:"uppercase"}}>{mock.name} {t.mockComposite}</div>
-          <div style={{fontSize:58,fontWeight:800,color:"#fff",fontFamily:"'Playfair Display',Georgia,serif",lineHeight:1.1}}>{comp}</div>
+          <div style={{fontSize:58,fontWeight:800,color:"#fff",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1.1}}>{comp}</div>
           <div style={{fontSize:13,color:"rgba(255,255,255,0.7)"}}>{t.mockOutOf} {compositeMax(mock)}</div>
         </div>
         <div className="rv-center" style={{padding:"20px 16px 40px"}}>
@@ -3583,7 +3614,7 @@ export default function StudyQuiz() {
                 const ok=chosen===q.correct;
                 return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 13px 12px 11px",marginBottom:9,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${ok?"#22c55e":"#ef4444"}`}} className="fade-in">
                   <div style={{display:"flex",gap:8,alignItems:"flex-start"}}><span style={{fontSize:14,flexShrink:0}}>{ok?"✅":"❌"}</span><span style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{q.question}</span></div>
-                  {!ok&&<div style={{fontSize:12,color:"#dc2626",marginTop:5,paddingLeft:22}}>{t.yourAns} {chosen!=null?q.options[chosen]:"—"}</div>}
+                  {!ok&&<div style={{fontSize:12,color:"#dc2626",marginTop:5,paddingLeft:22}}>{t.yourAns} {chosen!=null?q.options[chosen]:", "}</div>}
                   <div style={{fontSize:12,color:"#16a34a",marginTop:3,paddingLeft:22,fontWeight:500}}>{t.correctAns} {q.options[q.correct]}</div>
                   {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingTop:6,marginTop:6,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:22}}>{q.explanation}</div>}
                   {!ok&&<ExplainBox t={t} ctx={{question:q.question,correct:q.options[q.correct],picked:chosen!=null?q.options[chosen]:"",subject:sec.name}}/>}
@@ -3601,10 +3632,10 @@ export default function StudyQuiz() {
 
 const Sb = {
   root:        { minHeight:"100vh", background:"var(--color-background-tertiary)", fontFamily:"'DM Sans','Helvetica Neue',sans-serif", display:"flex", flexDirection:"column" },
-  brand:       { fontFamily:"'Playfair Display',Georgia,serif", fontSize:16, fontWeight:700, color:"var(--color-text-primary)", letterSpacing:0.5, display:"flex", alignItems:"center", gap:8 },
-  hero:        { background:"linear-gradient(145deg,#1e1b4b 0%,#312e81 60%,#1d4ed8 100%)", padding:"44px 24px 40px" },
-  h1:          { fontFamily:"'Playfair Display',Georgia,serif", fontSize:30, fontWeight:700, color:"#fff", lineHeight:1.2, margin:"14px 0 12px" },
-  h2:          { fontFamily:"'Playfair Display',Georgia,serif", fontSize:22, fontWeight:700, color:"var(--color-text-primary)", margin:"0 0 16px" },
+  brand:       { fontFamily:"'Fraunces',Georgia,serif", fontSize:16, fontWeight:700, color:"var(--color-text-primary)", letterSpacing:0.5, display:"flex", alignItems:"center", gap:8 },
+  hero:        { background:"#2c2870", padding:"44px 24px 40px" },
+  h1:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:30, fontWeight:700, color:"#fff", lineHeight:1.2, margin:"14px 0 12px" },
+  h2:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:22, fontWeight:700, color:"var(--color-text-primary)", margin:"0 0 16px" },
   secLabel:    { fontSize:11, fontWeight:700, color:"var(--color-text-tertiary)", letterSpacing:1.5, margin:"0 0 12px", textTransform:"uppercase" },
   fCard:       { background:"var(--color-background-primary)", borderRadius:12, padding:"13px 12px", border:"0.5px solid var(--color-border-tertiary)", display:"flex", flexDirection:"column", gap:4, cursor:"default" },
   planCard:    { flex:1, background:"var(--color-background-primary)", borderRadius:12, padding:"14px 12px", border:"0.5px solid var(--color-border-tertiary)" },
@@ -3616,8 +3647,8 @@ const Sb = {
   settingRow:  { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"11px 14px", borderBottom:"0.5px solid var(--color-border-tertiary)", gap:10, flexWrap:"wrap" },
   settingLabel:{ fontSize:13, fontWeight:600, color:"var(--color-text-primary)", flexShrink:0 },
   langSel:     { background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:8, padding:"5px 8px", fontSize:12, color:"var(--color-text-primary)", cursor:"pointer", fontFamily:"inherit", outline:"none" },
-  btnPrimary:  { background:"#4f46e5", color:"#fff", border:"none", borderRadius:12, padding:"13px 20px", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'Playfair Display',Georgia,serif", transition:"opacity 0.15s", margin:0 },
-  btnHero:     { background:"#fff", color:"#312e81", border:"none", borderRadius:12, padding:"13px 30px", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"inherit" },
+  btnPrimary:  { background:"#4338ca", color:"#fff", border:"none", borderRadius:12, padding:"13px 20px", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'Fraunces',Georgia,serif", transition:"opacity 0.15s", margin:0 },
+  btnHero:     { background:"#fff", color:"#2c2870", border:"none", borderRadius:12, padding:"13px 30px", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"inherit" },
   btnOutline:  { background:"none", color:"var(--color-text-primary)", border:"1px solid var(--color-border-secondary)", borderRadius:12, padding:"12px 20px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" },
   btnGhost:    { background:"none", color:"var(--color-text-secondary)", border:"0.5px solid var(--color-border-tertiary)", borderRadius:12, padding:"11px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   coachLabel:  { display:"block", fontSize:12, fontWeight:700, color:"var(--color-text-secondary)", margin:"0 0 6px", letterSpacing:0.2 },
@@ -3625,7 +3656,7 @@ const Sb = {
 };
 
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600&display=swap');
   *{box-sizing:border-box} body{margin:0}
   .fade-in {animation:fadeIn 0.3s ease both}
   .slide-up{animation:slideUp 0.25s ease both}
@@ -3635,12 +3666,12 @@ const CSS = `
   .spin-ring{animation:spin 0.9s linear infinite}
   .step{animation:fadeIn 0.4s ease forwards;opacity:0}
   .step-0{animation-delay:0.3s}.step-1{animation-delay:0.8s}.step-2{animation-delay:1.3s}.step-3{animation-delay:1.8s}
-  .exam-type-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(79,70,229,0.18)!important;border-color:#4f46e5!important;background:var(--color-hover-tint)!important}
+  .exam-type-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(67,56,202,0.18)!important;border-color:#4338ca!important;background:var(--color-hover-tint)!important}
   button:hover:not(:disabled){transform:translateY(-1px)}
   button:active:not(:disabled){transform:scale(0.97)}
-  .quiz-opt:hover:not(:disabled){transform:translateX(4px)!important;border-color:#4f46e5!important;background:var(--color-hover-tint)!important;box-shadow:2px 0 0 0 #4f46e5}
+  .quiz-opt:hover:not(:disabled){transform:translateX(4px)!important;border-color:#4338ca!important;background:var(--color-hover-tint)!important;box-shadow:2px 0 0 0 #4338ca}
   .quiz-opt:active:not(:disabled){transform:translateX(2px)!important}
-  textarea:focus,input:focus{border-color:#4f46e5!important;box-shadow:0 0 0 2px #4f46e520}
+  textarea:focus,input:focus{border-color:#4338ca!important;box-shadow:0 0 0 2px #4338ca20}
   select{appearance:auto}
   .no-anim *{animation:none!important;transition:none!important}
   @keyframes slideFromRight{from{transform:translateX(100%)}to{transform:translateX(0)}}
@@ -3650,7 +3681,7 @@ const CSS = `
   .settings-panel{animation:slideFromRight 0.22s ease}
   ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--color-border-secondary);border-radius:2px}
 
-  /* Hero (mobile base — stacks: back, brand bar, headline, sub, CTA) */
+  /* Hero (mobile base, stacks: back, brand bar, headline, sub, CTA) */
   .rv-hero-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;}
   .rv-hero-tools{display:flex;align-items:center;gap:10px;}
   .rv-hero-sub{margin-top:14px!important;}
@@ -3661,7 +3692,7 @@ const CSS = `
     /* Root: wider centered card */
     .rv-root-inner{max-width:900px;margin:0 auto;width:100%;}
 
-    /* Hero: two-column editorial layout — brand+sub on the left, headline+CTA
+    /* Hero: two-column editorial layout, brand+sub on the left, headline+CTA
        on the right (back link spans the top). */
     .rv-hero-inner{
       max-width:900px;margin:0 auto;

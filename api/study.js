@@ -68,12 +68,18 @@ function sanitizeQuiz(q) {
     answer: clean(x.answer, 600),
     explanation: clean(x.explanation, 600),
   }));
+  // The sharer's own score, if they shared straight from a results screen, 
+  // powers the "beat my 8/10" challenge framing on the taker page.
+  const oScore = Number.isFinite(+q.ownerScore) ? Math.max(0, Math.min(+q.ownerScore | 0, 1000)) : null;
+  const oTotal = Number.isFinite(+q.ownerTotal) ? Math.max(1, Math.min(+q.ownerTotal | 0, 1000)) : null;
   return {
     title: clean(q.title, 120) || "Shared quiz",
     subject: clean(q.subject, 120),
     type: ["mcq", "cards", "fill", "match"].includes(q.type) ? q.type : "mcq",
     diff: Number.isInteger(q.diff) ? q.diff : 1,
     owner: clean(q.owner, 40),
+    ownerScore: oScore != null && oTotal != null ? oScore : null,
+    ownerTotal: oScore != null && oTotal != null ? oTotal : null,
     questions,
     results: [],
     createdAt: Date.now(),
@@ -94,6 +100,8 @@ async function getSharedQuiz(req, res, id) {
   return res.status(200).json({
     quiz: { title: d.title, subject: d.subject, type: d.type, diff: d.diff, questions: d.questions },
     owner: d.owner || "",
+    ownerScore: d.ownerScore ?? null,
+    ownerTotal: d.ownerTotal ?? null,
     results: topResults(d.results),
   });
 }
