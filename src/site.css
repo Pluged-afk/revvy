@@ -153,19 +153,35 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 .step p { font-size: 15px; color: var(--ink-soft); line-height: 1.62; margin: 0; }
 .step + .step { position: relative; }
 
-/* ── Product preview card (hero visual, an honest mock) ─────── */
-.preview {
-  background: var(--card); border: 1px solid var(--line); border-radius: 18px;
-  box-shadow: var(--shadow-md); padding: 20px; position: relative;
-}
-.preview-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
-.preview-dot { width: 10px; height: 10px; border-radius: 50%; background: #e0d8c8; }
-.preview-q { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: var(--ink); line-height: 1.35; margin-bottom: 16px; }
-.preview-opt { display: flex; align-items: center; gap: 11px; border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; margin-bottom: 9px; font-size: 14.5px; color: var(--ink-soft); }
-.preview-opt .k { width: 22px; height: 22px; border-radius: 6px; background: var(--paper-2); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--muted); flex-shrink: 0; }
-.preview-opt.right { border-color: #bcd9c8; background: #f0f7f2; color: var(--green); }
-.preview-opt.right .k { background: var(--green); color: #fff; }
-.preview-cap { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+/* ── Hero quiz preview (a faithful replica of the app's quiz screen,
+   as a horizontal-scroll carousel of real example questions) ── */
+.qwrap { position: relative; }
+.qscroll { display: flex; gap: 18px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 2px; }
+.qscroll::-webkit-scrollbar { display: none; }
+.qcard { flex: 0 0 100%; scroll-snap-align: center; background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-md); overflow: hidden; }
+.qcard-top { display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; border-bottom: 1px solid var(--line); }
+.qcard-top .subj, .qcard-top .cnt { font-size: 12px; font-weight: 600; color: var(--muted); }
+.qcard-pbar { height: 4px; background: var(--paper-2); }
+.qcard-pbar > i { display: block; height: 100%; background: var(--indigo); }
+.qcard-body { padding: 18px 16px; }
+.qpills { display: flex; gap: 8px; margin-bottom: 14px; }
+.qpill { background: #ece8f6; color: var(--indigo); border-radius: 20px; padding: 4px 12px; font-size: 11px; font-weight: 700; }
+.qq { font-family: 'Fraunces', Georgia, serif; font-size: 18px; font-weight: 600; color: var(--ink); line-height: 1.4; margin: 0 0 16px; }
+.qopt { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1.5px solid var(--line-soft); border-radius: 12px; padding: 12px 13px; margin-bottom: 9px; font-size: 14px; color: var(--ink); }
+.qopt .k { width: 27px; height: 27px; border-radius: 50%; background: var(--paper-2); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--muted); flex-shrink: 0; }
+.qopt .lbl { flex: 1; line-height: 1.4; text-align: left; }
+.qopt .tick { margin-left: auto; font-size: 13px; }
+.qopt.correct { border-color: #22c55e; background: #f0fdf4; color: #15803d; }
+.qopt.correct .k { background: #16a34a; color: #fff; }
+.qexpl { border-radius: 10px; padding: 11px 13px; margin-top: 4px; background: #f0fdf4; border: 0.5px solid #86efac; color: #15803d; }
+.qexpl b { font-size: 13px; }
+.qexpl p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: #3f6d52; }
+.qnext { width: 100%; margin-top: 16px; border: none; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600; font-family: 'Fraunces', Georgia, serif; color: #fff; background: var(--indigo); }
+.qnext.off { background: var(--paper-3); color: var(--faint); }
+.qdots { display: flex; gap: 7px; justify-content: center; align-items: center; margin-top: 16px; }
+.qdots button { width: 8px; height: 8px; padding: 0; border: none; border-radius: 50%; background: #d9d0be; cursor: pointer; transition: width .2s, background .2s; }
+.qdots button.on { background: var(--clay); width: 20px; border-radius: 4px; }
+.qcap { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 12px; }
 
 /* ── Trust strip (honest, no fake stats) ─────────────────────── */
 .trust { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--paper); }

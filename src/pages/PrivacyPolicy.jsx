@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import usePageMeta from "../lib/usePageMeta.js";
 
 export default function PrivacyPolicy() {
-  usePageMeta("Privacy Policy · Revyy", "How Revyy collects, uses, and protects your data.");
+  usePageMeta("Privacy Policy · Revyy", "What data Revyy collects, how it is used, the third parties involved, and the choices you have.");
   return (
     <section className="section">
       <div className="container legal">
@@ -10,64 +10,102 @@ export default function PrivacyPolicy() {
         <p className="updated">Last updated: August 2026</p>
 
         <p>
-          This Privacy Policy explains what information Revyy ("we", "us") collects when you
-          use our website and app, how we use it, and the rights you have over your data. By
-          using Revyy you agree to the practices described below.
+          This policy explains what information Revyy ("we", "us") collects when you use our
+          website and app, how we use it, who we share it with, and the choices you have. We have
+          tried to describe what actually happens rather than list every possibility. If anything
+          is unclear, email us at <a href="mailto:support@revyy.app">support@revyy.app</a>.
         </p>
 
-        <h2>1. Data we collect</h2>
+        <h2>1. Information we collect</h2>
         <ul>
-          <li><strong>Study material you provide:</strong> PDFs, images, text and links you upload to generate a quiz.</li>
-          <li><strong>Account and usage data:</strong> basic settings (such as language and theme) and counters like the number of quizzes generated, stored locally in your browser.</li>
-          <li><strong>Payment data:</strong> if you subscribe to Pro, billing details are handled by our payment provider. We never see or store your full card number.</li>
-          <li><strong>Technical data:</strong> standard log information such as browser type and approximate region, used to keep the service secure and reliable.</li>
+          <li><strong>Account details:</strong> when you sign up, our authentication provider (Clerk) collects your email address and either a password or your Google sign-in, plus a display name if you provide one.</li>
+          <li><strong>Study material you upload:</strong> the PDFs, images, pasted text and links you submit so we can generate a quiz or exam from them.</li>
+          <li><strong>Your study progress:</strong> if you are signed in, we save the data the app produces, your review deck, quiz and exam scores, study plans, per-topic progress and any exam date you set, to our database so it syncs across your devices.</li>
+          <li><strong>Usage and plan data:</strong> counters such as how many questions and mock exams you have generated today, and whether you are on the Free or Pro plan, so we can apply plan limits.</li>
+          <li><strong>Payment data:</strong> if you subscribe to Pro, your card details are collected and held by our payment provider (Stripe). We never see or store your card number, only your subscription status.</li>
+          <li><strong>Messages you send us:</strong> the name, email and message you submit through the contact form or the in-app report tool.</li>
+          <li><strong>Settings stored on your device:</strong> your language, theme and a local copy of your study data and counters, kept in your browser's local storage.</li>
+          <li><strong>Technical data:</strong> standard server logs such as IP address, browser type and approximate region, used to keep the service secure and working.</li>
         </ul>
 
-        <h2>2. How we use it</h2>
+        <h2>2. How we use your information</h2>
         <ul>
-          <li>To generate quizzes from the material you submit.</li>
-          <li>To operate, maintain and improve the service.</li>
-          <li>To process subscriptions and prevent abuse of free-plan limits.</li>
-          <li>To respond to support requests you send us.</li>
+          <li>To generate quizzes, flashcards and mock exams from the material you provide.</li>
+          <li>To save and sync your study progress across your devices when you are signed in.</li>
+          <li>To apply Free and Pro plan limits and process subscriptions.</li>
+          <li>To respond to your support messages.</li>
+          <li>To keep the service secure, prevent abuse, and fix problems.</li>
+          <li>On the Free plan, to show advertising (see section 5).</li>
         </ul>
+
+        <h2>3. Your uploaded material and AI generation</h2>
         <p>
-          We do <strong>not</strong> sell your personal data, and we do not retain your uploaded
-          files after your quiz has been generated.
+          To build your quiz, the material you upload is sent to Anthropic's Claude API, which
+          reads it and writes the questions. Large uploads on the Pro plan pass through a temporary
+          file store (Vercel Blob), which we delete as soon as the file has been forwarded. We do
+          not keep copies of your uploaded files on our own servers.
+        </p>
+        <p>
+          Anthropic processes the content only to produce your quiz, under its own API terms, and
+          does not use API inputs to train its models.
         </p>
 
-        <h2>3. Advertising</h2>
+        <h2>4. Shared quizzes</h2>
         <p>
-          Free-plan pages may display ads from third-party advertising partners. These partners
-          may use cookies to show ads based on your prior visits to this and other websites. You
-          can manage or opt out of personalised advertising through your browser settings or your
-          device's ad-personalisation controls.
+          If you create a share link for a quiz, we store that quiz's questions, the name shown on
+          it (taken from the first part of your email address) and the scores of people who take it,
+          so that anyone with the link can play it and see the leaderboard. A shared quiz is
+          accessible to anyone who has the link. If you want a shared quiz removed, email us and we
+          will delete it.
         </p>
 
-        <h2>4. Anthropic AI API</h2>
+        <h2>5. Advertising</h2>
         <p>
-          Quizzes are generated using Anthropic's Claude API. The study material you submit is
-          sent to Anthropic solely to produce your quiz. Anthropic processes this content under
-          its own API terms and does not use API inputs to train its models.
+          Free-plan pages may display ads through Google AdSense. Google and its partners may use
+          cookies to show ads based on your visits to this and other sites. You can review and turn
+          off personalised advertising at Google's Ads Settings and through your browser or device
+          controls.
         </p>
 
-        <h2>5. Stripe payments</h2>
+        <h2>6. Who we share data with</h2>
+        <p>We do not sell your personal data. We share it only with the service providers we rely on to run Revyy, and only for that purpose:</p>
+        <ul>
+          <li><strong>Clerk</strong>, accounts and sign-in.</li>
+          <li><strong>Neon</strong>, our database (your study data, plan and usage counters, shared quizzes).</li>
+          <li><strong>Anthropic</strong>, the AI that generates your quizzes from your material.</li>
+          <li><strong>Stripe</strong>, payment processing for Pro.</li>
+          <li><strong>Vercel</strong>, hosting and the temporary file transfer described above.</li>
+          <li><strong>Google AdSense</strong>, advertising on the Free plan.</li>
+          <li><strong>Resend</strong>, delivering your contact-form messages to our support inbox.</li>
+        </ul>
+
+        <h2>7. Data retention</h2>
         <p>
-          Pro subscriptions are processed by Stripe, our payment provider. Your card details are
-          collected and stored by Stripe under their privacy policy and are never seen or stored
-          by Revyy. We only receive confirmation of your subscription status.
+          Your study data is kept until you delete it or close your account. Daily usage counters
+          reset each day. Contact messages remain in our support inbox. Shared quizzes stay
+          available until you ask us to remove them or you close your account.
         </p>
 
-        <h2>6. Your rights</h2>
+        <h2>8. Your rights and choices</h2>
         <ul>
           <li>Access, correct or delete the personal data we hold about you.</li>
-          <li>Withdraw consent or object to certain processing.</li>
-          <li>Clear locally stored settings at any time by clearing your browser data.</li>
-          <li>Request data portability where applicable.</li>
+          <li>Delete your account, which removes your synced study data.</li>
+          <li>Clear the settings and cache stored on your device by clearing your browser data.</li>
+          <li>Opt out of personalised ads through Google's Ads Settings.</li>
         </ul>
+        <p>To make any of these requests, email <a href="mailto:support@revyy.app">support@revyy.app</a>.</p>
 
-        <h2>7. Contact</h2>
+        <h2>9. Children</h2>
         <p>
-          For any privacy questions or requests, email us at{" "}
+          Revyy is intended for students old enough to hold an account under their local rules
+          (generally 13, or 16 in parts of the EU). It is not directed at younger children, and we
+          do not knowingly collect their data.
+        </p>
+
+        <h2>10. Changes and contact</h2>
+        <p>
+          We may update this policy as the product changes, and will update the date above when we
+          do. For any privacy question or request, email{" "}
           <a href="mailto:support@revyy.app">support@revyy.app</a> or visit our{" "}
           <Link to="/contact">Contact page</Link>.
         </p>

@@ -1,8 +1,98 @@
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import usePageMeta from "../lib/usePageMeta.js";
 import AdSlot from "../components/AdSlot.jsx";
 import Icon from "../components/Icon.jsx";
+
+// A faithful, static replica of the app's real quiz screen: same topbar,
+// progress bar, difficulty/type pills, Fraunces question, lettered options,
+// green "correct" state and explanation box. Shown as a small horizontal
+// carousel of real example questions so the hero looks like the actual product.
+const LETTERS = ["A", "B", "C", "D", "E", "F"];
+const QUIZ_EXAMPLES = [
+  {
+    subject: "Biology", progress: "Question 3 of 10", pct: 30, answered: true, correct: 1,
+    pills: ["Medium", "Multiple choice"],
+    q: "Which organelle is the main site of ATP synthesis?",
+    options: ["Nucleus", "Mitochondrion", "Ribosome", "Golgi apparatus"],
+    explanation: "The mitochondrion produces most of the cell's ATP through oxidative phosphorylation along its inner membrane.",
+  },
+  {
+    subject: "Modern History", progress: "Question 5 of 12", pct: 42, answered: false, correct: 0,
+    pills: ["Hard", "Multiple choice"],
+    q: "Which treaty formally ended the First World War?",
+    options: ["Treaty of Versailles", "Treaty of Tordesillas", "Congress of Vienna", "Treaty of Ghent"],
+  },
+  {
+    subject: "Chemistry", progress: "Question 8 of 10", pct: 80, answered: true, correct: 1,
+    pills: ["Easy", "Multiple choice"],
+    q: "What is the pH of a neutral aqueous solution at 25 °C?",
+    options: ["0", "7", "14", "1"],
+    explanation: "At 25 °C pure water has equal concentrations of H+ and OH- ions, which corresponds to a neutral pH of exactly 7.",
+  },
+];
+
+function QuizCarousel() {
+  const scroller = useRef(null);
+  const [active, setActive] = useState(0);
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el) return;
+    const kids = [...el.children];
+    let best = 0, bestDist = Infinity;
+    kids.forEach((c, i) => {
+      const d = Math.abs(c.offsetLeft - el.scrollLeft);
+      if (d < bestDist) { bestDist = d; best = i; }
+    });
+    setActive(best);
+  };
+  const go = (i) => {
+    const el = scroller.current;
+    if (el && el.children[i]) el.scrollTo({ left: el.children[i].offsetLeft, behavior: "smooth" });
+  };
+  return (
+    <div className="qwrap">
+      <div className="qscroll" ref={scroller} onScroll={onScroll}>
+        {QUIZ_EXAMPLES.map((ex, i) => (
+          <div className="qcard" key={i} aria-hidden={i !== active}>
+            <div className="qcard-top">
+              <span className="subj">{ex.subject}</span>
+              <span className="cnt">{ex.progress}</span>
+            </div>
+            <div className="qcard-pbar"><i style={{ width: `${ex.pct}%` }} /></div>
+            <div className="qcard-body">
+              <div className="qpills">{ex.pills.map((p) => <span className="qpill" key={p}>{p}</span>)}</div>
+              <h3 className="qq">{ex.q}</h3>
+              {ex.options.map((opt, oi) => {
+                const correct = ex.answered && oi === ex.correct;
+                return (
+                  <div className={"qopt" + (correct ? " correct" : "")} key={oi}>
+                    <span className="k">{LETTERS[oi]}</span>
+                    <span className="lbl">{opt}</span>
+                    {correct && <span className="tick">✓</span>}
+                  </div>
+                );
+              })}
+              {ex.answered && (
+                <div className="qexpl"><b>Correct</b><p>{ex.explanation}</p></div>
+              )}
+              <div className={"qnext" + (ex.answered ? "" : " off")}>
+                {ex.answered ? "Next question" : "Select an answer"}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="qdots">
+        {QUIZ_EXAMPLES.map((ex, i) => (
+          <button key={i} className={i === active ? "on" : ""} onClick={() => go(i)} aria-label={`Show ${ex.subject} example`} />
+        ))}
+      </div>
+      <p className="qcap">Real example questions, exactly as the app generates them.</p>
+    </div>
+  );
+}
 
 const FEATURES = [
   {
@@ -107,35 +197,8 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Honest product preview */}
-            <div className="preview" aria-hidden="true">
-              <div className="preview-bar">
-                <span className="preview-dot" />
-                <span className="preview-dot" />
-                <span className="preview-dot" />
-                <span style={{ marginLeft: "auto", fontSize: 12.5, color: "var(--muted)" }}>
-                  Biology · Question 3 of 10
-                </span>
-              </div>
-              <div className="preview-q">
-                Which organelle is the main site of ATP synthesis?
-              </div>
-              <div className="preview-opt">
-                <span className="k">A</span> Nucleus
-              </div>
-              <div className="preview-opt right">
-                <span className="k">B</span> Mitochondrion
-              </div>
-              <div className="preview-opt">
-                <span className="k">C</span> Ribosome
-              </div>
-              <div className="preview-opt">
-                <span className="k">D</span> Golgi apparatus
-              </div>
-              <p className="preview-cap">
-                Every question is written from the pages you upload.
-              </p>
-            </div>
+            {/* Faithful replica of the app's quiz screen, as a carousel */}
+            <QuizCarousel />
           </div>
         </div>
       </section>
