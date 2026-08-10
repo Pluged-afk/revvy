@@ -36,21 +36,28 @@ const QUIZ_EXAMPLES = [
 function QuizCarousel() {
   const scroller = useRef(null);
   const [active, setActive] = useState(0);
-  const onScroll = () => {
+  const n = QUIZ_EXAMPLES.length;
+  // Read the currently-centred card straight from the DOM, so navigation never
+  // depends on React state that might not have flushed yet.
+  const currentIndex = () => {
     const el = scroller.current;
-    if (!el) return;
+    if (!el) return 0;
     const kids = [...el.children];
     let best = 0, bestDist = Infinity;
     kids.forEach((c, i) => {
       const d = Math.abs(c.offsetLeft - el.scrollLeft);
       if (d < bestDist) { bestDist = d; best = i; }
     });
-    setActive(best);
+    return best;
   };
+  const onScroll = () => setActive(currentIndex());
   const go = (i) => {
     const el = scroller.current;
     if (el && el.children[i]) el.scrollTo({ left: el.children[i].offsetLeft, behavior: "smooth" });
   };
+  // Wrap around both ways so it never dead-ends (last -> first, first -> last).
+  const next = () => go((currentIndex() + 1) % n);
+  const prev = () => go((currentIndex() - 1 + n) % n);
   return (
     <div className="qwrap">
       <div className="qscroll" ref={scroller} onScroll={onScroll}>
@@ -84,10 +91,18 @@ function QuizCarousel() {
           </div>
         ))}
       </div>
-      <div className="qdots">
-        {QUIZ_EXAMPLES.map((ex, i) => (
-          <button key={i} className={i === active ? "on" : ""} onClick={() => go(i)} aria-label={`Show ${ex.subject} example`} />
-        ))}
+      <div className="qnav">
+        <button className="qarrow" onClick={prev} aria-label="Previous example">
+          <Icon name="chevron" size={17} style={{ transform: "rotate(180deg)" }} />
+        </button>
+        <div className="qdots">
+          {QUIZ_EXAMPLES.map((ex, i) => (
+            <button key={i} className={i === active ? "on" : ""} onClick={() => go(i)} aria-label={`Show ${ex.subject} example`} />
+          ))}
+        </div>
+        <button className="qarrow" onClick={next} aria-label="Next example">
+          <Icon name="chevron" size={17} />
+        </button>
       </div>
       <p className="qcap">Real example questions, exactly as the app generates them.</p>
     </div>

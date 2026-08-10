@@ -178,7 +178,11 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 .qexpl p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: #3f6d52; }
 .qnext { width: 100%; margin-top: 16px; border: none; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600; font-family: 'Fraunces', Georgia, serif; color: #fff; background: var(--indigo); }
 .qnext.off { background: var(--paper-3); color: var(--faint); }
-.qdots { display: flex; gap: 7px; justify-content: center; align-items: center; margin-top: 16px; }
+.qnav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; }
+.qarrow { width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color .15s, background .15s; }
+.qarrow:hover { border-color: var(--ink); background: var(--paper-2); }
+.qarrow:active { transform: scale(0.94); }
+.qdots { display: flex; gap: 7px; justify-content: center; align-items: center; }
 .qdots button { width: 8px; height: 8px; padding: 0; border: none; border-radius: 50%; background: #d9d0be; cursor: pointer; transition: width .2s, background .2s; }
 .qdots button.on { background: var(--clay); width: 20px; border-radius: 4px; }
 .qcap { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 12px; }

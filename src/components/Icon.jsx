@@ -106,6 +106,7 @@ const PATHS = {
       <path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" />
     </>
   ),
+  chevron: <path d="M9.5 5.5l6.5 6.5-6.5 6.5" />,
 };
 
 export default function Icon({ name, size = 24, stroke = 1.6, className, style }) {
