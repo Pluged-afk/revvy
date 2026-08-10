@@ -119,20 +119,20 @@ const THEME_LIGHT = `
 `;
 const THEME_DARK = `
   :root,[data-theme="dark"] {
-    --color-background-primary:#241f18 !important;
-    --color-background-secondary:#2b2419 !important;
-    --color-background-tertiary:#191510 !important;
-    --color-background-success:#16281c !important;
-    --color-text-primary:#ece5d8 !important;
-    --color-text-secondary:#a79e8d !important;
-    --color-text-tertiary:#7c7463 !important;
-    --color-text-success:#6cc194 !important;
-    --color-border-primary:#463d30 !important;
-    --color-border-secondary:#372f24 !important;
-    --color-border-tertiary:#262019 !important;
-    --color-border-success:#2f5a41 !important;
-    --color-hover-tint:#322b20 !important;
-    --color-sel-tint:#322c52 !important;
+    --color-background-primary:#201f26 !important;
+    --color-background-secondary:#292833 !important;
+    --color-background-tertiary:#17161b !important;
+    --color-background-success:#13291c !important;
+    --color-text-primary:#eceaf2 !important;
+    --color-text-secondary:#a6a3ad !important;
+    --color-text-tertiary:#78757f !important;
+    --color-text-success:#63c08c !important;
+    --color-border-primary:#3a3946 !important;
+    --color-border-secondary:#302f3a !important;
+    --color-border-tertiary:#262530 !important;
+    --color-border-success:#2c5540 !important;
+    --color-hover-tint:#2a2935 !important;
+    --color-sel-tint:#332d55 !important;
   }
 `;
 
