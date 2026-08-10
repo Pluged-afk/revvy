@@ -20,6 +20,27 @@ import Icon from "./components/Icon.jsx";
 // so we don't depend on the emoji stored in the translation data.
 const FEAT_ICONS = ["notes", "camera", "pencil", "layers", "chat", "globe"];
 
+// Phone-style light/dark toggle: moon on the left, sun on the right, a knob that
+// slides to the side you're on (left = dark, right = light). `onDark` styles it
+// for a dark surface (the app hero); otherwise it uses theme tokens.
+function ThemeSwitch({ isDark, onToggle, onDark }) {
+  const track = onDark
+    ? { background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.32)" }
+    : { background: "var(--color-background-secondary)", border: "1px solid var(--color-border-secondary)" };
+  const dim = onDark ? "rgba(255,255,255,0.6)" : "var(--color-text-tertiary)";
+  return (
+    <button type="button" role="switch" aria-checked={isDark} aria-label="Toggle dark mode"
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"} onClick={onToggle}
+      style={{ position: "relative", width: 54, height: 30, borderRadius: 999, padding: 0, cursor: "pointer", flexShrink: 0, ...track }}>
+      <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", display: "flex", color: dim, pointerEvents: "none" }}><Icon name="moon" size={13} /></span>
+      <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", display: "flex", color: dim, pointerEvents: "none" }}><Icon name="sun" size={13} /></span>
+      <span style={{ position: "absolute", top: 3, left: isDark ? 3 : 27, width: 24, height: 24, borderRadius: "50%", background: "#fff", color: "#4338ca", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.28)", transition: "left .2s ease" }}>
+        <Icon name={isDark ? "moon" : "sun"} size={13} />
+      </span>
+    </button>
+  );
+}
+
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
 const AD_MAX_Q     = 50;
@@ -2354,10 +2375,6 @@ export default function StudyQuiz() {
               {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
               <DevBadge/></span>
             <div className="rv-hero-tools">
-              <button onClick={toggleTheme} title={isDarkTheme?"Light mode":"Dark mode"} aria-label="Toggle dark mode"
-                style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,0.16)",border:"1.5px solid rgba(255,255,255,0.35)",color:"#fff",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <Icon name={isDarkTheme?"sun":"moon"} size={17}/>
-              </button>
               {user ? (
                 <button onClick={()=>openSettings()} title={t.accountLbl} aria-label={t.accountLbl}
                   style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,0.16)",border:"1.5px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -2366,6 +2383,7 @@ export default function StudyQuiz() {
               ) : (
                 <button onClick={()=>navigate("/login")} style={{background:"rgba(255,255,255,0.16)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,fontSize:12,fontWeight:600,padding:"7px 14px",cursor:"pointer",fontFamily:"inherit"}}>{t.logIn}</button>
               )}
+              <ThemeSwitch isDark={isDarkTheme} onToggle={toggleTheme} onDark />
             </div>
           </div>
           <h1 className="rv-hero-head" style={Sb.h1}>{t.tagline}</h1>
@@ -2524,7 +2542,7 @@ export default function StudyQuiz() {
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           {isPro && <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"2px 7px",fontWeight:700}}>PRO</span>}
           <button onClick={()=>setSoundOn(s=>!s)} title={soundOn?t.soundOn:t.soundOff} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",opacity:soundOn?1:0.4}}>{soundOn?"🔊":"🔇"}</button>
-          <button onClick={toggleTheme} title={isDarkTheme?"Light mode":"Dark mode"} aria-label="Toggle dark mode" style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",color:"var(--color-text-secondary)",display:"flex",alignItems:"center"}}><Icon name={isDarkTheme?"sun":"moon"} size={16}/></button>
+          <ThemeSwitch isDark={isDarkTheme} onToggle={toggleTheme} />
           <button onClick={()=>openSettings()} title={t.set.title} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",color:"var(--color-text-secondary)"}}>⚙️</button>
         </div>
       </div>
