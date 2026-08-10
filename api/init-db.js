@@ -2,7 +2,7 @@ import sql from "./db.js";
 
 // One-time provisioning: creates the profiles table and ensures the
 // clerk_user_id column exists. Protected by INIT_DB_SECRET so it can't be
-// triggered anonymously — run: GET /api/init-db?secret=<INIT_DB_SECRET>.
+// triggered anonymously, run: GET /api/init-db?secret=<INIT_DB_SECRET>.
 // Returns 404 without the secret so the endpoint isn't discoverable.
 export default async function handler(req, res) {
   const secret = process.env.INIT_DB_SECRET;

@@ -27,7 +27,7 @@ function getBaseUrl(req) {
 }
 
 // action=checkout: creates a Stripe Checkout session (subscription, charged
-// immediately — no trial) and returns its URL.
+// immediately, no trial) and returns its URL.
 async function checkout(req, res, stripe, body) {
   const { priceId, userId, userEmail } = body;
   if (!priceId || !userId) return res.status(400).json({ error: "Missing priceId or userId." });
@@ -111,7 +111,7 @@ async function pack(req, res, stripe, body) {
   if (!p) return res.status(400).json({ error: "Unknown pack." });
 
   // Packs are available to all users (free or Pro). Look up the profile only to
-  // reuse the saved Stripe customer / email — no Pro gate.
+  // reuse the saved Stripe customer / email, no Pro gate.
   let row = {};
   try {
     const rows = await sql`SELECT email, stripe_customer_id FROM profiles WHERE clerk_user_id = ${userId} OR id = ${userId} LIMIT 1`;

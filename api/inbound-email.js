@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   // everything so this endpoint can't be abused as an open email relay.
   const secret = process.env.RESEND_WEBHOOK_SECRET;
   if (!secret) {
-    console.error("[inbound] RESEND_WEBHOOK_SECRET not configured — rejecting");
+    console.error("[inbound] RESEND_WEBHOOK_SECRET not configured, rejecting");
     return res.status(503).json({ error: "Inbound email not configured." });
   }
   if (!verifySvix(secret, req.headers, raw)) {

@@ -9,7 +9,7 @@ export const AuthContext = createContext(null);
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);
 
-// Placeholder ad — stands in for a real rewarded-ad SDK. Resolves after a
+// Placeholder ad, stands in for a real rewarded-ad SDK. Resolves after a
 // short simulated "watch"; swap this out when a real ad provider is wired in.
 function simulateAdWatch() {
   return new Promise((resolve) => setTimeout(resolve, 1200));
@@ -235,7 +235,7 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
-  // Dev-mode Pro override (local only — dev.devMode is false in production).
+  // Dev-mode Pro override (local only, dev.devMode is false in production).
   const effIsPro = dev.devMode && dev.pro !== null ? dev.pro : isPro;
 
   const value = {

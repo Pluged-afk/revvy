@@ -1,6 +1,6 @@
 // Build-time pre-rendering. After `vite build` (client) and the SSR build,
 // this renders every marketing/blog route to static HTML and writes it into
-// dist/<route>/index.html — so crawlers (Google, AdSense) get real content
+// dist/<route>/index.html, so crawlers (Google, AdSense) get real content
 // instead of an empty <div id="root">. React still mounts and takes over on
 // load. Vercel serves these static files before the SPA rewrite, so each URL
 // resolves to its own prerendered page.
@@ -21,14 +21,14 @@ const esc = (s) => String(s)
 
 // Marketing routes + metadata (mirrors each page's usePageMeta call).
 const routes = [
-  { path: "/",         title: "Revyy — AI Exam Prep: Turn Notes Into Quizzes & Mock Exams", desc: "Free AI exam-prep tool for students. Turn any PDF or notes into practice quizzes and AI-graded mock exams, then let spaced review drill your weak spots until exam day." },
-  { path: "/features", title: "Revyy Features — AI Quiz Maker, Flashcards & Exam Mode", desc: "Four quiz types, AI-graded exam simulation, PDF & image upload, and 20+ languages. See how Revyy turns your study material into quizzes." },
-  { path: "/pricing",  title: "Revyy Pricing — Free AI Quiz Generator, or Pro €4.99/mo", desc: "Use Revyy's AI quiz generator free forever, or go Pro for €4.99/month for exam mode, all quiz types and no ads. Cancel anytime." },
-  { path: "/about",    title: "About — Revyy", desc: "Revyy started as a personal tool to get ready for exams — built to test yourself before the real thing." },
-  { path: "/contact",  title: "Contact — Revyy", desc: "Questions, feedback, or feature ideas? Get in touch with the Revyy team." },
-  { path: "/blog",     title: "Study Guides & Revision Tips — Revyy Blog", desc: "Evidence-based study techniques, revision strategies and exam tips to help you learn more in less time." },
-  { path: "/privacy",  title: "Privacy Policy — Revyy", desc: "How Revyy collects, uses, and protects your data." },
-  { path: "/terms",    title: "Terms of Service — Revyy", desc: "The terms that govern your use of Revyy." },
+  { path: "/",         title: "Revyy, AI Exam Prep: Turn Notes Into Quizzes & Mock Exams", desc: "Free AI exam-prep tool for students. Turn any PDF or notes into practice quizzes and AI-graded mock exams, then let spaced review drill your weak spots until exam day." },
+  { path: "/features", title: "Revyy Features, AI Quiz Maker, Flashcards & Exam Mode", desc: "Four quiz types, AI-graded exam simulation, PDF & image upload, and 20+ languages. See how Revyy turns your study material into quizzes." },
+  { path: "/pricing",  title: "Revyy Pricing, Free AI Quiz Generator, or Pro €4.99/mo", desc: "Use Revyy's AI quiz generator free forever, or go Pro for €4.99/month for exam mode, all quiz types and no ads. Cancel anytime." },
+  { path: "/about",    title: "About, Revyy", desc: "Revyy started as a personal tool to get ready for exams, built to test yourself before the real thing." },
+  { path: "/contact",  title: "Contact, Revyy", desc: "Questions, feedback, or feature ideas? Get in touch with the Revyy team." },
+  { path: "/blog",     title: "Study Guides & Revision Tips, Revyy Blog", desc: "Evidence-based study techniques, revision strategies and exam tips to help you learn more in less time." },
+  { path: "/privacy",  title: "Privacy Policy, Revyy", desc: "How Revyy collects, uses, and protects your data." },
+  { path: "/terms",    title: "Terms of Service, Revyy", desc: "The terms that govern your use of Revyy." },
 ];
 
 // One route per blog post, with Article + Breadcrumb structured data.
@@ -47,7 +47,7 @@ for (const p of POSTS) {
     ],
   };
   routes.push({
-    path: `/blog/${p.slug}`, title: `${p.title} — Revyy`, desc: p.description,
+    path: `/blog/${p.slug}`, title: `${p.title}, Revyy`, desc: p.description,
     extraHead: `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>`,
   });
 }

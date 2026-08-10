@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 
 // Dev-only: emulate Vercel serverless functions so everything under /api/*
 // works with `npm run dev` too (plain Vite does not serve the api/ folder).
-// Server secrets stay here — they are never sent to the client.
+// Server secrets stay here, they are never sent to the client.
 function devApi() {
   return {
     name: 'dev-api',
@@ -41,7 +41,7 @@ function devApi() {
 export default defineConfig(({ mode }) => {
   // Load .env (all keys, including non-VITE server secrets) and hand the
   // server-only ones to this Node process for the dev middleware above.
-  // NOTE: only assign when a value exists — assigning `undefined` to
+  // NOTE: only assign when a value exists, assigning `undefined` to
   // process.env coerces it to the string "undefined" (which is truthy).
   const env = loadEnv(mode, process.cwd(), '')
   // Set when defined; otherwise CLEAR it, so a stale value can't linger in a
@@ -54,7 +54,7 @@ export default defineConfig(({ mode }) => {
   setEnv('ANTHROPIC_API_KEY', env.ANTHROPIC_API_KEY)
   setEnv('BLOB_READ_WRITE_TOKEN', env.BLOB_READ_WRITE_TOKEN)
 
-  // Startup diagnostic — printed to the terminal running `npm run dev`.
+  // Startup diagnostic, printed to the terminal running `npm run dev`.
   console.log(
     `\n[revyy] env from ${process.cwd()}\\.env\n` +
     `        DATABASE_URL ......... ${process.env.DATABASE_URL ? 'loaded' : 'MISSING'}\n` +

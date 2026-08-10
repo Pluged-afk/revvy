@@ -6,10 +6,10 @@
 // STREAM from Anthropic, and pipes the assembled text back to the client as it
 // arrives. Streaming keeps the connection alive on long generations (large
 // PDFs / high max_tokens) so the gateway doesn't 504. The client accumulates
-// the full text and only renders once it's complete — no partial UI.
+// the full text and only renders once it's complete, no partial UI.
 //
 // Requires ANTHROPIC_API_KEY in the server environment (Vercel → Settings →
-// Environment Variables — NOT prefixed with VITE_).
+// Environment Variables, NOT prefixed with VITE_).
 
 import { verifyToken } from "@clerk/backend";
 
@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: { message: "Method not allowed" } });
   }
 
-  // Require a signed-in user — this proxy spends the server's Anthropic key,
+  // Require a signed-in user, this proxy spends the server's Anthropic key,
   // so it must never be callable anonymously (client usage limits aren't a gate).
   const authz = req.headers.authorization || "";
   const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
@@ -56,7 +56,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({ model, max_tokens, system, messages, stream: true }),
     });
 
-    // Errors (bad model, auth, oversized, etc.) come back before the stream —
+    // Errors (bad model, auth, oversized, etc.) come back before the stream, 
     // return them as JSON so the client's !res.ok branch can read the message.
     if (!upstream.ok) {
       const errJson = await upstream.json().catch(() => ({}));

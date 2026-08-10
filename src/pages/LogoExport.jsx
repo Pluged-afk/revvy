@@ -2,7 +2,7 @@ import { RevyyGlyph } from "../components/Logo.jsx";
 
 // Standalone, unchromed page for exporting the Revyy app icon.
 // Renders the brand mark (purple gradient tile + white glyph) on a dark-purple
-// 1020×1020 canvas — screenshot the square for app directories / store listings.
+// 1020×1020 canvas, screenshot the square for app directories / store listings.
 export default function LogoExport() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, background: "#0c0b17", padding: 24, fontFamily: "system-ui, -apple-system, sans-serif" }}>
@@ -39,7 +39,7 @@ export default function LogoExport() {
         </div>
       </div>
 
-      <p style={{ color: "#64748b", fontSize: 13 }}>1020 × 1020 — screenshot the square above at full size.</p>
+      <p style={{ color: "#64748b", fontSize: 13 }}>1020 × 1020, screenshot the square above at full size.</p>
     </div>
   );
 }

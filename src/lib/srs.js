@@ -3,7 +3,7 @@ import { useStudy } from "../context/StudyContext.jsx";
 
 // Spaced-repetition (SM-2-flavoured) review deck. The state + scheduling now
 // live in StudyContext (server-synced when signed in); this hook is a thin,
-// backwards-compatible view over it — call sites are unchanged. Missed
+// backwards-compatible view over it, call sites are unchanged. Missed
 // questions become review cards resurfaced on expanding intervals until they
 // stick, turning Revyy from a one-off generator into a daily review habit.
 

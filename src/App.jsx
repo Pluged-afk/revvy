@@ -40,7 +40,7 @@ function ClerkRoutes() {
       <AuthProvider>
         <DevWidget />
         <Routes>
-          {/* Marketing website — navbar + footer layout */}
+          {/* Marketing website, navbar + footer layout */}
           <Route element={<SiteLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/features" element={<Features />} />
@@ -57,14 +57,14 @@ function ClerkRoutes() {
           <Route path="/login/*" element={<Login />} />
           <Route path="/signup/*" element={<Signup />} />
 
-          {/* Standalone logo export (no navbar/footer) — for screenshotting */}
+          {/* Standalone logo export (no navbar/footer), for screenshotting */}
           <Route path="/logo-export" element={<LogoExport />} />
 
-          {/* Public shared-quiz taker (no account needed) — the share-a-quiz
+          {/* Public shared-quiz taker (no account needed), the share-a-quiz
               growth loop. Standalone: its own styling, no app shell. */}
           <Route path="/q/:id" element={<SharedQuiz />} />
 
-          {/* The quiz app — browsable by everyone. Generating a quiz requires
+          {/* The quiz app, browsable by everyone. Generating a quiz requires
               an account; that gate lives in StudyQuiz's generate handlers.
               StudyProvider (server-synced deck / stats / plans) wraps only this
               route so it never loads on the marketing pages or during SSR. */}

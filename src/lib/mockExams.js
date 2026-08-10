@@ -1,12 +1,12 @@
-// Standardized mock exams — authentic structure + timing for real tests.
+// Standardized mock exams, authentic structure + timing for real tests.
 // Every section is multiple-choice, so mocks auto-score with no AI grading.
 // Add an entry to MOCK_EXAMS to add a test.
 //
 //   scoreMode:
-//     "average"     — composite is the mean of the section scaled scores (ACT, LSAT)
-//     "sum"         — composite is their sum (SAT/PSAT/GRE/MCAT/UCAT)
-//     "scaledTotal" — composite maps overall performance onto [totalMin,totalMax]
-//                     (GMAT — its total isn't a simple sum of section scores)
+//     "average", composite is the mean of the section scaled scores (ACT, LSAT)
+//     "sum", composite is their sum (SAT/PSAT/GRE/MCAT/UCAT)
+//     "scaledTotal", composite maps overall performance onto [totalMin,totalMax]
+//                     (GMAT, its total isn't a simple sum of section scores)
 //   scaleMin/scaleMax: the scaled-score range for EACH section.
 
 export const MOCK_EXAMS = [
@@ -53,7 +53,7 @@ export const MOCK_EXAMS = [
     scoreMode: "sum", scaleMin: 130, scaleMax: 170,
     sections: [
       { id: "verbal", name: "Verbal Reasoning", count: 27, minutes: 41, options: 4,
-        instr: "GRE Verbal Reasoning. Mix reading comprehension (a short passage in the stem plus a question on meaning, inference, or the author's purpose), single-blank text completion (a sentence with ONE blank — pick the best word), and questions on graduate-level vocabulary in context. Four choices, with challenging and close distractors." },
+        instr: "GRE Verbal Reasoning. Mix reading comprehension (a short passage in the stem plus a question on meaning, inference, or the author's purpose), single-blank text completion (a sentence with ONE blank, pick the best word), and questions on graduate-level vocabulary in context. Four choices, with challenging and close distractors." },
       { id: "quant", name: "Quantitative Reasoning", count: 27, minutes: 47, options: 5,
         instr: "GRE Quantitative Reasoning. Problem-solving and data interpretation covering arithmetic, algebra, geometry, and statistics at an advanced level. Include some data-interpretation questions that describe a chart or table in words. Five choices." },
     ],
@@ -68,7 +68,7 @@ export const MOCK_EXAMS = [
       { id: "dm", name: "Decision Making", count: 36, minutes: 37, options: 4,
         instr: "UCAT Decision Making. Logical puzzles: syllogisms, Venn-diagram/set reasoning, probabilistic reasoning, judging the strength of a short argument, recognising unstated assumptions, or interpreting a small data table. Describe any diagram or table in words. Four choices." },
       { id: "qr", name: "Quantitative Reasoning", count: 36, minutes: 26, options: 5,
-        instr: "UCAT Quantitative Reasoning. Numerical problem-solving from a described chart, table, or scenario — percentages, ratios, rates, averages, speed/distance, and unit conversions. Describe any table or figure in words. Five choices." },
+        instr: "UCAT Quantitative Reasoning. Numerical problem-solving from a described chart, table, or scenario, percentages, ratios, rates, averages, speed/distance, and unit conversions. Describe any table or figure in words. Five choices." },
     ],
   },
   {

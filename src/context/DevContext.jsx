@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState } from "react";
 
-// Master switch — ONLY active when explicitly "true". Anything else (false,
+// Master switch, ONLY active when explicitly "true". Anything else (false,
 // undefined, missing) disables every dev bypass and hides all dev UI.
 export const DEV_MODE = import.meta.env.VITE_DEV_MODE === "true";
 

@@ -6,11 +6,11 @@ import { simulateAdWatch } from "./ads.jsx";
 // Pro users always have everything unlocked and never see these prompts.
 //
 // Rules:
-//   flashcard   — unlimited unlocks/day, 1h each
-//   fillinblank — once/day, 1h
-//   matchterms  — once/day, 1h
-//   questions   — up to 50/quiz, once/day, 1h
-//   filesize    — 10MB uploads, once/day, 1h
+//   flashcard, unlimited unlocks/day, 1h each
+//   fillinblank, once/day, 1h
+//   matchterms, once/day, 1h
+//   questions, up to 50/quiz, once/day, 1h
+//   filesize, 10MB uploads, once/day, 1h
 const HOUR = 3600 * 1000;
 
 // Exam mode is a special case: watching one ad unlocks a SINGLE exam for the

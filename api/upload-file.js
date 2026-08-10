@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  // Require a signed-in user — this uploads to the Anthropic Files API on the
+  // Require a signed-in user, this uploads to the Anthropic Files API on the
   // server's key, so it must not be callable anonymously.
   const authz = req.headers.authorization || "";
   const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";

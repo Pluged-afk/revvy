@@ -3,12 +3,12 @@ import { planProgress } from "./planner.js";
 // Exam-readiness score + weak-topic detection. Pure functions over the
 // server-synced study data (SRS deck, lifetime stats, active plan). Turns the
 // data Revyy already collects into one motivating number and a short "focus
-// here" list — no extra storage, no API call.
+// here" list, no extra storage, no API call.
 
 const DAY = 86400000;
 
 // A card counts as "solid" once it's been recalled at least twice and isn't
-// currently overdue — i.e. it's sticking. Freshly-missed cards drag readiness
+// currently overdue, i.e. it's sticking. Freshly-missed cards drag readiness
 // down until they're reviewed, which is the behaviour we want.
 function isSolid(c, now) {
   return (c.reps || 0) >= 2 && c.due > now && (c.interval || 0) >= 3;

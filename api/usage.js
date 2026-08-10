@@ -37,7 +37,7 @@ function shape(row, mocksUsed = 0) {
 }
 
 // Reset questions_used_today / ad_watches_today when the date rolls over, then
-// return the current counters. Atomic — uses CURRENT_DATE on the server.
+// return the current counters. Atomic, uses CURRENT_DATE on the server.
 // Deliberately does NOT touch the mock columns, so this core path can never
 // break if the mock migration hasn't been applied yet.
 async function resetAndRead(userId) {
@@ -126,7 +126,7 @@ export default async function handler(req, res) {
       }
 
       if (action === "consume-mock") {
-        // Mocks are Pro-only and capped per day — account-tied + server-enforced.
+        // Mocks are Pro-only and capped per day, account-tied + server-enforced.
         if (row.is_pro !== true) return res.status(200).json({ allowed: false, reason: "pro_only", ...shape(row) });
         const used = await readMockUsage(userId, true);   // self-heals the columns + applies the daily reset
         if (used >= MOCK_DAILY_CAP) return res.status(200).json({ allowed: false, reason: "daily_cap", ...shape(row, used) });

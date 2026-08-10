@@ -61,7 +61,7 @@ export default async function handler(req, res) {
         WHERE clerk_user_id = ${userId} OR id = ${userId} OR email = ${email} OR stripe_customer_id = ${customerId}
         RETURNING id, is_pro`;
       console.log("[webhook] result:", JSON.stringify(result));
-      console.log(`[wh] ${source}: updated ${result.length} row(s)${result.length ? "" : " (NO MATCH — user not found by clerk id / email / customer)"}`);
+      console.log(`[wh] ${source}: updated ${result.length} row(s)${result.length ? "" : " (NO MATCH, user not found by clerk id / email / customer)"}`);
       return result;
     } catch (e) {
       console.error(`[wh] ${source}: DB error:`, e.message);

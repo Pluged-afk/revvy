@@ -7,7 +7,7 @@ import { useAuth } from "./AuthContext.jsx";
 // localStorage (instant + offline), and synced to Neon per-user when signed
 // in (debounced write-through; one read on sign-in with a merge so progress
 // made while logged out is never lost). Replaces the old per-hook localStorage
-// state in srs.js / stats.js — those now read from here.
+// state in srs.js / stats.js, those now read from here.
 
 const LS_KEY = "revyy_study_v1";
 const DAY = 86400000;
@@ -157,7 +157,7 @@ export function StudyProvider({ children }) {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ data: dataRef.current }),
         });
-      } catch { /* offline / transient — localStorage keeps the copy */ }
+      } catch { /* offline / transient, localStorage keeps the copy */ }
     }, 1200);
   }, [data, user, getToken]);
 

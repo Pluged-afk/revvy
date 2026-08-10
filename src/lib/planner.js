@@ -5,7 +5,7 @@
 // frictionless MCQ throughout (the only always-available type); Pro users get
 // a rotation of quiz styles plus a mock exam on the final day.
 //
-// Deterministic on purpose — no API call, so it's instant, free, and reliable.
+// Deterministic on purpose, no API call, so it's instant, free, and reliable.
 
 const DAY = 86400000;
 const PRO_LEARN_FORMATS = ["mcq", "cards", "fill", "match"];

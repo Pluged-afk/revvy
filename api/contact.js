@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   if (name.length > 200 || email.length > 200) return res.status(400).json({ error: "Name or email is too long." });
   if (message.length > 5000) return res.status(400).json({ error: "Message is too long (max 5000 characters)." });
 
-  const subject = `Contact form — ${name}`;
+  const subject = `Contact form, ${name}`;
   const text = `New contact form submission\n\nName: ${name}\nEmail: ${email}\n\n${message}`;
   const html =
     `<div style="font-family:system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.6;color:#1e293b">` +

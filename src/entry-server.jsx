@@ -18,7 +18,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 import TermsOfService from "./pages/TermsOfService.jsx";
 
 // Logged-out, non-Pro mock so marketing/blog components render server-side
-// without Clerk. Every function is a no-op — none run during a static render.
+// without Clerk. Every function is a no-op, none run during a static render.
 const authMock = {
   user: null, isPro: false, loading: false, usage: null,
   subStatus: null, subPlan: null, periodEnd: null, cancelAtPeriodEnd: false,

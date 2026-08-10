@@ -9,7 +9,7 @@ import sql, { readBody } from "./db.js";
 
 // GET: returns the signed-in user's profile. The Clerk session token (sent as
 // `Authorization: Bearer <token>`) is verified server-side and the user id is
-// taken from the token — never trusted from the client.
+// taken from the token, never trusted from the client.
 async function getProfile(req, res) {
   const auth = req.headers.authorization || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;

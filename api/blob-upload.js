@@ -3,7 +3,7 @@ import { verifyToken } from "@clerk/backend";
 import { readBody } from "./db.js";
 import sql from "./db.js";
 
-// Mints a short-lived client-upload token for Vercel Blob — but ONLY for Pro
+// Mints a short-lived client-upload token for Vercel Blob, but ONLY for Pro
 // users. The client passes its Clerk session token as clientPayload; we verify
 // it and check is_pro in Neon before allowing a large direct-to-Blob upload.
 // Requires BLOB_READ_WRITE_TOKEN in the server environment.
@@ -31,7 +31,7 @@ export default async function handler(req, res) {
         return {
           allowedContentTypes: ["application/pdf", "image/png", "image/jpeg", "image/webp", "image/gif"],
           maximumSizeInBytes: 100 * 1024 * 1024, // 100 MB ceiling for Pro
-          addRandomSuffix: true, // unique blob name per upload — no conflicts
+          addRandomSuffix: true, // unique blob name per upload, no conflicts
           tokenPayload: JSON.stringify({ userId }),
         };
       },

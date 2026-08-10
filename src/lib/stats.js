@@ -2,7 +2,7 @@ import { useStudy } from "../context/StudyContext.jsx";
 
 // Study-stats view: lifetime questions answered, accuracy, and a daily streak.
 // State lives in StudyContext (server-synced when signed in); this hook is a
-// thin, backwards-compatible view — call sites are unchanged. Feeds the account
+// thin, backwards-compatible view, call sites are unchanged. Feeds the account
 // "Your progress" panel so the account is a study home, not just a billing row.
 
 const dstr = (d = new Date()) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD (local)
