@@ -21,14 +21,14 @@ const esc = (s) => String(s)
 
 // Marketing routes + metadata (mirrors each page's usePageMeta call).
 const routes = [
-  { path: "/",         title: "Revyy, AI Exam Prep: Turn Notes Into Quizzes & Mock Exams", desc: "Free AI exam-prep tool for students. Turn any PDF or notes into practice quizzes and AI-graded mock exams, then let spaced review drill your weak spots until exam day." },
-  { path: "/features", title: "Revyy Features, AI Quiz Maker, Flashcards & Exam Mode", desc: "Four quiz types, AI-graded exam simulation, PDF & image upload, and 20+ languages. See how Revyy turns your study material into quizzes." },
-  { path: "/pricing",  title: "Revyy Pricing, Free AI Quiz Generator, or Pro €4.99/mo", desc: "Use Revyy's AI quiz generator free forever, or go Pro for €4.99/month for exam mode, all quiz types and no ads. Cancel anytime." },
-  { path: "/about",    title: "About, Revyy", desc: "Revyy started as a personal tool to get ready for exams, built to test yourself before the real thing." },
-  { path: "/contact",  title: "Contact, Revyy", desc: "Questions, feedback, or feature ideas? Get in touch with the Revyy team." },
-  { path: "/blog",     title: "Study Guides & Revision Tips, Revyy Blog", desc: "Evidence-based study techniques, revision strategies and exam tips to help you learn more in less time." },
-  { path: "/privacy",  title: "Privacy Policy, Revyy", desc: "How Revyy collects, uses, and protects your data." },
-  { path: "/terms",    title: "Terms of Service, Revyy", desc: "The terms that govern your use of Revyy." },
+  { path: "/",         title: "Revyy: Practice Quizzes & Mock Exams From Your Own Notes", desc: "Free study tool for students. Upload a PDF or paste your notes and get practice quizzes and graded mock exams built from your own material, then review your weak spots until exam day." },
+  { path: "/features", title: "Revyy Features: Quiz Types, Exam Mode and Uploads", desc: "Four quiz types, mock exam simulation, PDF and photo upload, and 20+ languages. See how Revyy turns your own study material into practice." },
+  { path: "/pricing",  title: "Revyy Pricing: Free Quiz Generator, or Pro at €4.99 a Month", desc: "Use Revyy free forever, or go Pro for €4.99 a month for exam mode, all four quiz types and no ads. Cancel anytime." },
+  { path: "/about",    title: "About Revyy", desc: "Revyy started as one student's tool for getting ready for exams: a fast way to test yourself on your own notes before the real thing." },
+  { path: "/contact",  title: "Contact Revyy", desc: "Questions, feedback, or an idea for a feature? Get in touch with Revyy." },
+  { path: "/blog",     title: "Study Guides and Revision Tips: The Revyy Blog", desc: "Practical, evidence-based study techniques, revision strategies and exam tips to help you learn more in less time." },
+  { path: "/privacy",  title: "Privacy Policy · Revyy", desc: "How Revyy collects, uses, and protects your data." },
+  { path: "/terms",    title: "Terms of Service · Revyy", desc: "The terms that govern your use of Revyy." },
 ];
 
 // One route per blog post, with Article + Breadcrumb structured data.
@@ -39,7 +39,7 @@ for (const p of POSTS) {
     "@graph": [
       { "@type": "BlogPosting", headline: p.title, description: p.description, url, mainEntityOfPage: url,
         datePublished: p.date, dateModified: p.date, image: `${SITE}/og-image.svg`,
-        author: { "@type": "Organization", name: "Revyy", url: SITE },
+        author: { "@type": "Person", name: "Plug", url: `${SITE}/about` },
         publisher: { "@type": "Organization", name: "Revyy", logo: { "@type": "ImageObject", url: `${SITE}/favicon.svg` } } },
       { "@type": "BreadcrumbList", itemListElement: [
         { "@type": "ListItem", position: 1, name: "Blog", item: `${SITE}/blog` },
@@ -47,7 +47,7 @@ for (const p of POSTS) {
     ],
   };
   routes.push({
-    path: `/blog/${p.slug}`, title: `${p.title}, Revyy`, desc: p.description,
+    path: `/blog/${p.slug}`, title: `${p.title} · Revyy`, desc: p.description,
     extraHead: `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>`,
   });
 }
