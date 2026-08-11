@@ -142,6 +142,7 @@ const THEME_LIGHT = `
     --color-border-success:#bcdcc9 !important;
     --color-hover-tint:#f4efe4 !important;
     --color-sel-tint:#ece8f6 !important;
+    --color-accent:#4338ca !important;
   }
 `;
 const THEME_DARK = `
@@ -160,6 +161,7 @@ const THEME_DARK = `
     --color-border-success:#2c5540 !important;
     --color-hover-tint:#2a2935 !important;
     --color-sel-tint:#332d55 !important;
+    --color-accent:#a5b4fc !important;
   }
 `;
 
@@ -371,7 +373,7 @@ function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
           <div style={{fontSize:42,marginBottom:6}}>⭐</div>
           <h3 style={{margin:"0 0 4px",fontSize:21,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.upgradeToPro}</h3>
         </div>
-        <div style={{background:"linear-gradient(135deg,#ede9fe,#f5f3ff)",borderRadius:12,padding:"12px 14px",marginBottom:14,fontSize:12.5,color:"#3730a3",lineHeight:1.6,textAlign:"center"}}>{t.proDesc}</div>
+        <div style={{background:"linear-gradient(135deg,var(--color-sel-tint),var(--color-sel-tint))",borderRadius:12,padding:"12px 14px",marginBottom:14,fontSize:12.5,color:"var(--color-accent)",lineHeight:1.6,textAlign:"center"}}>{t.proDesc}</div>
         {error && <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"9px 12px",fontSize:12.5,marginBottom:14}}>{error}</div>}
         <div style={{display:"flex",gap:12,marginBottom:14}}>
           {/* Monthly, subtle gold ring (less prominent than yearly) */}
@@ -541,7 +543,7 @@ function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=fal
     <div>
       <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.6,marginBottom:20}}>
         {parts[0]}
-        <span style={{display:"inline-block",borderBottom:"2px solid #4338ca",minWidth:80,margin:"0 4px",padding:"0 6px",color:"#4338ca",fontStyle:"italic"}}>
+        <span style={{display:"inline-block",borderBottom:"2px solid #4338ca",minWidth:80,margin:"0 4px",padding:"0 6px",color:"var(--color-accent)",fontStyle:"italic"}}>
           {checked?(q.answer||""):(val||"\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0")}
         </span>
         {parts[1]||""}
@@ -656,7 +658,7 @@ function ExplainBox({ ctx, t }) {
     setAsking(false);
   };
   if (!open) return (
-    <button onClick={load} style={{marginTop:8,marginLeft:23,background:"none",border:"none",color:"#4338ca",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0}}>💡 {t.explainWhy}</button>
+    <button onClick={load} style={{marginTop:8,marginLeft:23,background:"none",border:"none",color:"var(--color-accent)",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0}}>💡 {t.explainWhy}</button>
   );
   return (
     <div style={{marginTop:8,marginLeft:23,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"10px 12px"}} className="fade-in">
@@ -853,7 +855,7 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
         {/* Question packs, available to all users; other limits still apply. */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"14px 0 6px"}}>
           <span style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)"}}>{s.buyPacks || "Question packs"}</span>
-          {onOpenPacks && <button onClick={onOpenPacks} style={{fontSize:11,color:"#4338ca",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:700,padding:0}}>{s.comparePacks || "View all →"}</button>}
+          {onOpenPacks && <button onClick={onOpenPacks} style={{fontSize:11,color:"var(--color-accent)",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:700,padding:0}}>{s.comparePacks || "View all →"}</button>}
         </div>
         {QUESTION_PACKS.map((p) => (
           <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:6}}>
@@ -967,7 +969,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 </div>
               ))}
             </div>
-            {acctSrs.dueCount > 0 && <div style={{fontSize:11.5,color:"#4338ca",fontWeight:600,marginTop:9,textAlign:"center"}}>🔁 {acctSrs.dueCount} card{acctSrs.dueCount>1?"s":""} due for review today</div>}
+            {acctSrs.dueCount > 0 && <div style={{fontSize:11.5,color:"var(--color-accent)",fontWeight:600,marginTop:9,textAlign:"center"}}>🔁 {acctSrs.dueCount} card{acctSrs.dueCount>1?"s":""} due for review today</div>}
           </div>
 
           <SectionLabel label={s.secAppearance}/>
@@ -2396,7 +2398,7 @@ export default function StudyQuiz() {
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
         <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4338ca,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 16px rgba(67,56,202,0.3)":"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <span style={{flexShrink:0,display:"flex",color:srs.dueCount>0?"#fff":"#4338ca"}}><Icon name="repeat" size={23}/></span>
+            <span style={{flexShrink:0,display:"flex",color:srs.dueCount>0?"#fff":"var(--color-accent)"}}><Icon name="repeat" size={23}/></span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:14,color:srs.dueCount>0?"#fff":"var(--color-text-primary)"}}>{t.srsTitle}</div>
               <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:srs.dueCount>0?"rgba(255,255,255,0.85)":"var(--color-text-secondary)"}}>
@@ -2423,7 +2425,7 @@ export default function StudyQuiz() {
         {mastery.length>0 && (
           <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-              <span style={{flexShrink:0,display:"flex",color:"#4338ca"}}><Icon name="chart" size={21}/></span>
+              <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="chart" size={21}/></span>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.masteryTitle}</div>
                 <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.masterySub}</div>
@@ -2450,7 +2452,7 @@ export default function StudyQuiz() {
         {!homePlan ? (
           <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <span style={{flexShrink:0,display:"flex",color:"#4338ca"}}><Icon name="compass" size={23}/></span>
+              <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="compass" size={23}/></span>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.coachTitle}</div>
                 <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.coachTagline}</div>
@@ -2469,7 +2471,7 @@ export default function StudyQuiz() {
           return (
             <div style={{background:due?"linear-gradient(135deg,#4338ca,#6366f1)":"var(--color-background-primary)",border:due?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:due?"0 4px 16px rgba(67,56,202,0.3)":"none"}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <span style={{flexShrink:0,display:"flex",color:due?"#fff":"#4338ca"}}><Icon name="compass" size={23}/></span>
+                <span style={{flexShrink:0,display:"flex",color:due?"#fff":"var(--color-accent)"}}><Icon name="compass" size={23}/></span>
                 <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>{setActivePlanId(homePlan.id);setConfirmDelPlan(false);setScreen("plan");}}>
                   <div style={{fontWeight:700,fontSize:14,color:due?"#fff":"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{homePlan.title}</div>
                   <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:due?"rgba(255,255,255,0.85)":"var(--color-text-secondary)"}}>
@@ -2483,7 +2485,7 @@ export default function StudyQuiz() {
               {!complete && day && (
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,paddingTop:12,borderTop:due?"0.5px solid rgba(255,255,255,0.2)":"0.5px solid var(--color-border-tertiary)"}}>
                   <span style={{fontSize:12,fontWeight:600,color:due?"rgba(255,255,255,0.9)":"var(--color-text-secondary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📖 {day.label}</span>
-                  <span style={{flexShrink:0,fontSize:10,fontWeight:700,letterSpacing:0.3,background:due?"rgba(255,255,255,0.2)":"#ede9fe",color:due?"#fff":"#4338ca",borderRadius:8,padding:"3px 8px"}}>{day.format==="exam"?t.coachExamFormat:(t.quizTypes?.[day.format]||day.format)}</span>
+                  <span style={{flexShrink:0,fontSize:10,fontWeight:700,letterSpacing:0.3,background:due?"rgba(255,255,255,0.2)":"var(--color-sel-tint)",color:due?"#fff":"var(--color-accent)",borderRadius:8,padding:"3px 8px"}}>{day.format==="exam"?t.coachExamFormat:(t.quizTypes?.[day.format]||day.format)}</span>
                 </div>
               )}
             </div>
@@ -2493,7 +2495,7 @@ export default function StudyQuiz() {
         <div className="rv-feat-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
           {[...t.features.filter(([icon])=>icon!=="🔗"), t.langFeature].map(([,title,sub],i)=>(
             <div key={i} style={Sb.fCard}>
-              <span style={{width:34,height:34,borderRadius:9,background:"var(--color-sel-tint)",color:"#4338ca",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:2}}><Icon name={FEAT_ICONS[i]||"notes"} size={19}/></span>
+              <span style={{width:34,height:34,borderRadius:9,background:"var(--color-sel-tint)",color:"var(--color-accent)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:2}}><Icon name={FEAT_ICONS[i]||"notes"} size={19}/></span>
               <span style={{fontSize:13,fontWeight:600,color:"var(--color-text-primary)"}}>{title}</span>
               <span style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.4}}>{sub}</span>
             </div>
@@ -2563,7 +2565,7 @@ export default function StudyQuiz() {
           {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4338ca":"var(--color-border-secondary)",background:tab===id?"#4338ca":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s"}}>{lb}</button>)}
         </div>
         {tab==="file" && (
-          <div style={{...Sb.dropzone,...(drag?{borderColor:"#4338ca",background:"#ede9fe"}:{}),...(file?{borderStyle:"solid",borderColor:"#4338ca"}:{})}}
+          <div style={{...Sb.dropzone,...(drag?{borderColor:"#4338ca",background:"var(--color-sel-tint)"}:{}),...(file?{borderStyle:"solid",borderColor:"#4338ca"}:{})}}
             onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);loadFile(e.dataTransfer.files[0]);}}
             onClick={()=>fileRef.current.click()}>
@@ -2612,7 +2614,7 @@ export default function StudyQuiz() {
           <div style={{...Sb.settingRow,flexDirection:"column",alignItems:"flex-start",gap:8}}>
             <div style={{display:"flex",justifyContent:"space-between",width:"100%",alignItems:"center"}}>
               <span style={Sb.settingLabel}>{t.questions}</span>
-              <span style={{fontWeight:700,fontSize:14,color:"#4338ca",minWidth:32,textAlign:"right"}}>{Math.min(numQ,qCap())}</span>
+              <span style={{fontWeight:700,fontSize:14,color:"var(--color-accent)",minWidth:32,textAlign:"right"}}>{Math.min(numQ,qCap())}</span>
             </div>
             {/* Pro/unlocked: step the slider by 1 and reveal a type-in box. */}
             {canCustomQ()&&(
@@ -2672,7 +2674,7 @@ export default function StudyQuiz() {
         {!isPro&&(
           <div
             onClick={unlocks.examUsedToday()?undefined:enterExamMode}
-            style={{background:"#f5f3ff",border:"1.5px solid "+(unlocks.examUnlocked()?"#4338ca":"#f59e0b55"),borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:unlocks.examUsedToday()?"default":"pointer",opacity:unlocks.examUsedToday()?0.65:1}}>
+            style={{background:"var(--color-sel-tint)",border:"1.5px solid "+(unlocks.examUnlocked()?"#4338ca":"#f59e0b55"),borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:unlocks.examUsedToday()?"default":"pointer",opacity:unlocks.examUsedToday()?0.65:1}}>
             <span style={{fontSize:22,flexShrink:0}}>🎓</span>
             <div style={{flex:1}}>
               <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.examModeLabel}</div>
@@ -2750,8 +2752,8 @@ export default function StudyQuiz() {
         <PBar v={qIdx} max={quiz.questions.length}/>
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}>
           <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-            <span style={{background:"#ede9fe",color:"#4338ca",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.diffOpts[diff]}</span>
-            <span style={{background:"#ede9fe",color:"#4338ca",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.quizTypes[quiz.type]}</span>
+            <span style={{background:"var(--color-sel-tint)",color:"var(--color-accent)",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.diffOpts[diff]}</span>
+            <span style={{background:"var(--color-sel-tint)",color:"var(--color-accent)",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{t.quizTypes[quiz.type]}</span>
           </div>
           {quiz.type==="cards"&&<Flashcard key={qIdx} q={q} isLast={isLast} t={t} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} feedback={settings.feedback} autoAdvance={settings.autoAdvance} autoSec={autoAdvanceSec} onNext={(ok,picked)=>{const u=[...answers,{isCorrect:ok,picked}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
@@ -2801,9 +2803,9 @@ export default function StudyQuiz() {
       </div>
       <div className="rv-center" style={{padding:"20px 16px"}}>
         {srsAdded>0 && (
-          <div style={{display:"flex",alignItems:"center",gap:10,background:"#ede9fe",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
             <span style={{fontSize:18}}>🔁</span>
-            <span style={{flex:1,fontSize:12.5,color:"#4338ca",lineHeight:1.4}}>{t.srsAddedMsg.replace("{n}",srsAdded).replace("{s}",srsAdded>1?"s":"")}</span>
+            <span style={{flex:1,fontSize:12.5,color:"var(--color-accent)",lineHeight:1.4}}>{t.srsAddedMsg.replace("{n}",srsAdded).replace("{s}",srsAdded>1?"s":"")}</span>
             <button onClick={startReview} style={{flexShrink:0,background:"#4338ca",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
           </div>
         )}
@@ -2867,7 +2869,7 @@ export default function StudyQuiz() {
         <AdBanners isPro={isPro}/>
         <div style={Sb.topbar} className="rv-topbar">
           <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
-          <span style={{...Sb.brand,color:"#4338ca"}}>🔁 {t.srsReview}</span>
+          <span style={{...Sb.brand,color:"var(--color-accent)"}}>🔁 {t.srsReview}</span>
           <span style={{fontSize:12,color:"var(--color-text-secondary)",fontWeight:600}}>{done?"":`${Math.min(reviewPos+1,reviewQueue.length)}/${reviewQueue.length}`}</span>
         </div>
         {!done && <PBar v={reviewPos} max={reviewQueue.length||1}/>}
@@ -2920,7 +2922,7 @@ export default function StudyQuiz() {
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← {t.backWord}</button>
-        <span style={{...Sb.brand,color:"#4338ca"}}>{t.examModeLabel}</span>
+        <span style={{...Sb.brand,color:"var(--color-accent)"}}>{t.examModeLabel}</span>
         <span style={{fontSize:10,background:isPro?"#f59e0b":"#4338ca",color:"#fff",borderRadius:8,padding:"2px 8px",fontWeight:700,whiteSpace:"nowrap"}}>{isPro?"PRO":t.oneFreePerDay}</span>
       </div>
       <div className="rv-exam-body" style={{padding:"20px 16px 40px"}}>
@@ -2928,10 +2930,10 @@ export default function StudyQuiz() {
         <p style={Sb.secLabel}>{t.examType}</p>
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:22}}>
           {[{id:"mcq",icon:"📋",title:t.fullMCQ,desc:t.fullMCQDesc},{id:"written",icon:"✍️",title:t.fullWritten,desc:t.fullWrittenDesc},{id:"custom",icon:"🎛️",title:t.customMix,desc:t.customMixDesc}].filter(m=>isPro||m.id!=="custom").map(m=>(
-            <div key={m.id} onClick={()=>setExamMode(m.id)} className="exam-type-card" style={{display:"flex",alignItems:"center",gap:14,borderRadius:12,padding:"14px 16px",cursor:"pointer",border:"1.5px solid "+(examMode===m.id?"#4338ca":"var(--color-border-tertiary)"),background:examMode===m.id?"#ede9fe":"var(--color-background-primary)",transition:"all 0.18s",boxShadow:examMode===m.id?"0 4px 16px #4338ca33":"none"}}>
+            <div key={m.id} onClick={()=>setExamMode(m.id)} className="exam-type-card" style={{display:"flex",alignItems:"center",gap:14,borderRadius:12,padding:"14px 16px",cursor:"pointer",border:"1.5px solid "+(examMode===m.id?"#4338ca":"var(--color-border-tertiary)"),background:examMode===m.id?"var(--color-sel-tint)":"var(--color-background-primary)",transition:"all 0.18s",boxShadow:examMode===m.id?"0 4px 16px #4338ca33":"none"}}>
               <span style={{fontSize:26,flexShrink:0}}>{m.icon}</span>
               <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{m.title}</div><div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:2}}>{m.desc}</div></div>
-              {examMode===m.id&&<span style={{color:"#4338ca",fontWeight:700,fontSize:18}}>✓</span>}
+              {examMode===m.id&&<span style={{color:"var(--color-accent)",fontWeight:700,fontSize:18}}>✓</span>}
             </div>
           ))}
         </div>
@@ -2942,7 +2944,7 @@ export default function StudyQuiz() {
               <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>{t.questionsLow}</span>
-                  <span style={{fontWeight:700,fontSize:18,color:"#4338ca"}}>{Math.min(Math.max(parseInt(examTotalQ)||1,1),100)}</span>
+                  <span style={{fontWeight:700,fontSize:18,color:"var(--color-accent)"}}>{Math.min(Math.max(parseInt(examTotalQ)||1,1),100)}</span>
                 </div>
                 <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(examTotalQ)||1,1),100)} onChange={e=>setExamTotalQ(e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>100</span></div>
@@ -2951,7 +2953,7 @@ export default function StudyQuiz() {
               <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>{t.freeDailyExam}</span>
-                  <span style={{fontWeight:700,fontSize:18,color:"#4338ca"}}>{t.examFreeQCount}</span>
+                  <span style={{fontWeight:700,fontSize:18,color:"var(--color-accent)"}}>{t.examFreeQCount}</span>
                 </div>
                 <p style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.5,margin:"8px 0 0"}}>{t.upgradeExamNote}</p>
               </div>
@@ -2962,14 +2964,14 @@ export default function StudyQuiz() {
           <div style={{marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <p style={{...Sb.secLabel,margin:0}}>{t.examSectionsLbl}</p>
-              {examSections.length<5&&<button onClick={addSection} style={{background:"#ede9fe",border:"1px solid #a5b4fc",color:"#4338ca",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t.addSectionBtn}</button>}
+              {examSections.length<5&&<button onClick={addSection} style={{background:"var(--color-sel-tint)",border:"1px solid #a5b4fc",color:"var(--color-accent)",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t.addSectionBtn}</button>}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {examSections.map((sec,si)=>{
                 const secMarks=(parseInt(sec.count)||0)*(parseFloat(sec.marksPerQ)||1);
                 return (
                   <div key={sec.id} style={{background:"var(--color-background-primary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)",overflow:"hidden"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",background:si%2===0?"#f5f3ff":"#fef3c7"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",background:si%2===0?"var(--color-sel-tint)":"#fef3c7"}}>
                       <span style={{fontWeight:700,fontSize:13,color:si%2===0?"#4338ca":"#92400e"}}>{t.sectionNum.replace("{n}",si+1)}</span>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <span style={{fontSize:11,fontWeight:600,color:"var(--color-text-secondary)"}}>{secMarks} {t.marksWord}</span>
@@ -2994,7 +2996,7 @@ export default function StudyQuiz() {
                       <div>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                           <span style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)"}}>{t.questionsUpperLbl}</span>
-                          <span style={{fontWeight:700,fontSize:14,color:"#4338ca"}}>{Math.min(Math.max(parseInt(sec.count)||1,1),100)}</span>
+                          <span style={{fontWeight:700,fontSize:14,color:"var(--color-accent)"}}>{Math.min(Math.max(parseInt(sec.count)||1,1),100)}</span>
                         </div>
                         <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(sec.count)||1,1),100)} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
                         <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>100</span></div>
@@ -3047,9 +3049,9 @@ export default function StudyQuiz() {
               <div key={idx}>
                 <input ref={examFileRefs[idx]} type="file" accept=".pdf,.txt,.md,.csv,image/*" style={{display:"none"}} onChange={e=>addExamFile(e.target.files[0],idx)}/>
                 {ef?(
-                  <div style={{background:"#ede9fe",border:"1px solid #a5b4fc",borderRadius:10,padding:"10px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",minHeight:56}} onClick={()=>removeExamFile(idx)}>
+                  <div style={{background:"var(--color-sel-tint)",border:"1px solid #a5b4fc",borderRadius:10,padding:"10px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",minHeight:56}} onClick={()=>removeExamFile(idx)}>
                     <span style={{fontSize:18,flexShrink:0}}>{ef.type==="pdf"?"📄":ef.type==="image"?"🖼️":"📝"}</span>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:600,color:"#3730a3",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ef.name}</div><div style={{fontSize:9,color:"#6d28d9"}}>{t.tapToRemove}</div></div>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:600,color:"var(--color-accent)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ef.name}</div><div style={{fontSize:9,color:"var(--color-text-secondary)"}}>{t.tapToRemove}</div></div>
                   </div>
                 ):(
                   <div style={{border:"1.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"14px 8px",textAlign:"center",cursor:"pointer",background:"var(--color-background-primary)",minHeight:56,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}} onClick={()=>examFileRefs[idx].current.click()}>
@@ -3107,7 +3109,7 @@ export default function StudyQuiz() {
             </div>
           )}
           <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-            <span style={{background:q.type==="mcq"?"#ede9fe":"#fef3c7",color:q.type==="mcq"?"#4338ca":"#92400e",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{q.type==="mcq"?t.quizTypes.mcq:q.type==="fill"?t.quizTypes.fill:t.writtenWord}</span>
+            <span style={{background:q.type==="mcq"?"var(--color-sel-tint)":"#fef3c7",color:q.type==="mcq"?"#4338ca":"#92400e",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{q.type==="mcq"?t.quizTypes.mcq:q.type==="fill"?t.quizTypes.fill:t.writtenWord}</span>
             {examAns[examIdx]!==undefined&&<span style={{background:"#f0fdf4",color:"#16a34a",borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:600}}>{t.answeredWord}</span>}
           </div>
           <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:"0 0 20px"}}>{q.question}</h3>
@@ -3115,7 +3117,7 @@ export default function StudyQuiz() {
             <div style={{display:"flex",flexDirection:"column",gap:9}}>
               {q.options.map((opt,i)=>{
                 const isSel=examAns[examIdx]===i;
-                return <button key={i} onClick={()=>pickExam(i)} className="quiz-opt" style={{display:"flex",alignItems:"center",gap:12,background:isSel?"#ede9fe":"var(--color-background-primary)",border:"1.5px solid "+(isSel?"#4338ca":"var(--color-border-tertiary)"),borderRadius:12,padding:"13px 14px",cursor:"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",transition:"all 0.18s"}}>
+                return <button key={i} onClick={()=>pickExam(i)} className="quiz-opt" style={{display:"flex",alignItems:"center",gap:12,background:isSel?"var(--color-sel-tint)":"var(--color-background-primary)",border:"1.5px solid "+(isSel?"#4338ca":"var(--color-border-tertiary)"),borderRadius:12,padding:"13px 14px",cursor:"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",transition:"all 0.18s"}}>
                   <span style={{width:28,height:28,borderRadius:"50%",background:isSel?"#4338ca":"var(--color-background-secondary)",color:isSel?"#fff":"var(--color-text-secondary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{LETTERS[i]}</span>
                   <span style={{flex:1,textAlign:"left",lineHeight:1.4}}>{opt}</span>
                 </button>;
@@ -3145,7 +3147,7 @@ export default function StudyQuiz() {
             <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"26px 22px",maxWidth:330,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.25)"}}>
               <div style={{fontSize:34,marginBottom:8}}>📋</div>
               <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{t.submitExamQ}</h3>
-              <p style={{margin:"0 0 18px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.submitStillHave} <strong style={{color:"#4338ca"}}>{fmtClock(examTimeLeft||0)}</strong> {t.submitReviewBefore}</p>
+              <p style={{margin:"0 0 18px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.submitStillHave} <strong style={{color:"var(--color-accent)"}}>{fmtClock(examTimeLeft||0)}</strong> {t.submitReviewBefore}</p>
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 <button onClick={()=>{setShowSubmitPrompt(false);setExamReview(true);setExamIdx(0);}} style={{...Sb.btnPrimary,width:"100%",margin:0,background:"#4338ca",fontSize:14}}>{t.reviewAnswersBtn}</button>
                 <button onClick={()=>{setShowSubmitPrompt(false);submitExam();}} style={{width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.submitNowBtn}</button>
@@ -3196,9 +3198,9 @@ export default function StudyQuiz() {
         </div>
         <div className="rv-center" style={{padding:"20px 16px"}}>
           {srsAdded>0 && (
-            <div style={{display:"flex",alignItems:"center",gap:10,background:"#ede9fe",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
               <span style={{fontSize:18}}>🔁</span>
-              <span style={{flex:1,fontSize:12.5,color:"#4338ca",lineHeight:1.4}}>{t.srsAddedMsg.replace("{n}",srsAdded).replace("{s}",srsAdded>1?"s":"")}</span>
+              <span style={{flex:1,fontSize:12.5,color:"var(--color-accent)",lineHeight:1.4}}>{t.srsAddedMsg.replace("{n}",srsAdded).replace("{s}",srsAdded>1?"s":"")}</span>
               <button onClick={startReview} style={{flexShrink:0,background:"#4338ca",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
             </div>
           )}
@@ -3234,7 +3236,7 @@ export default function StudyQuiz() {
                 const col=secPct>=90?"#16a34a":secPct>=50?"#b45309":"#dc2626";
                 return (
                   <div key={si} style={{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:si<examSections.length-1?"0.5px solid var(--color-border-tertiary)":undefined,gap:12}}>
-                    <span style={{width:22,height:22,borderRadius:"50%",background:si%2===0?"#ede9fe":"#fef3c7",color:si%2===0?"#4338ca":"#92400e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{si+1}</span>
+                    <span style={{width:22,height:22,borderRadius:"50%",background:si%2===0?"var(--color-sel-tint)":"#fef3c7",color:si%2===0?"#4338ca":"#92400e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{si+1}</span>
                     <div style={{flex:1}}>
                       <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)"}}>{t.sectionNum.replace("{n}",si+1)}: {sec.type==="mcq"?t.quizTypes.mcq:sec.type==="fill"?t.quizTypes.fill:t.writtenWord}</div>
                       <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{t.qsTimesMarks.replace("{n}",secQs.length).replace("{m}",sec.marksPerQ)}</div>
@@ -3268,7 +3270,7 @@ export default function StudyQuiz() {
             return (
               <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"13px 13px 13px 10px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:"3px solid "+col}} className="fade-in">
                 <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}>
-                  <span style={{fontSize:9,fontWeight:700,background:q.type==="mcq"?"#ede9fe":"#fef3c7",color:q.type==="mcq"?"#4338ca":"#92400e",borderRadius:8,padding:"2px 6px",flexShrink:0,marginTop:2}}>{q.type==="mcq"?t.badgeMcq:q.type==="fill"?t.badgeFill:t.badgeWritten}</span>
+                  <span style={{fontSize:9,fontWeight:700,background:q.type==="mcq"?"var(--color-sel-tint)":"#fef3c7",color:q.type==="mcq"?"#4338ca":"#92400e",borderRadius:8,padding:"2px 6px",flexShrink:0,marginTop:2}}>{q.type==="mcq"?t.badgeMcq:q.type==="fill"?t.badgeFill:t.badgeWritten}</span>
                   <span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,flex:1}}>{q.question}</span>
                 </div>
                 {q.type==="mcq"&&examAns[i]!==undefined&&(
@@ -3382,7 +3384,7 @@ export default function StudyQuiz() {
           {activePlan.mode==="remind" && activePlan.reminderTime && (
             <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"var(--color-text-secondary)",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:14}}>
               🔔 <span style={{flex:1}}>{t.coachReminderTime} <strong style={{color:"var(--color-text-primary)"}}>{activePlan.reminderTime}</strong></span>
-              {notifPerm!=="granted" && notifPerm!=="unsupported" && <button onClick={enableReminders} style={{background:"none",border:"none",color:"#4338ca",fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",padding:0}}>{t.coachEnableNotif}</button>}
+              {notifPerm!=="granted" && notifPerm!=="unsupported" && <button onClick={enableReminders} style={{background:"none",border:"none",color:"var(--color-accent)",fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",padding:0}}>{t.coachEnableNotif}</button>}
             </div>
           )}
           {rd.score!=null && (
@@ -3424,7 +3426,7 @@ export default function StudyQuiz() {
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st==="done"&&"✓ "}{day.label}</div>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
-                      <span style={{fontSize:9.5,fontWeight:700,letterSpacing:0.3,background:"#ede9fe",color:"#4338ca",borderRadius:7,padding:"2px 6px"}}>{KIND[day.kind]||day.kind}</span>
+                      <span style={{fontSize:9.5,fontWeight:700,letterSpacing:0.3,background:"var(--color-sel-tint)",color:"var(--color-accent)",borderRadius:7,padding:"2px 6px"}}>{KIND[day.kind]||day.kind}</span>
                       <span style={{fontSize:10.5,color:"var(--color-text-secondary)"}}>{day.format==="exam"?t.coachExamFormat:(t.quizTypes?.[day.format]||day.format)} · {day.numQ} Qs</span>
                       {pctScore!=null && <span style={{fontSize:10.5,fontWeight:700,color:"#16a34a"}}>· {t.coachScored.replace("{pct}",pctScore)}</span>}
                     </div>
@@ -3667,7 +3669,7 @@ export default function StudyQuiz() {
 }
 
 const Sb = {
-  root:        { minHeight:"100vh", background:"var(--color-background-tertiary)", fontFamily:"'DM Sans','Helvetica Neue',sans-serif", display:"flex", flexDirection:"column" },
+  root:        { minHeight:"100vh", background:"var(--color-background-tertiary)", color:"var(--color-text-primary)", fontFamily:"'DM Sans','Helvetica Neue',sans-serif", display:"flex", flexDirection:"column" },
   brand:       { fontFamily:"'Fraunces',Georgia,serif", fontSize:16, fontWeight:700, color:"var(--color-text-primary)", letterSpacing:0.5, display:"flex", alignItems:"center", gap:8 },
   hero:        { background:"#2c2870", padding:"44px 24px 40px" },
   h1:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:30, fontWeight:700, color:"#fff", lineHeight:1.2, margin:"14px 0 12px" },
