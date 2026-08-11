@@ -20,6 +20,12 @@ import Icon from "./components/Icon.jsx";
 // so we don't depend on the emoji stored in the translation data.
 const FEAT_ICONS = ["notes", "camera", "pencil", "layers", "chat", "globe"];
 
+// Strip a leading emoji (and its trailing space) from a translated label so we
+// can show a clean SVG icon in front of it instead. Leaves the words intact.
+const stripEmoji = (s) => String(s ?? "").replace(/^[\u{1F000}-\u{1FAFF}☀-➿⬀-⯿←-⇿️‍\s]+/u, "").trim();
+// Icon per upload tab id (labels come from the translation data with emoji).
+const TAB_ICONS = { file: "folder", text: "pencil", photo: "camera" };
+
 // Phone-style light/dark toggle: moon on the left, sun on the right, a knob that
 // slides to the side you're on (left = dark, right = light). `onDark` styles it
 // for a dark surface (the app hero); otherwise it uses theme tokens.
@@ -658,11 +664,11 @@ function ExplainBox({ ctx, t }) {
     setAsking(false);
   };
   if (!open) return (
-    <button onClick={load} style={{marginTop:8,marginLeft:23,background:"none",border:"none",color:"var(--color-accent)",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0}}>💡 {t.explainWhy}</button>
+    <button onClick={load} style={{marginTop:8,marginLeft:23,background:"none",border:"none",color:"var(--color-accent)",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="chat" size={13}/>{t.explainWhy}</button>
   );
   return (
     <div style={{marginTop:8,marginLeft:23,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"10px 12px"}} className="fade-in">
-      {loading && <div style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>💡 {t.explainLoading}</div>}
+      {loading && <div style={{fontSize:12.5,color:"var(--color-text-secondary)",display:"inline-flex",alignItems:"center",gap:5}}><Icon name="chat" size={13}/>{t.explainLoading}</div>}
       {err && <div style={{fontSize:12.5,color:"#b91c1c"}}>{err}</div>}
       {text && <div style={{fontSize:12.5,color:"var(--color-text-primary)",lineHeight:1.55,whiteSpace:"pre-wrap"}}>{text}</div>}
       {turns.map((turn,i)=>(
@@ -785,6 +791,7 @@ function Seg({ options, value, onChange }) {
       {options.map(([v,label])=>(
         <button key={v} onClick={()=>onChange(v)} style={{
           padding:"5px 9px",borderRadius:6,border:"none",cursor:"pointer",
+          display:"inline-flex",alignItems:"center",justifyContent:"center",minHeight:26,
           fontSize:12,fontWeight:600,fontFamily:"inherit",transition:"all 0.15s",
           background:value===v?"var(--color-background-primary)":"transparent",
           color:value===v?"var(--color-text-primary)":"var(--color-text-secondary)",
@@ -842,7 +849,7 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
           {/* The X/2 here is scoped to the +questions ad, it's not all ads. */}
           {adsLeft > 0
             ? <button disabled={adBusy} onClick={onWatchAd} style={{marginTop:10,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:adBusy ? "default" : "pointer",fontFamily:"inherit",opacity:adBusy ? 0.6 : 1}}>
-                {adBusy ? (s.loadingAd || "Loading ad…") : `📺 ${(s.watchAdForQuestions || "Watch ad for +{n} questions").replace("{n}", u.ad_question_bonus ?? 10)} · ${u.ad_watches_today ?? 0}/${u.max_ad_watches ?? 2}`}
+                {adBusy ? (s.loadingAd || "Loading ad…") : `${(s.watchAdForQuestions || "Watch ad for +{n} questions").replace("{n}", u.ad_question_bonus ?? 10)} · ${u.ad_watches_today ?? 0}/${u.max_ad_watches ?? 2}`}
               </button>
             : <div style={{marginTop:10,width:"100%",background:"var(--color-background-tertiary)",color:"var(--color-text-tertiary)",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:600,textAlign:"center",boxSizing:"border-box"}}>
                 📵 {(s.adLimitReached || "Daily ad limit reached")} · {u.max_ad_watches ?? 2}/{u.max_ad_watches ?? 2}
@@ -959,8 +966,8 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:10}}>{t.progressTitle}</div>
             <div style={{display:"flex",gap:8}}>
               {[
-                { v: `🔥 ${acctStats.streak}`, l: t.dayStreak },
-                { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : ", ", l: t.accuracyLbl },
+                { v: <span style={{display:"inline-flex",alignItems:"center",gap:5,justifyContent:"center"}}><Icon name="flame" size={16} stroke={1.8} style={{color:"#f97316"}}/>{acctStats.streak}</span>, l: t.dayStreak },
+                { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : "0%", l: t.accuracyLbl },
                 { v: acctSrs.totalCount, l: t.inReviewLbl },
               ].map(({ v, l }, i) => (
                 <div key={i} style={{flex:1,background:"var(--color-background-secondary)",borderRadius:12,padding:"12px 4px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
@@ -969,12 +976,12 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 </div>
               ))}
             </div>
-            {acctSrs.dueCount > 0 && <div style={{fontSize:11.5,color:"var(--color-accent)",fontWeight:600,marginTop:9,textAlign:"center"}}>🔁 {acctSrs.dueCount} card{acctSrs.dueCount>1?"s":""} due for review today</div>}
+            {acctSrs.dueCount > 0 && <div style={{fontSize:11.5,color:"var(--color-accent)",fontWeight:600,marginTop:9,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><Icon name="repeat" size={13}/>{acctSrs.dueCount} card{acctSrs.dueCount>1?"s":""} due for review today</div>}
           </div>
 
           <SectionLabel label={s.secAppearance}/>
           <SettingRow label={s.theme} desc={draft.theme==="light"?s.themeLight:draft.theme==="dark"?s.themeDark:s.themeFollows}>
-            <Seg options={[["system",s.segAuto],["light","☀️"],["dark","🌙"]]} value={draft.theme} onChange={v=>update("theme",v)}/>
+            <Seg options={[["system",s.segAuto],["light",<Icon name="sun" size={15}/>],["dark",<Icon name="moon" size={15}/>]]} value={draft.theme} onChange={v=>update("theme",v)}/>
           </SettingRow>
           <SettingRow label={s.fontSize} desc={draft.fontSize==="small"?s.fontCompact:""}>
             <Seg options={[["small","S"],["medium","M"],["large","L"]]} value={draft.fontSize} onChange={v=>update("fontSize",v)}/>
@@ -982,9 +989,9 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           <SettingRow label={s.animations} desc={s.animationsDesc}>
             <Toggle on={draft.animations} onChange={v=>update("animations",v)}/>
           </SettingRow>
-          <SettingRow label={"🌍 "+(s.language||"Language")} desc={LANGS[draft.lang]?.name}>
+          <SettingRow label={<span style={{display:"inline-flex",alignItems:"center",gap:6}}><Icon name="globe" size={14}/>{s.language||"Language"}</span>} desc={LANGS[draft.lang]?.name}>
             <select value={draft.lang} onChange={e=>update("lang",e.target.value)} style={{border:"0.5px solid var(--color-border-secondary)",borderRadius:8,background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:13,padding:"6px 8px",fontFamily:"inherit",outline:"none",maxWidth:150,cursor:"pointer"}}>
-              {Object.entries(LANGS).map(([code,l])=><option key={code} value={code}>{l.flag} {l.name}</option>)}
+              {Object.entries(LANGS).map(([code,l])=><option key={code} value={code}>{l.name}</option>)}
             </select>
           </SettingRow>
 
@@ -994,12 +1001,12 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           </SettingRow>
           <SettingRow label={s.volume+"  "+draft.volume+"%"} desc={!draft.sound?s.volumeNeedSound:undefined}>
             <div style={{display:"flex",alignItems:"center",gap:6,width:130}}>
-              <span style={{fontSize:13}}>🔇</span>
+              <Icon name="volume" size={14} style={{color:"var(--color-text-tertiary)",flexShrink:0}}/>
               <input type="range" min={0} max={100} step={5} value={draft.volume}
                 onChange={e=>update("volume",parseInt(e.target.value))}
                 disabled={!draft.sound}
                 style={{flex:1,accentColor:"#4338ca",cursor:draft.sound?"pointer":"not-allowed",opacity:draft.sound?1:0.4}}/>
-              <span style={{fontSize:13}}>🔊</span>
+              <Icon name="volume" size={17} style={{color:"var(--color-text-secondary)",flexShrink:0}}/>
             </div>
           </SettingRow>
 
@@ -1052,7 +1059,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             style={{margin:"4px 18px 8px",width:"calc(100% - 36px)",display:"flex",alignItems:"center",justifyContent:"space-between",
               background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"13px 16px",
               fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
-            <span>🐛 {s.reportBug}</span><span style={{color:"var(--color-text-tertiary)",fontSize:18}}>›</span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="chat" size={16}/>{s.reportBug}</span><span style={{color:"var(--color-text-tertiary)",fontSize:18}}>›</span>
           </button>
 
           {signedIn ? (<>
@@ -1065,7 +1072,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             {isPro ? (
               <>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
-                  <span style={{fontSize:15,fontWeight:700,color:"var(--color-text-primary)"}}>⭐ Revyy Pro</span>
+                  <span style={{fontSize:15,fontWeight:700,color:"var(--color-text-primary)",display:"inline-flex",alignItems:"center",gap:6}}><Icon name="spark" size={15} style={{color:"var(--color-accent)"}}/>Revyy Pro</span>
                   <span style={{fontSize:10,fontWeight:700,background:"#dcfce7",color:"#15803d",border:"0.5px solid #86efac",borderRadius:8,padding:"3px 9px"}}>{s.proActive}</span>
                 </div>
                 <div style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.7}}>
@@ -1081,7 +1088,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                   style={{width:"100%",marginTop:12,background:"var(--color-background-primary)",
                     border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
                     fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:portalBusy?"default":"pointer",fontFamily:"inherit",opacity:portalBusy?0.6:1}}>
-                  {portalBusy==="manage" ? s.opening : `💳 ${t.manageSubscription}`}
+                  {portalBusy==="manage" ? s.opening : <span style={{display:"inline-flex",alignItems:"center",gap:7,justifyContent:"center"}}><Icon name="card" size={15}/>{t.manageSubscription}</span>}
                 </button>
                 {!cancelAtPeriodEnd && (
                   <button onClick={doCancel} disabled={!!portalBusy}
@@ -1095,7 +1102,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 <button onClick={doRefreshSub} disabled={checkingSub}
                   style={{width:"100%",marginTop:8,background:"none",border:"none",
                     fontSize:12,fontWeight:500,color:"var(--color-text-tertiary)",cursor:checkingSub?"default":"pointer",fontFamily:"inherit"}}>
-                  {checkingSub ? "Checking…" : "🔄 Refresh subscription status"}
+                  {checkingSub ? "Checking…" : <span style={{display:"inline-flex",alignItems:"center",gap:6,justifyContent:"center"}}><Icon name="repeat" size={13}/>Refresh subscription status</span>}
                 </button>
               </>
             ) : (
@@ -1119,7 +1126,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 <button onClick={doRefreshSub} disabled={checkingSub}
                   style={{width:"100%",marginTop:8,background:"none",border:"none",
                     fontSize:12,fontWeight:500,color:"var(--color-text-tertiary)",cursor:checkingSub?"default":"pointer",fontFamily:"inherit"}}>
-                  {checkingSub ? "Checking…" : "🔄 Already paid? Refresh status"}
+                  {checkingSub ? "Checking…" : <span style={{display:"inline-flex",alignItems:"center",gap:6,justifyContent:"center"}}><Icon name="repeat" size={13}/>Already paid? Refresh status</span>}
                 </button>
               </>
             )}
@@ -1131,7 +1138,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
               style={{width:"100%",background:"var(--color-background-secondary)",
                 border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
                 fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
-              🔐 Manage login &amp; security
+              <span style={{display:"inline-flex",alignItems:"center",gap:8,justifyContent:"center"}}><Icon name="lock" size={15}/>Manage login &amp; security</span>
             </button>
             <button onClick={onSignOut}
               style={{width:"100%",background:"var(--color-background-secondary)",
@@ -2543,16 +2550,16 @@ export default function StudyQuiz() {
         <span style={Sb.brand}>{t.appName}</span>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           {isPro && <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"2px 7px",fontWeight:700}}>PRO</span>}
-          <button onClick={()=>setSoundOn(s=>!s)} title={soundOn?t.soundOn:t.soundOff} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",opacity:soundOn?1:0.4}}>{soundOn?"🔊":"🔇"}</button>
+          <button onClick={()=>setSoundOn(s=>!s)} title={soundOn?t.soundOn:t.soundOff} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",display:"flex",alignItems:"center",color:"var(--color-text-secondary)",opacity:soundOn?1:0.4}}><Icon name="volume" size={17}/></button>
           <ThemeSwitch isDark={isDarkTheme} onToggle={toggleTheme} />
-          <button onClick={()=>openSettings()} title={t.set.title} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"2px 4px",color:"var(--color-text-secondary)"}}>⚙️</button>
+          <button onClick={()=>openSettings()} title={t.set.title} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",display:"flex",alignItems:"center",color:"var(--color-text-secondary)"}}><Icon name="gear" size={17}/></button>
         </div>
       </div>
       <div className="rv-upload-body" style={{padding:"18px 16px 32px"}}>
         <div className="rv-ul-left">
         {planSession && (
           <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4338ca,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:14,color:"#fff"}}>
-            <span style={{fontSize:18,flexShrink:0}}>🧭</span>
+            <span style={{flexShrink:0,display:"flex"}}><Icon name="compass" size={19}/></span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:12.5,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.coachSessionBanner} · {planSession.label}</div>
               <div style={{fontSize:11,opacity:0.85,marginTop:1}}>{t.quizTypes?.[planSession.format]||planSession.format} · {planSession.numQ} Qs</div>
@@ -2562,7 +2569,7 @@ export default function StudyQuiz() {
         )}
         <h2 style={Sb.h2}>{t.uploadTitle}</h2>
         <div style={{display:"flex",gap:5,marginBottom:16}}>
-          {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4338ca":"var(--color-border-secondary)",background:tab===id?"#4338ca":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s"}}>{lb}</button>)}
+          {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4338ca":"var(--color-border-secondary)",background:tab===id?"#4338ca":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name={TAB_ICONS[id]} size={15}/>{stripEmoji(lb)}</button>)}
         </div>
         {tab==="file" && (
           <div style={{...Sb.dropzone,...(drag?{borderColor:"#4338ca",background:"var(--color-sel-tint)"}:{}),...(file?{borderStyle:"solid",borderColor:"#4338ca"}:{})}}
@@ -2570,12 +2577,12 @@ export default function StudyQuiz() {
             onDrop={e=>{e.preventDefault();setDrag(false);loadFile(e.dataTransfer.files[0]);}}
             onClick={()=>fileRef.current.click()}>
             <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,image/*" style={{display:"none"}} onChange={e=>loadFile(e.target.files[0])}/>
-            {file?(<><div style={{fontSize:32}}>{file.type==="pdf"?"📄":file.type==="image"?"🖼️":"📝"}</div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(file.sizeMB*1024*1024)} · {t.tapChange}</div></>):(<><div style={{fontSize:32}}>📂</div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.dropTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.dropSub}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{isPro?t.unlimited:t.maxFileFree.replace("{n}",fileLimitMB())}</div></>)}
+            {file?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name={file.type==="image"?"camera":"notes"} size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(file.sizeMB*1024*1024)} · {t.tapChange}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="folder" size={32} stroke={1.5}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.dropTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.dropSub}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{isPro?t.unlimited:t.maxFileFree.replace("{n}",fileLimitMB())}</div></>)}
           </div>
         )}
         {tab==="file" && !isPro && (
           unlocks.isUnlocked("filesize")
-            ? <div style={{fontSize:11,color:"var(--color-text-success)",marginTop:8,fontWeight:600}}>🔓 {AD_FILE_MB}MB uploads unlocked · {unlocks.remainingLabel("filesize")} left</div>
+            ? <div style={{fontSize:11,color:"var(--color-text-success)",marginTop:8,fontWeight:600,display:"flex",alignItems:"center",gap:5}}><Icon name="check" size={13}/>{AD_FILE_MB}MB uploads unlocked · {unlocks.remainingLabel("filesize")} left</div>
             : <button onClick={()=>setUnlockFeature("filesize")} style={{fontSize:11,color:"#f59e0b",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:"6px 0 0",textAlign:"left",display:"block"}}>
                 {unlocks.canUnlock("filesize") ? t.adWatchFile.replace("{n}",AD_FILE_MB) : t.adFileUsed.replace("{n}",AD_FILE_MB)}
               </button>
@@ -2583,12 +2590,12 @@ export default function StudyQuiz() {
         {tab==="photo" && (
           <div style={{...Sb.dropzone,...(file&&file.type==="image"?{borderStyle:"solid",borderColor:"#4338ca"}:{})}} onClick={()=>photoRef.current.click()}>
             <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>loadFile(e.target.files[0])}/>
-            {file&&file.type==="image"?(<><div style={{fontSize:32}}>🖼️</div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{t.tapChange}</div></>):(<><div style={{fontSize:48}}>📷</div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.photoTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.photoHint}</div></>)}
+            {file&&file.type==="image"?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="camera" size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{t.tapChange}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:4}}><Icon name="camera" size={38} stroke={1.4}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.photoTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.photoHint}</div></>)}
           </div>
         )}
         {tab==="text" && <textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>}
-        {error && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,lineHeight:1.5}}>⚠️ {error}</div>}
-        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4338ca"}}>💎 {t.getMoreQuestions}</button>}
+        {error && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,lineHeight:1.5,display:"flex",alignItems:"flex-start",gap:7}}><Icon name="alert" size={15} style={{flexShrink:0,marginTop:1}}/><span>{error}</span></div>}
+        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4338ca",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="gem" size={16}/>{t.getMoreQuestions}</button>}
         </div>
         <div className="rv-ul-right">
         <div style={Sb.settingsBox}>
@@ -2667,17 +2674,17 @@ export default function StudyQuiz() {
           </div>
           {!isPro&&(usage?.remaining??99)<=10&&((usage?.max_ad_watches??2)-(usage?.ad_watches_today??0))>0&&
             <button disabled={adBusy} onClick={handleWatchAd} style={{marginTop:8,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:8,padding:"9px",fontSize:12,fontWeight:700,cursor:adBusy?"default":"pointer",fontFamily:"inherit",opacity:adBusy?0.6:1}}>
-              {adBusy?t.loadingAd:`📺 ${t.watchAdForQuestions.replace("{n}",usage?.ad_question_bonus??10)} · ${usage?.ad_watches_today??0}/${usage?.max_ad_watches??2}`}
+              {adBusy?t.loadingAd:`${t.watchAdForQuestions.replace("{n}",usage?.ad_question_bonus??10)} · ${usage?.ad_watches_today??0}/${usage?.max_ad_watches??2}`}
             </button>}
         </div>
-        {isPro&&<button style={{width:"100%",marginBottom:14,background:"#2c2870",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Fraunces',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span>{t.examModeLabel}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>{t.badgeUnlimited}</span></button>}
+        {isPro&&<button style={{width:"100%",marginBottom:14,background:"#2c2870",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Fraunces',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="cap" size={17}/>{stripEmoji(t.examModeLabel)}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>{t.badgeUnlimited}</span></button>}
         {!isPro&&(
           <div
             onClick={unlocks.examUsedToday()?undefined:enterExamMode}
             style={{background:"var(--color-sel-tint)",border:"1.5px solid "+(unlocks.examUnlocked()?"#4338ca":"#f59e0b55"),borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:unlocks.examUsedToday()?"default":"pointer",opacity:unlocks.examUsedToday()?0.65:1}}>
-            <span style={{fontSize:22,flexShrink:0}}>🎓</span>
+            <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="cap" size={22}/></span>
             <div style={{flex:1}}>
-              <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.examModeLabel}</div>
+              <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{stripEmoji(t.examModeLabel)}</div>
               <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.45}}>
                 {examAdBusy?t.loadingAd:unlocks.examUsedToday()?t.examAdUsed:unlocks.examUnlocked()?t.examAdUnlocked:t.examAdWatch}
               </div>
@@ -2689,7 +2696,7 @@ export default function StudyQuiz() {
         )}
         <div onClick={()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }}
           style={{background:"#2c2870",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-          <span style={{fontSize:22,flexShrink:0}}>🎓</span>
+          <span style={{flexShrink:0,display:"flex",color:"#fff"}}><Icon name="cap" size={22}/></span>
           <div style={{flex:1,color:"#fff",minWidth:0}}>
             <div style={{fontWeight:700,fontSize:14}}>{t.mockCardTitle}</div>
             <div style={{fontSize:11,opacity:0.85,marginTop:2,lineHeight:1.45}}>{t.mockCardSub}</div>
@@ -2922,16 +2929,16 @@ export default function StudyQuiz() {
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← {t.backWord}</button>
-        <span style={{...Sb.brand,color:"var(--color-accent)"}}>{t.examModeLabel}</span>
+        <span style={{...Sb.brand,color:"var(--color-accent)"}}><Icon name="cap" size={16}/>{stripEmoji(t.examModeLabel)}</span>
         <span style={{fontSize:10,background:isPro?"#f59e0b":"#4338ca",color:"#fff",borderRadius:8,padding:"2px 8px",fontWeight:700,whiteSpace:"nowrap"}}>{isPro?"PRO":t.oneFreePerDay}</span>
       </div>
       <div className="rv-exam-body" style={{padding:"20px 16px 40px"}}>
         <p style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:20,lineHeight:1.6}}>{t.examModeSub}</p>
         <p style={Sb.secLabel}>{t.examType}</p>
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:22}}>
-          {[{id:"mcq",icon:"📋",title:t.fullMCQ,desc:t.fullMCQDesc},{id:"written",icon:"✍️",title:t.fullWritten,desc:t.fullWrittenDesc},{id:"custom",icon:"🎛️",title:t.customMix,desc:t.customMixDesc}].filter(m=>isPro||m.id!=="custom").map(m=>(
+          {[{id:"mcq",icon:"list",title:t.fullMCQ,desc:t.fullMCQDesc},{id:"written",icon:"pencil",title:t.fullWritten,desc:t.fullWrittenDesc},{id:"custom",icon:"sliders",title:t.customMix,desc:t.customMixDesc}].filter(m=>isPro||m.id!=="custom").map(m=>(
             <div key={m.id} onClick={()=>setExamMode(m.id)} className="exam-type-card" style={{display:"flex",alignItems:"center",gap:14,borderRadius:12,padding:"14px 16px",cursor:"pointer",border:"1.5px solid "+(examMode===m.id?"#4338ca":"var(--color-border-tertiary)"),background:examMode===m.id?"var(--color-sel-tint)":"var(--color-background-primary)",transition:"all 0.18s",boxShadow:examMode===m.id?"0 4px 16px #4338ca33":"none"}}>
-              <span style={{fontSize:26,flexShrink:0}}>{m.icon}</span>
+              <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name={m.icon} size={24} stroke={1.6}/></span>
               <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{m.title}</div><div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:2}}>{m.desc}</div></div>
               {examMode===m.id&&<span style={{color:"var(--color-accent)",fontWeight:700,fontSize:18}}>✓</span>}
             </div>
@@ -3055,7 +3062,7 @@ export default function StudyQuiz() {
                   </div>
                 ):(
                   <div style={{border:"1.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"14px 8px",textAlign:"center",cursor:"pointer",background:"var(--color-background-primary)",minHeight:56,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}} onClick={()=>examFileRefs[idx].current.click()}>
-                    <div style={{fontSize:18,marginBottom:2}}>📎</div>
+                    <div style={{color:"var(--color-text-tertiary)",marginBottom:3,display:"flex"}}><Icon name="paperclip" size={17}/></div>
                     <div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{t.addFile}</div>
                   </div>
                 )}
@@ -3468,7 +3475,7 @@ export default function StudyQuiz() {
       </div>
       <div className="rv-center-narrow" style={{padding:"22px 16px 40px"}}>
         <div style={{textAlign:"center",marginBottom:18}}>
-          <div style={{fontSize:36,marginBottom:6}}>🎓</div>
+          <div style={{marginBottom:8,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="cap" size={34}/></div>
           <h2 style={{...Sb.h2,textAlign:"center",margin:"0 0 4px"}}>{t.mockChoose}</h2>
           <p style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.mockSelectSub}</p>
         </div>
@@ -3502,7 +3509,7 @@ export default function StudyQuiz() {
         </div>
         <div className="rv-center-narrow" style={{padding:"22px 16px 40px"}}>
           <div style={{textAlign:"center",marginBottom:18}}>
-            <div style={{fontSize:40,marginBottom:6}}>🎓</div>
+            <div style={{marginBottom:8,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="cap" size={38}/></div>
             <h2 style={{...Sb.h2,textAlign:"center",margin:"0 0 4px"}}>{exam.name} {t.mockPracticeTest}</h2>
             <p style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{exam.note}</p>
           </div>
@@ -3519,10 +3526,10 @@ export default function StudyQuiz() {
             </div>
           </div>
           <div style={{background:"#fffbeb",border:"0.5px solid #f59e0b44",borderRadius:10,padding:"11px 14px",fontSize:12,color:"#92400e",lineHeight:1.5,marginBottom:14}}>⏱️ {t.mockWarn}</div>
-          {mockGenErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {mockGenErr}</div>}
+          {mockGenErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,display:"flex",alignItems:"flex-start",gap:7}}><Icon name="alert" size={15} style={{flexShrink:0,marginTop:1}}/><span>{mockGenErr}</span></div>}
           {isPro
-            ? <button style={{...Sb.btnPrimary,width:"100%"}} onClick={startMock}>🎓 {t.mockStart}</button>
-            : <button style={{...Sb.btnPrimary,width:"100%",background:"#f59e0b"}} onClick={()=>{if(requireLogin())return;setShowProModal(true);}}>⭐ {t.mockProOnly}</button>}
+            ? <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={startMock}><Icon name="cap" size={17}/>{t.mockStart}</button>
+            : <button style={{...Sb.btnPrimary,width:"100%",background:"#f59e0b",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>{if(requireLogin())return;setShowProModal(true);}}><Icon name="spark" size={16}/>{t.mockProOnly}</button>}
           {isPro && usage && <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>{t.mockLeftLabel.replace("{n}",usage.mocks_remaining ?? 2).replace("{cap}",usage.mock_daily_cap ?? 2)}</p>}
           <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:12,lineHeight:1.5}}>{t.mockDisclaimer}</p>
         </div>
