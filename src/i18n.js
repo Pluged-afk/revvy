@@ -48,7 +48,9 @@ const T_EN = {
   dropSub:"PDF · Images (JPG, PNG) · Text files (.txt, .md)",
   tapChange:"Tap to change file",
   quizType:"Quiz type", questions:"Questions", difficulty:"Difficulty",
-  diffOpts:["Easy","Medium","Hard"], generate:"✦ Generate quiz",
+  diffOpts:["Easy","Normal","Hard"], generate:"✦ Generate quiz",
+  diffDesc:["Core facts, tested directly.","Understand and apply the ideas. Standard exam level.","Reason across several concepts. Tough but fair, never tricky."],
+  fixMisses:"Fix your misses ({n})", fixMissesTitle:"Fix your misses",
   freeLabel:"Free", freeDesc:"50 questions/day · MCQ free · Flashcards, match & 1 exam a day via ads · Up to 20 per quiz · 5MB files",
   startFree:"Start free", upgrade:"Upgrade →",
   proLabel:"Pro", proPrice:"€4.99/mo",
@@ -316,6 +318,9 @@ const T_EN = {
 
 const T_LANGS = {
   "zh":{
+    "diffDesc":["直接考核核心事实。","理解并运用知识点。标准考试难度。","跨多个概念推理。有难度但公平，绝不刁钻。"],
+    "fixMisses":"订正错题 ({n})",
+    "fixMissesTitle":"订正错题",
     "srcSeeQuestion":"查看出处",
     "srcSeeAnswer":"查看答案出处",
     "srcConfirmsAnswer":"确认答案",
@@ -361,7 +366,7 @@ const T_LANGS = {
     "quizType":"题型",
     "questions":"题目数量",
     "difficulty":"难度",
-    "diffOpts":["简单","中等","困难"],
+    "diffOpts":["简单","普通","困难"],
     "generate":"✦ 生成测验",
     "freeLabel":"免费",
     "freeDesc":"每天50题 · 选择题免费 · 卡片、匹配和每天1次考试（看广告解锁）· 每次最多20题 · 文件5MB",
@@ -875,6 +880,9 @@ const T_LANGS = {
     }
   },
   "hi":{
+    "diffDesc":["मुख्य तथ्य, सीधे पूछे गए।","विचारों को समझें और लागू करें। मानक परीक्षा स्तर।","कई अवधारणाओं पर तर्क करें। कठिन पर निष्पक्ष, कभी पेचीदा नहीं।"],
+    "fixMisses":"गलतियाँ सुधारें ({n})",
+    "fixMissesTitle":"गलतियाँ सुधारें",
     "srcSeeQuestion":"देखें यह कहाँ से आया",
     "srcSeeAnswer":"देखें उत्तर कहाँ से आया",
     "srcConfirmsAnswer":"उत्तर की पुष्टि करता है",
@@ -920,7 +928,7 @@ const T_LANGS = {
     "quizType":"क्विज़ प्रकार",
     "questions":"प्रश्न",
     "difficulty":"कठिनाई",
-    "diffOpts":["आसान","मध्यम","कठिन"],
+    "diffOpts":["आसान","सामान्य","कठिन"],
     "generate":"✦ क्विज़ बनाएं",
     "freeLabel":"मुफ़्त",
     "freeDesc":"50 प्रश्न/दिन · MCQ मुफ़्त · कार्ड, मैच और दिन में 1 परीक्षा (विज्ञापन से) · प्रति क्विज़ 20 तक · 5MB फ़ाइलें",
@@ -1434,6 +1442,9 @@ const T_LANGS = {
     }
   },
   "es":{
+    "diffDesc":["Datos clave, preguntados directamente.","Comprende y aplica las ideas. Nivel de examen estándar.","Razona entre varios conceptos. Difícil pero justo, nunca con trampa."],
+    "fixMisses":"Corrige tus fallos ({n})",
+    "fixMissesTitle":"Corrige tus fallos",
     "srcSeeQuestion":"Ver de dónde viene",
     "srcSeeAnswer":"Ver de dónde viene la respuesta",
     "srcConfirmsAnswer":"Confirma la respuesta",
@@ -1479,7 +1490,7 @@ const T_LANGS = {
     "quizType":"Tipo de quiz",
     "questions":"Preguntas",
     "difficulty":"Dificultad",
-    "diffOpts":["Fácil","Medio","Difícil"],
+    "diffOpts":["Fácil","Normal","Difícil"],
     "generate":"✦ Generar quiz",
     "freeLabel":"Gratis",
     "freeDesc":"50 preguntas/día · MCQ gratis · Tarjetas, emparejar y 1 examen al día con anuncios · Hasta 20 por quiz · Archivos 5MB",
@@ -1988,6 +1999,9 @@ const T_LANGS = {
     }
   },
   "fr":{
+    "diffDesc":["Faits essentiels, demandés directement.","Comprendre et appliquer les idées. Niveau d'examen standard.","Raisonner sur plusieurs concepts. Difficile mais juste, jamais piégeux."],
+    "fixMisses":"Corrige tes erreurs ({n})",
+    "fixMissesTitle":"Corrige tes erreurs",
     "srcSeeQuestion":"Voir d'où ça vient",
     "srcSeeAnswer":"Voir d'où vient la réponse",
     "srcConfirmsAnswer":"Confirme la réponse",
@@ -2030,7 +2044,7 @@ const T_LANGS = {
     "tapChange":"Appuyer pour changer",
     "quizType":"Type de quiz",
     "difficulty":"Difficulté",
-    "diffOpts":["Facile","Moyen","Difficile"],
+    "diffOpts":["Facile","Normal","Difficile"],
     "generate":"✦ Générer le quiz",
     "freeLabel":"Gratuit",
     "freeDesc":"50 questions/jour · QCM gratuit · Cartes, association et 1 examen/jour via pubs · Jusqu'à 20 par quiz · Fichiers 5 Mo",
@@ -2523,6 +2537,9 @@ const T_LANGS = {
     }
   },
   "ar":{
+    "diffDesc":["حقائق أساسية، تُسأل مباشرة.","افهم الأفكار وطبّقها. مستوى امتحان قياسي.","استدلّ عبر عدة مفاهيم. صعب لكن عادل، دون خداع."],
+    "fixMisses":"صحّح أخطاءك ({n})",
+    "fixMissesTitle":"صحّح أخطاءك",
     "srcSeeQuestion":"اطّلع على المصدر",
     "srcSeeAnswer":"اطّلع على مصدر الإجابة",
     "srcConfirmsAnswer":"يؤكّد الإجابة",
@@ -2568,7 +2585,7 @@ const T_LANGS = {
     "quizType":"نوع الاختبار",
     "questions":"الأسئلة",
     "difficulty":"الصعوبة",
-    "diffOpts":["سهل","متوسط","صعب"],
+    "diffOpts":["سهل","عادي","صعب"],
     "generate":"✦ إنشاء الاختبار",
     "freeLabel":"مجاني",
     "freeDesc":"50 سؤال/يوم · MCQ مجانًا · بطاقات ومطابقة واختبار واحد يوميًا عبر الإعلانات · حتى 20 لكل اختبار · ملفات 5MB",
@@ -3081,6 +3098,9 @@ const T_LANGS = {
     }
   },
   "pt":{
+    "diffDesc":["Fatos essenciais, perguntados diretamente.","Entenda e aplique as ideias. Nível de prova padrão.","Raciocine entre vários conceitos. Difícil mas justo, nunca com pegadinha."],
+    "fixMisses":"Corrija seus erros ({n})",
+    "fixMissesTitle":"Corrija seus erros",
     "srcSeeQuestion":"Ver de onde veio",
     "srcSeeAnswer":"Ver de onde veio a resposta",
     "srcConfirmsAnswer":"Confirma a resposta",
@@ -3126,7 +3146,7 @@ const T_LANGS = {
     "quizType":"Tipo de quiz",
     "questions":"Questões",
     "difficulty":"Dificuldade",
-    "diffOpts":["Fácil","Médio","Difícil"],
+    "diffOpts":["Fácil","Normal","Difícil"],
     "generate":"✦ Gerar quiz",
     "freeLabel":"Grátis",
     "freeDesc":"50 questões/dia · MCQ grátis · Cartões, associação e 1 exame por dia com anúncios · Até 20 por quiz · Arquivos 5MB",
@@ -3634,6 +3654,9 @@ const T_LANGS = {
     }
   },
   "ru":{
+    "diffDesc":["Ключевые факты, спрошены напрямую.","Понимать и применять идеи. Стандартный уровень экзамена.","Рассуждать через несколько понятий. Сложно, но честно, без подвохов."],
+    "fixMisses":"Исправить ошибки ({n})",
+    "fixMissesTitle":"Исправить ошибки",
     "srcSeeQuestion":"Показать источник",
     "srcSeeAnswer":"Показать источник ответа",
     "srcConfirmsAnswer":"Подтверждает ответ",
@@ -3679,7 +3702,7 @@ const T_LANGS = {
     "quizType":"Тип теста",
     "questions":"Вопросы",
     "difficulty":"Сложность",
-    "diffOpts":["Лёгкий","Средний","Сложный"],
+    "diffOpts":["Лёгкий","Обычный","Сложный"],
     "generate":"✦ Создать тест",
     "freeLabel":"Бесплатно",
     "freeDesc":"50 вопросов/день · MCQ бесплатно · Карточки, сопоставление и 1 экзамен в день за рекламу · До 20 за тест · Файлы 5MB",
@@ -4190,6 +4213,9 @@ const T_LANGS = {
     }
   },
   "id":{
+    "diffDesc":["Fakta inti, ditanya langsung.","Pahami dan terapkan idenya. Level ujian standar.","Bernalar lintas beberapa konsep. Sulit tapi adil, tanpa jebakan."],
+    "fixMisses":"Perbaiki yang salah ({n})",
+    "fixMissesTitle":"Perbaiki yang salah",
     "srcSeeQuestion":"Lihat sumbernya",
     "srcSeeAnswer":"Lihat sumber jawabannya",
     "srcConfirmsAnswer":"Memastikan jawabannya",
@@ -4234,7 +4260,7 @@ const T_LANGS = {
     "quizType":"Jenis kuis",
     "questions":"Pertanyaan",
     "difficulty":"Kesulitan",
-    "diffOpts":["Mudah","Sedang","Sulit"],
+    "diffOpts":["Mudah","Normal","Sulit"],
     "generate":"✦ Buat kuis",
     "freeLabel":"Gratis",
     "freeDesc":"50 soal/hari · MCQ gratis · Kartu, cocokkan & 1 ujian per hari via iklan · Hingga 20 per kuis · File 5MB",
@@ -4744,6 +4770,9 @@ const T_LANGS = {
     }
   },
   "de":{
+    "diffDesc":["Kernfakten, direkt abgefragt.","Ideen verstehen und anwenden. Normales Prüfungsniveau.","Über mehrere Konzepte hinweg denken. Schwer aber fair, nie mit Fallstricken."],
+    "fixMisses":"Fehler ausbessern ({n})",
+    "fixMissesTitle":"Fehler ausbessern",
     "srcSeeQuestion":"Quelle anzeigen",
     "srcSeeAnswer":"Quelle der Antwort anzeigen",
     "srcConfirmsAnswer":"Bestätigt die Antwort",
@@ -4789,7 +4818,7 @@ const T_LANGS = {
     "quizType":"Quiztyp",
     "questions":"Fragen",
     "difficulty":"Schwierigkeit",
-    "diffOpts":["Einfach","Mittel","Schwer"],
+    "diffOpts":["Einfach","Normal","Schwer"],
     "generate":"✦ Quiz erstellen",
     "freeLabel":"Kostenlos",
     "freeDesc":"50 Fragen/Tag · MCQ gratis · Karteikarten, Zuordnen & 1 Prüfung/Tag per Werbung · Bis zu 20 pro Quiz · Dateien bis 5MB",
@@ -5298,6 +5327,9 @@ const T_LANGS = {
     }
   },
   "ja":{
+    "diffDesc":["核心事実を直接問う。","考えを理解して応用する。標準的な試験レベル。","複数の概念にまたがって考える。手強いが公正、引っかけなし。"],
+    "fixMisses":"間違いを直す ({n})",
+    "fixMissesTitle":"間違いを直す",
     "srcSeeQuestion":"出典を見る",
     "srcSeeAnswer":"答えの出典を見る",
     "srcConfirmsAnswer":"答えの裏づけ",
@@ -5343,7 +5375,7 @@ const T_LANGS = {
     "quizType":"クイズの種類",
     "questions":"問題数",
     "difficulty":"難易度",
-    "diffOpts":["易しい","普通","難しい"],
+    "diffOpts":["やさしい","普通","難しい"],
     "generate":"✦ クイズを作成",
     "freeLabel":"無料",
     "freeDesc":"1日50問 · MCQ無料 · カード・マッチと1日1回の試験（広告で解除）· 1回最大20問 · ファイル5MB",
@@ -5854,6 +5886,9 @@ const T_LANGS = {
     }
   },
   "tr":{
+    "diffDesc":["Temel gerçekler, doğrudan sorulur.","Fikirleri anla ve uygula. Standart sınav düzeyi.","Birkaç kavram arası akıl yürüt. Zor ama adil, asla kurnazca değil."],
+    "fixMisses":"Yanlışları düzelt ({n})",
+    "fixMissesTitle":"Yanlışları düzelt",
     "srcSeeQuestion":"Kaynağını gör",
     "srcSeeAnswer":"Cevabın kaynağını gör",
     "srcConfirmsAnswer":"Cevabı doğrular",
@@ -5898,7 +5933,7 @@ const T_LANGS = {
     "quizType":"Test türü",
     "questions":"Sorular",
     "difficulty":"Zorluk",
-    "diffOpts":["Kolay","Orta","Zor"],
+    "diffOpts":["Kolay","Normal","Zor"],
     "generate":"✦ Test oluştur",
     "freeLabel":"Ücretsiz",
     "freeDesc":"Günde 50 soru · MCQ ücretsiz · Kartlar, eşleştirme ve günde 1 sınav (reklamla) · Test başına 20 · 5MB dosya",
@@ -6409,6 +6444,9 @@ const T_LANGS = {
     }
   },
   "ko":{
+    "diffDesc":["핵심 사실을 직접 묻습니다.","개념을 이해하고 적용합니다. 표준 시험 수준.","여러 개념을 넘나들며 추론합니다. 어렵지만 공정하고, 함정은 없습니다."],
+    "fixMisses":"틀린 문제 고치기 ({n})",
+    "fixMissesTitle":"틀린 문제 고치기",
     "srcSeeQuestion":"출처 보기",
     "srcSeeAnswer":"답의 출처 보기",
     "srcConfirmsAnswer":"답을 뒷받침해요",
@@ -6968,6 +7006,9 @@ const T_LANGS = {
     }
   },
   "vi":{
+    "diffDesc":["Sự kiện cốt lõi, hỏi trực tiếp.","Hiểu và áp dụng ý tưởng. Mức thi tiêu chuẩn.","Suy luận qua nhiều khái niệm. Khó nhưng công bằng, không đánh đố."],
+    "fixMisses":"Sửa lỗi sai ({n})",
+    "fixMissesTitle":"Sửa lỗi sai",
     "srcSeeQuestion":"Xem nguồn",
     "srcSeeAnswer":"Xem nguồn của đáp án",
     "srcConfirmsAnswer":"Xác nhận đáp án",
@@ -7013,7 +7054,7 @@ const T_LANGS = {
     "quizType":"Loại trắc nghiệm",
     "questions":"Câu hỏi",
     "difficulty":"Độ khó",
-    "diffOpts":["Dễ","Trung bình","Khó"],
+    "diffOpts":["Dễ","Thường","Khó"],
     "generate":"✦ Tạo bài trắc nghiệm",
     "freeLabel":"Miễn phí",
     "freeDesc":"50 câu/ngày · MCQ miễn phí · Thẻ, ghép và 1 bài thi mỗi ngày qua quảng cáo · Tối đa 20 mỗi bài · Tệp 5MB",
@@ -7524,6 +7565,9 @@ const T_LANGS = {
     }
   },
   "it":{
+    "diffDesc":["Fatti chiave, chiesti direttamente.","Comprendi e applica le idee. Livello d'esame standard.","Ragiona tra più concetti. Difficile ma giusto, mai con trabocchetti."],
+    "fixMisses":"Correggi gli errori ({n})",
+    "fixMissesTitle":"Correggi gli errori",
     "srcSeeQuestion":"Vedi da dove viene",
     "srcSeeAnswer":"Vedi da dove viene la risposta",
     "srcConfirmsAnswer":"Conferma la risposta",
@@ -7567,7 +7611,7 @@ const T_LANGS = {
     "quizType":"Tipo di quiz",
     "questions":"Domande",
     "difficulty":"Difficoltà",
-    "diffOpts":["Facile","Medio","Difficile"],
+    "diffOpts":["Facile","Normale","Difficile"],
     "generate":"✦ Genera quiz",
     "freeLabel":"Gratis",
     "freeDesc":"50 domande/giorno · MCQ gratis · Flashcard, abbinamento e 1 esame al giorno con pubblicità · Fino a 20 per quiz · File 5MB",
@@ -8074,6 +8118,9 @@ const T_LANGS = {
     }
   },
   "th":{
+    "diffDesc":["ข้อเท็จจริงหลัก ถามตรงๆ","เข้าใจและนำแนวคิดไปใช้ ระดับข้อสอบมาตรฐาน","ใช้เหตุผลข้ามหลายแนวคิด ยากแต่ยุติธรรม ไม่มีกับดัก"],
+    "fixMisses":"แก้ข้อที่ผิด ({n})",
+    "fixMissesTitle":"แก้ข้อที่ผิด",
     "srcSeeQuestion":"ดูที่มา",
     "srcSeeAnswer":"ดูที่มาของคำตอบ",
     "srcConfirmsAnswer":"ยืนยันคำตอบ",
@@ -8119,7 +8166,7 @@ const T_LANGS = {
     "quizType":"ประเภทแบบทดสอบ",
     "questions":"คำถาม",
     "difficulty":"ระดับความยาก",
-    "diffOpts":["ง่าย","ปานกลาง","ยาก"],
+    "diffOpts":["ง่าย","ปกติ","ยาก"],
     "generate":"✦ สร้างแบบทดสอบ",
     "freeLabel":"ฟรี",
     "freeDesc":"50 ข้อ/วัน · MCQ ฟรี · การ์ด จับคู่ และสอบ 1 ครั้ง/วัน ผ่านโฆษณา · สูงสุด 20 ต่อควิซ · ไฟล์ 5MB",
@@ -8630,6 +8677,9 @@ const T_LANGS = {
     }
   },
   "pl":{
+    "diffDesc":["Kluczowe fakty, pytane wprost.","Zrozum i zastosuj pomysły. Standardowy poziom egzaminu.","Rozumuj między kilkoma pojęciami. Trudne, ale uczciwe, nigdy podchwytliwe."],
+    "fixMisses":"Popraw błędy ({n})",
+    "fixMissesTitle":"Popraw błędy",
     "srcSeeQuestion":"Zobacz źródło",
     "srcSeeAnswer":"Zobacz źródło odpowiedzi",
     "srcConfirmsAnswer":"Potwierdza odpowiedź",
@@ -8674,7 +8724,7 @@ const T_LANGS = {
     "quizType":"Typ quizu",
     "questions":"Pytania",
     "difficulty":"Trudność",
-    "diffOpts":["Łatwy","Średni","Trudny"],
+    "diffOpts":["Łatwy","Normalny","Trudny"],
     "generate":"✦ Generuj quiz",
     "freeLabel":"Za darmo",
     "freeDesc":"50 pytań/dzień · MCQ za darmo · Fiszki, dopasowania i 1 egzamin dziennie za reklamę · Do 20 na quiz · Pliki 5MB",
@@ -9185,6 +9235,9 @@ const T_LANGS = {
     }
   },
   "nl":{
+    "diffDesc":["Kernfeiten, direct gevraagd.","Begrijp en pas de ideeën toe. Standaard examenniveau.","Redeneer over meerdere concepten. Moeilijk maar eerlijk, nooit met valstrikken."],
+    "fixMisses":"Fouten herstellen ({n})",
+    "fixMissesTitle":"Fouten herstellen",
     "srcSeeQuestion":"Bekijk de bron",
     "srcSeeAnswer":"Bekijk de bron van het antwoord",
     "srcConfirmsAnswer":"Bevestigt het antwoord",
@@ -9228,7 +9281,7 @@ const T_LANGS = {
     "quizType":"Quiztype",
     "questions":"Vragen",
     "difficulty":"Moeilijkheid",
-    "diffOpts":["Makkelijk","Gemiddeld","Moeilijk"],
+    "diffOpts":["Makkelijk","Normaal","Moeilijk"],
     "generate":"✦ Maak quiz",
     "freeLabel":"Gratis",
     "freeDesc":"50 vragen/dag · MCQ gratis · Flashcards, match & 1 examen/dag via advertenties · Max 20 per quiz · 5MB-bestanden",
@@ -9732,6 +9785,9 @@ const T_LANGS = {
     }
   },
   "sv":{
+    "diffDesc":["Kärnfakta, frågas direkt.","Förstå och tillämpa idéerna. Standardnivå för prov.","Resonera över flera begrepp. Svårt men rättvist, aldrig lurigt."],
+    "fixMisses":"Rätta dina misstag ({n})",
+    "fixMissesTitle":"Rätta dina misstag",
     "srcSeeQuestion":"Se källan",
     "srcSeeAnswer":"Se svarets källa",
     "srcConfirmsAnswer":"Bekräftar svaret",
@@ -9775,7 +9831,7 @@ const T_LANGS = {
     "quizType":"Quiztyp",
     "questions":"Frågor",
     "difficulty":"Svårighetsgrad",
-    "diffOpts":["Lätt","Medel","Svår"],
+    "diffOpts":["Lätt","Normal","Svår"],
     "generate":"✦ Skapa quiz",
     "freeLabel":"Gratis",
     "freeDesc":"50 frågor/dag · MCQ gratis · Kort, matcha & 1 prov/dag via annonser · Upp till 20 per quiz · 5MB-filer",
@@ -10285,6 +10341,9 @@ const T_LANGS = {
     }
   },
   "he":{
+    "diffDesc":["עובדות ליבה, נשאלות ישירות.","להבין וליישם את הרעיונות. רמת מבחן רגילה.","להסיק על פני כמה מושגים. קשה אך הוגן, לעולם לא מתחכם."],
+    "fixMisses":"תקן את הטעויות ({n})",
+    "fixMissesTitle":"תקן את הטעויות",
     "srcSeeQuestion":"ראה את המקור",
     "srcSeeAnswer":"ראה את מקור התשובה",
     "srcConfirmsAnswer":"מאשר את התשובה",
@@ -10330,7 +10389,7 @@ const T_LANGS = {
     "quizType":"סוג החידון",
     "questions":"שאלות",
     "difficulty":"קושי",
-    "diffOpts":["קל","בינוני","קשה"],
+    "diffOpts":["קל","רגיל","קשה"],
     "generate":"✦ צור חידון",
     "freeLabel":"חינם",
     "freeDesc":"50 שאלות/יום · MCQ חינם · כרטיסים, התאמה ובחינה אחת ביום עם פרסומות · עד 20 לחידון · קבצים 5MB",

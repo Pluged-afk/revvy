@@ -63,12 +63,16 @@ const LETTERS      = ["A","B","C","D","E","F"];
 // Model for all generation/grading. Haiku 4.5: cheap + fast, plenty for
 // question writing. ($0.80/1M in, $4/1M out vs Sonnet's $3/$15.)
 const AI_MODEL     = "claude-haiku-4-5-20251001";
-// Difficulty rubric (index 0/1/2 = Easy/Medium/Hard). The label alone barely
+// Difficulty rubric (index 0/1/2 = Easy/Normal/Hard). The label alone barely
 // moves the model, the per-level guidance is what actually changes output.
+// Calibrated from what students say they mean by each level: Easy = genuinely
+// easy, Normal = the standard exam question they expect, Hard = deep and
+// demanding but never tricky/gotcha/tedious. Difficulty comes from depth of
+// reasoning and number of concepts connected, not from trap wording.
 const DIFFICULTY = [
-  { name:"Easy",   guide:"Test basic recall and core definitions. Single concept per question, plain wording. For multiple choice, distractors should be clearly wrong." },
-  { name:"Medium", guide:"Test understanding and application. Require connecting ideas or one reasoning step. For multiple choice, distractors should be plausible and require thought." },
-  { name:"Hard",   guide:"Test analysis, synthesis, and edge cases. Require multi-step reasoning or distinguishing subtle differences. For multiple choice, distractors should be very close and tricky. Avoid trivially-recalled facts." },
+  { name:"Easy",   guide:"Genuinely easy. One core fact or definition per question, tested directly, in plain everyday wording. Recall or simple recognition (Bloom: Remember or Understand). One step, no calculation chains, no traps. The correct answer is obvious to anyone who read the material, and the other options are clearly wrong. Never obscure." },
+  { name:"Normal", guide:"A standard, fair exam question, the level most students expect by default. Test real understanding and straightforward application (Bloom: Understand or Apply): connect two related ideas, apply a concept to a clear example, or take one clear reasoning step. Distractors should be genuinely plausible and reflect common honest misconceptions, not word games. Solid but not punishing." },
+  { name:"Hard",   guide:"Genuinely hard through DEPTH, not trickery. Require multi-step reasoning, connecting several concepts, applying ideas to a NEW or unfamiliar scenario, or analysing and evaluating relationships and trade-offs (Bloom: Apply, Analyze or Evaluate). Distractors are close and demand careful discrimination by someone who truly understands. The challenge must come from how much thinking and how many concepts are needed, NEVER from gotcha wording, deliberate ambiguity, obscure trivia, or tedious busywork. A well-prepared student should still get it by reasoning carefully." },
 ];
 const STRIPE_MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const STRIPE_YEARLY_PRICE  = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
@@ -189,7 +193,7 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
   };
   // `diff` is the 0/1/2 index; map to the difficulty rubric.
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
-  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic","source":"..."}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Set "source" to SHORT verbatim words copied straight from the study material (a phrase or one sentence, max ~25 words, exact wording, no paraphrasing) that back up the correct answer, so the learner can see exactly where it came from; if a question leans on general knowledge NOT stated in the material, set "source" to an empty string "". Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nFAIRNESS: whatever the level, difficulty must come from the depth of thinking and the number of concepts a learner must connect, NEVER from trick wording, deliberate ambiguity, obscure trivia, or gotchas. Every question must be clearly answerable from a genuine understanding of the material and have exactly ONE defensible correct answer.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic","source":"..."}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Set "source" to SHORT verbatim words copied straight from the study material (a phrase or one sentence, max ~25 words, exact wording, no paraphrasing) that back up the correct answer, so the learner can see exactly where it came from; if a question leans on general knowledge NOT stated in the material, set "source" to an empty string "". Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
@@ -2483,6 +2487,19 @@ export default function StudyQuiz() {
     setSelected(null);
   };
   const newMat  = () => { setScreen("upload");setQuiz(null);setFile(null);setTextVal("");setError(""); };
+  // Feature D: re-drill ONLY the questions just missed, as a fresh mini-quiz
+  // (active recall on exactly your weak spots, right now). Reuses the whole quiz
+  // flow, no new generation, no quota spent, and no lockout: keep fixing until
+  // you get them all. The spaced-repetition deck still handles the long game.
+  const missedThisQuiz = quiz && quiz.type!=="match"
+    ? quiz.questions.filter((_, i) => answers[i] && answers[i].isCorrect === false)
+    : [];
+  const fixMisses = () => {
+    if (!missedThisQuiz.length) return;
+    setQuiz((prev) => ({ ...prev, questions: missedThisQuiz, title: t.fixMissesTitle }));
+    setQIdx(0); setAnswers([]); setSelected(null);
+    setScreen("quiz");
+  };
 
   const score = answers.filter(a=>a.isCorrect).length;
   const pct   = quiz ? Math.round((score/quiz.questions.length)*100) : 0;
@@ -2880,6 +2897,7 @@ export default function StudyQuiz() {
               {t.diffOpts.map((d,i)=><Chip key={d} small label={d} active={diff===i} onClick={()=>setDiff(i)}/>)}
             </div>
           </div>
+          {t.diffDesc?.[diff] && <div style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.45,padding:"2px 2px 0",textAlign:"right"}}>{t.diffDesc[diff]}</div>}
         </div>
         {/* Usage strip, questions remaining today (server-tracked). */}
         <div style={{background:isPro?"var(--color-background-secondary)":"#fffbeb",border:isPro?"0.5px solid var(--color-border-tertiary)":"1px solid #f59e0b44",borderRadius:10,padding:"10px 14px",fontSize:12,color:isPro?"var(--color-text-secondary)":"#92400e",marginBottom:14}}>
@@ -3040,6 +3058,11 @@ export default function StudyQuiz() {
             </div>
           ))}
         </div>
+        {missedThisQuiz.length>0 && (
+          <button onClick={fixMisses} style={{...Sb.btnPrimary,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:9,background:"linear-gradient(135deg,#15803d,#22c55e)"}}>
+            <Icon name="target" size={17}/>{t.fixMisses.replace("{n}",missedThisQuiz.length)}
+          </button>
+        )}
         {planSession && (
           <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4338ca,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:14,color:"#fff"}}>
             <Icon name="compass" size={18} style={{color:"#fff",flexShrink:0}}/>
