@@ -2114,10 +2114,10 @@ export default function StudyQuiz() {
       handleUploadUrl: "/api/blob-upload",
       clientPayload: token || "",
     });
-    const sub = await fetch("/api/transcribe", {
+    const sub = await fetch("/api/upload-file", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(await authHeader()) },
-      body: JSON.stringify({ blobUrl: blob.url }),
+      body: JSON.stringify({ transcribe: true, blobUrl: blob.url }),
     });
     const subData = await sub.json().catch(() => ({}));
     if (!sub.ok || !subData.transcriptId) throw new Error(subData.error || t.errTranscribe);
@@ -2125,7 +2125,7 @@ export default function StudyQuiz() {
     const deadline = Date.now() + 6 * 60000; // give up after 6 minutes
     for (;;) {
       await new Promise((r) => setTimeout(r, 3000));
-      const p = await fetch(`/api/transcribe?id=${encodeURIComponent(subData.transcriptId)}`, { headers: { ...(await authHeader()) } });
+      const p = await fetch(`/api/upload-file?transcript=${encodeURIComponent(subData.transcriptId)}`, { headers: { ...(await authHeader()) } });
       const d = await p.json().catch(() => ({}));
       if (d.status === "completed") { setMediaStatus(""); return String(d.text || "").trim(); }
       if (d.status === "error" || Date.now() > deadline) { setMediaStatus(""); throw new Error(d.error || t.errTranscribe); }
