@@ -189,7 +189,7 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
   };
   // `diff` is the 0/1/2 index; map to the difficulty rubric.
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
-  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic"}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic","source":"..."}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Set "source" to SHORT verbatim words copied straight from the study material (a phrase or one sentence, max ~25 words, exact wording, no paraphrasing) that back up the correct answer, so the learner can see exactly where it came from; if a question leans on general knowledge NOT stated in the material, set "source" to an empty string "". Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
@@ -197,7 +197,7 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
   // max_tokens is a ceiling, not a charge, you're billed only for tokens
   // actually generated. Generous per-question budget so a 100-question set
   // never truncates mid-generation.
-  const maxTokens = Math.min(Math.max(Math.round(numQ * 260) + 3000, 4000), 48000);
+  const maxTokens = Math.min(Math.max(Math.round(numQ * 300) + 3000, 4000), 48000);
 
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
@@ -207,15 +207,27 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
   });
   if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`Error ${res.status}`); }
   const raw = stripFences(await readStream(res));
-  try { return JSON.parse(raw); }
+  let parsed;
+  try { parsed = JSON.parse(raw); }
   catch {
     // Truncated on a big set (hit the token ceiling): salvage the questions that
     // completed by closing the array + object after the last complete object,
     // so the generate loop keeps a partial set instead of losing everything.
     const cut = raw.lastIndexOf("}");
-    if (cut > 0) { try { return JSON.parse(raw.slice(0, cut + 1) + "]}"); } catch { /* fall through */ } }
-    throw new Error("Unexpected format");
+    if (cut > 0) { try { parsed = JSON.parse(raw.slice(0, cut + 1) + "]}"); } catch { /* fall through */ } }
+    if (!parsed) throw new Error("Unexpected format");
   }
+  // Bound the per-question "source" excerpt (feature A: show the learner where
+  // each answer came from in their own material). A blank/missing source means
+  // the question leaned on general knowledge, which the UI flags to double-check.
+  if (parsed && Array.isArray(parsed.questions)) {
+    parsed.questions = parsed.questions.map((q) =>
+      q && typeof q === "object"
+        ? { ...q, source: typeof q.source === "string" ? q.source.trim().slice(0, 240) : "" }
+        : q
+    );
+  }
+  return parsed;
 }
 
 // Read the streamed plain-text response from /api/anthropic into one string.
@@ -252,6 +264,51 @@ function followupAnswer({ question, correct, prior, ask }) {
   return callClaudeText(
     `A student is reviewing a quiz question they got wrong.\nQuestion: ${question}\nCorrect answer: ${correct}\nYour earlier explanation: ${prior}\nThe student now asks: "${ask}"\nAnswer their follow-up clearly and concisely (2-4 sentences).`
   );
+}
+
+// Feature B: write ONE replacement multiple-choice question when the learner
+// flags one as wrong / confusing / off-material. Reuses the ORIGINAL study
+// material (blocks) when we still have it, so the fix stays grounded in their
+// notes. Returns a normalized question, or throws if the model's reply is
+// malformed (the caller shows a "try again" message).
+async function regenerateQuestion({ blocks, q, subject, reason, uiLangName, diff }) {
+  const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
+  const reasonLine = {
+    wrong:   "The learner says the marked correct answer looks wrong.",
+    unclear: "The learner says it was confusing or badly worded.",
+    offnotes:"The learner says it was not covered in their material.",
+  }[reason] || "The learner flagged a problem with it.";
+  const topic = q.topic || subject || "the same concept";
+  const optLine = Array.isArray(q.options) ? q.options.join(" / ") : "(none)";
+  const prompt = `A study question was flagged as having a problem. ${reasonLine}
+Flagged question: ${q.question}
+Its options were: ${optLine}
+Write ONE brand-new multiple-choice question that tests the SAME concept (${topic}) but fixes the problem: exactly 4 options, exactly ONE clearly correct answer, plausible distractors, and clear unambiguous wording. Work the answer out yourself first and make sure "correct" is the index of that answer. Do not repeat the flagged question.
+DIFFICULTY: ${d.name}. ${d.guide}
+Base it on the study material above. In "source", copy SHORT verbatim words from that material that back up the answer (max ~25 words, exact wording, no paraphrasing); if it must rely on general knowledge not in the material, set "source" to "".
+LANGUAGE: write the question, every option, the explanation and the source in the SAME language as the study material.${uiLangName ? ` If that is unclear, use ${uiLangName}.` : ""}
+Return ONLY raw JSON, no markdown: {"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"${topic}","source":"..."}`;
+  const res = await fetch("/api/anthropic", {
+    method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
+    body: JSON.stringify({ model:AI_MODEL, max_tokens:1200,
+      system:"You are an expert educator. Return ONLY valid raw JSON, no markdown.",
+      messages:[{ role:"user", content:[...(blocks||[]),{type:"text",text:prompt}] }] }),
+  });
+  if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`Error ${res.status}`); }
+  const parsed = JSON.parse(stripFences(await readStream(res)));
+  const options = Array.isArray(parsed.options) ? parsed.options.filter((o)=>typeof o==="string"&&o.trim()) : [];
+  if (options.length < 2 || !Number.isInteger(parsed.correct) || parsed.correct < 0 || parsed.correct >= options.length) {
+    throw new Error("Malformed replacement");
+  }
+  return {
+    question: String(parsed.question || "").trim(),
+    options,
+    correct: parsed.correct,
+    answer: options[parsed.correct] || "",
+    explanation: String(parsed.explanation || "").trim().slice(0, 400),
+    topic: String(parsed.topic || q.topic || "").trim().slice(0, 60),
+    source: typeof parsed.source === "string" ? parsed.source.trim().slice(0, 240) : "",
+  };
 }
 
 // Generate one section of a standardized mock exam from its spec (no upload), 
@@ -683,6 +740,80 @@ function ExplainBox({ ctx, t }) {
             style={{flex:1,borderRadius:8,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:12.5,padding:"7px 10px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
           <button onClick={doAsk} disabled={asking||!ask.trim()} style={{background:"#4338ca",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:(asking||!ask.trim())?0.5:1}}>{asking?"…":t.explainAskBtn}</button>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Feature A: "Where did this come from?" Shows whether a question is grounded
+// in the learner's own material (with the exact supporting quote, tap to open)
+// or leaned on general knowledge (flagged so they double-check it). Revyy's
+// edge: because quizzes come from YOUR notes, we can show the receipt.
+function SourceNote({ q, t }) {
+  const [open, setOpen] = useState(false);
+  const grounded = typeof q.source === "string" && q.source.trim().length > 0;
+  return (
+    <div style={{marginTop:10}}>
+      <button
+        onClick={()=>grounded&&setOpen((o)=>!o)}
+        aria-expanded={grounded?open:undefined}
+        style={{display:"inline-flex",alignItems:"center",gap:6,background:grounded?"var(--color-sel-tint)":"var(--color-background-secondary)",color:grounded?"var(--color-accent)":"var(--color-text-secondary)",border:grounded?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:20,padding:"5px 11px",fontSize:11,fontWeight:700,cursor:grounded?"pointer":"default",fontFamily:"inherit"}}>
+        <Icon name={grounded?"notes":"alert"} size={13} stroke={2}/>
+        {grounded ? t.srcFromNotes : t.srcVerify}
+        {grounded && <Icon name="chevron" size={11} stroke={2.4} style={{transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}/>}
+      </button>
+      {grounded && open && (
+        <div className="fade-in" style={{marginTop:8,background:"var(--color-background-secondary)",borderLeft:"3px solid var(--color-accent)",borderRadius:"0 8px 8px 0",padding:"9px 12px"}}>
+          <div style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase",color:"var(--color-text-tertiary)",marginBottom:4}}>{t.srcQuoteLabel}</div>
+          <div style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55,fontStyle:"italic"}}>&ldquo;{q.source}&rdquo;</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Feature B: flag a bad question and get a corrected one in its place. Low-key
+// until tapped; then the learner says what is off and Revyy rewrites the
+// question (grounded in the same material) and swaps it in via onReplace.
+function FlagFix({ q, subject, blocks, uiLangName, diff, onReplace, t }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [done, setDone] = useState(false);
+  const regen = async (reason) => {
+    setBusy(true); setErr("");
+    try {
+      const nq = await regenerateQuestion({ blocks, q, subject, reason, uiLangName, diff });
+      onReplace(nq);
+      setDone(true); setOpen(false);
+    } catch { setErr(t.flagFailed); }
+    finally { setBusy(false); }
+  };
+  if (done) return (
+    <div style={{marginTop:10,fontSize:12,color:"#16a34a",fontWeight:700,display:"inline-flex",alignItems:"center",gap:6}}>
+      <Icon name="check" size={14} stroke={2.4}/>{t.flagReplaced}
+    </div>
+  );
+  if (!open) return (
+    <button onClick={()=>setOpen(true)} style={{marginTop:10,background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:5,padding:0}}>
+      <Icon name="alert" size={13} stroke={2}/><span style={{textDecoration:"underline",textUnderlineOffset:2}}>{t.flagBtn}</span>
+    </button>
+  );
+  return (
+    <div className="fade-in" style={{marginTop:10,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"11px 12px"}}>
+      {busy ? (
+        <div style={{fontSize:12.5,color:"var(--color-text-secondary)",fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}><Icon name="repeat" size={13}/>{t.flagWriting}</div>
+      ) : (
+        <>
+          <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginBottom:8,fontWeight:600}}>{t.flagPrompt}</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {[["wrong",t.flagWrong],["unclear",t.flagUnclear],["offnotes",t.flagNotInNotes]].map(([r,label])=>(
+              <button key={r} onClick={()=>regen(r)} style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-tertiary)",borderRadius:8,padding:"6px 10px",fontSize:11.5,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>{label}</button>
+            ))}
+            <button onClick={()=>{setOpen(false);setErr("");}} style={{background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:11.5,cursor:"pointer",fontFamily:"inherit",padding:"6px 4px"}}>{t.cancel}</button>
+          </div>
+          {err && <div style={{fontSize:11.5,color:"#dc2626",marginTop:8}}>{err}</div>}
+        </>
       )}
     </div>
   );
@@ -1410,6 +1541,9 @@ export default function StudyQuiz() {
   const [qIdx,         setQIdx]         = useState(0);
   const [answers,      setAnswers]      = useState([]);
   const [selected,     setSelected]     = useState(null);
+  // The material blocks the current quiz was built from, kept so "Report a
+  // problem" (FlagFix) can regenerate a replacement grounded in the same notes.
+  const genBlocksRef = useRef(null);
   const [error,        setError]        = useState("");
   const [drag,         setDrag]         = useState(false);
   const [showProModal, setShowProModal] = useState(false);
@@ -2210,6 +2344,7 @@ export default function StudyQuiz() {
         }
       }
       if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
+      genBlocksRef.current = blocks; // keep the source material for FlagFix regen
       setQuiz({...res, type:finalType});
       setQIdx(0); setAnswers([]); setSelected(null);
       setScreen("quiz");
@@ -2248,6 +2383,7 @@ export default function StudyQuiz() {
         if (r?.questions?.length) { if (!res || r.questions.length > res.questions.length) res = r; if (res.questions.length >= n) break; }
       }
       if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
+      genBlocksRef.current = blocks; // keep the weak-spot brief for FlagFix regen
       setQuiz({ ...res, type: "mcq" });
       setQIdx(0); setAnswers([]); setSelected(null);
       setScreen("quiz");
@@ -2267,6 +2403,17 @@ export default function StudyQuiz() {
   };
   const nextMCQ = () => { if(selected===null)return; nextQ(selected===quiz.questions[qIdx].correct,{selected}); };
   const retry   = () => { setQIdx(0);setAnswers([]);setSelected(null);setScreen("quiz"); };
+  // Swap the flagged question in place with a freshly-generated replacement and
+  // clear any pick, so the learner answers the corrected question (FlagFix).
+  const replaceCurrentQuestion = (nq) => {
+    setQuiz((prev) => {
+      if (!prev) return prev;
+      const qs = prev.questions.slice();
+      qs[qIdx] = { ...qs[qIdx], ...nq };
+      return { ...prev, questions: qs };
+    });
+    setSelected(null);
+  };
   const newMat  = () => { setScreen("upload");setQuiz(null);setFile(null);setTextVal("");setError(""); };
 
   const score = answers.filter(a=>a.isCorrect).length;
@@ -2786,8 +2933,10 @@ export default function StudyQuiz() {
                 })}
               </div>
               {selected!==null&&instant&&<div style={{borderRadius:10,padding:"12px 14px",marginTop:14,...(selected===q.correct?{background:"#f0fdf4",border:"0.5px solid #86efac",color:"#15803d"}:{background:"#fef2f2",border:"0.5px solid #fca5a5",color:"#b91c1c"})}} className="slide-up"><strong style={{fontSize:14}}>{selected===q.correct?t.correct:t.incorrect}</strong><p style={{margin:"5px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p></div>}
+              {selected!==null&&instant&&<SourceNote q={q} t={t}/>}
               {settings.autoAdvance && instant && selected!==null && <AutoAdvanceBar sec={autoAdvanceSec} runId={qIdx} t={t}/>}
               {(!settings.autoAdvance || instant) && <button style={{...Sb.btnPrimary,width:"100%",marginTop:settings.autoAdvance?12:20,opacity:selected===null?0.35:1,cursor:selected===null?"not-allowed":"pointer"}} onClick={nextMCQ} disabled={selected===null}>{settings.autoAdvance?t.skip||t.next:(isLast?t.finish:t.next)}</button>}
+              <div style={{textAlign:"center",marginTop:12}}><FlagFix q={q} subject={quiz.subject} blocks={genBlocksRef.current} uiLangName={LANGS[lang]?.name} diff={diff} t={t} onReplace={replaceCurrentQuestion}/></div>
             </>
           )}
         </div>
@@ -2857,6 +3006,7 @@ export default function StudyQuiz() {
               {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="fill")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {quiz.type==="mcq"?(q.options?.[a.selected]??", "):(a.picked||", ")}</div>}
               <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {quiz.type==="mcq"?q.options?.[q.correct]:(q.answer||"")}</div>
               {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.55,paddingTop:8,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:23}}>{q.explanation}</div>}
+              <div style={{paddingLeft:23}}><SourceNote q={q} t={t}/></div>
               {!a?.isCorrect&&<ExplainBox t={t} ctx={{question:q.question,correct:quiz.type==="mcq"?(q.options?.[q.correct]??""):(q.answer||""),picked:quiz.type==="mcq"?(q.options?.[a?.selected]??""):(a?.picked||""),subject:quiz.subject}}/>}
             </div>;
           })
