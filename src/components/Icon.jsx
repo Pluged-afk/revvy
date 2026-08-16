@@ -179,6 +179,22 @@ const PATHS = {
       <path d="M3 8h18M9 3l-1.5 5L12 21M15 3l1.5 5L12 21" />
     </>
   ),
+  help: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.6 9.4a2.4 2.4 0 0 1 4.7.7c0 1.6-2.35 1.9-2.35 3.4" />
+      <path d="M12 17h.01" />
+    </>
+  ),
+  x: <path d="M6 6l12 12M18 6L6 18" />,
+  pause: <path d="M9 5v14M15 5v14" />,
+  trophy: (
+    <>
+      <path d="M8 4h8v5a4 4 0 0 1-8 0V4z" />
+      <path d="M8 6H5v1.4A2.8 2.8 0 0 0 8 10M16 6h3v1.4A2.8 2.8 0 0 1 16 10" />
+      <path d="M12 13v3.2M9 20h6M9.8 17h4.4l.5 3H9.3z" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 24, stroke = 1.6, className, style }) {

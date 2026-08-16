@@ -266,11 +266,25 @@ function followupAnswer({ question, correct, prior, ask }) {
   );
 }
 
+// Shape a model-returned MCQ into the app's question object, or null if it is
+// malformed. Shared by flag/fix regeneration and flag verification.
+function normalizeQuestion(parsed, orig) {
+  const options = Array.isArray(parsed?.options) ? parsed.options.filter((o)=>typeof o==="string"&&o.trim()) : [];
+  if (options.length < 2 || !Number.isInteger(parsed.correct) || parsed.correct < 0 || parsed.correct >= options.length) return null;
+  return {
+    question: String(parsed.question || "").trim(),
+    options,
+    correct: parsed.correct,
+    answer: options[parsed.correct] || "",
+    explanation: String(parsed.explanation || "").trim().slice(0, 400),
+    topic: String(parsed.topic || orig?.topic || "").trim().slice(0, 60),
+    source: typeof parsed.source === "string" ? parsed.source.trim().slice(0, 240) : "",
+  };
+}
+
 // Feature B: write ONE replacement multiple-choice question when the learner
-// flags one as wrong / confusing / off-material. Reuses the ORIGINAL study
-// material (blocks) when we still have it, so the fix stays grounded in their
-// notes. Returns a normalized question, or throws if the model's reply is
-// malformed (the caller shows a "try again" message).
+// flags one as confusing / off-material (or as a fallback after verification).
+// Reuses the ORIGINAL study material (blocks) so the fix stays grounded.
 async function regenerateQuestion({ blocks, q, subject, reason, uiLangName, diff }) {
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
   const reasonLine = {
@@ -295,19 +309,45 @@ Return ONLY raw JSON, no markdown: {"question":"...","options":["A","B","C","D"]
       messages:[{ role:"user", content:[...(blocks||[]),{type:"text",text:prompt}] }] }),
   });
   if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`Error ${res.status}`); }
+  const nq = normalizeQuestion(JSON.parse(stripFences(await readStream(res))), q);
+  if (!nq) throw new Error("Malformed replacement");
+  return nq;
+}
+
+// Feature B (verify): when the learner says the marked answer is WRONG, don't
+// blindly rewrite. Re-check the question against their material plus the model's
+// own knowledge and return a verdict: the answer holds up (with the reason and a
+// supporting quote), the learner is right (with a corrected question), or it was
+// genuinely ambiguous (with a clearer one).
+async function verifyFlaggedQuestion({ blocks, q, uiLangName, diff }) {
+  const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
+  const marked = Array.isArray(q.options) ? (q.options[q.correct] ?? "") : (q.answer || "");
+  const optLine = Array.isArray(q.options) ? q.options.map((o,i)=>`${i}: ${o}`).join(" | ") : "(none)";
+  const prompt = `A learner thinks this quiz question is mis-keyed, that the marked "correct" answer is actually wrong. Check carefully whether the marked answer is truly correct, using the study material above plus your own reliable knowledge. Reason it out before deciding.
+Question: ${q.question}
+Options (index: text): ${optLine}
+Marked correct answer: index ${q.correct} = "${marked}"
+Choose ONE verdict:
+- "answer_correct": the marked answer is right. Briefly explain why for the learner, and if the material states it, quote the exact supporting words in "answerSource". Set "replacement" to null.
+- "student_right": the marked answer is genuinely wrong. Give a corrected replacement question (with the right answer keyed) in "replacement".
+- "ambiguous": the question is unclear or has more than one defensible answer. Give a clearer replacement question in "replacement".
+Keep any replacement at a similar difficulty (${d.name}) and grounded in the material, with a "source" quote where possible.
+Write every learner-facing string in the SAME language as the study material.${uiLangName ? ` If unclear, use ${uiLangName}.` : ""}
+Return ONLY raw JSON, no markdown: {"verdict":"answer_correct","explanation":"...","answerSource":"...","replacement":{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"${q.topic || ""}","source":"..."}}`;
+  const res = await fetch("/api/anthropic", {
+    method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
+    body: JSON.stringify({ model:AI_MODEL, max_tokens:1400,
+      system:"You are a meticulous fact-checker and educator. Return ONLY valid raw JSON, no markdown.",
+      messages:[{ role:"user", content:[...(blocks||[]),{type:"text",text:prompt}] }] }),
+  });
+  if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`Error ${res.status}`); }
   const parsed = JSON.parse(stripFences(await readStream(res)));
-  const options = Array.isArray(parsed.options) ? parsed.options.filter((o)=>typeof o==="string"&&o.trim()) : [];
-  if (options.length < 2 || !Number.isInteger(parsed.correct) || parsed.correct < 0 || parsed.correct >= options.length) {
-    throw new Error("Malformed replacement");
-  }
+  const verdict = ["answer_correct","student_right","ambiguous"].includes(parsed.verdict) ? parsed.verdict : "answer_correct";
   return {
-    question: String(parsed.question || "").trim(),
-    options,
-    correct: parsed.correct,
-    answer: options[parsed.correct] || "",
-    explanation: String(parsed.explanation || "").trim().slice(0, 400),
-    topic: String(parsed.topic || q.topic || "").trim().slice(0, 60),
-    source: typeof parsed.source === "string" ? parsed.source.trim().slice(0, 240) : "",
+    verdict,
+    explanation: String(parsed.explanation || "").trim().slice(0, 500),
+    answerSource: typeof parsed.answerSource === "string" ? parsed.answerSource.trim().slice(0, 240) : "",
+    replacement: verdict === "answer_correct" ? null : normalizeQuestion(parsed.replacement || {}, q),
   };
 }
 
@@ -433,7 +473,7 @@ function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>!busy&&onClose()}>
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"28px 20px 36px",width:"100%",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box"}}>
         <div style={{textAlign:"center",marginBottom:14}}>
-          <div style={{fontSize:42,marginBottom:6}}>⭐</div>
+          <div style={{marginBottom:8,display:"flex",justifyContent:"center",color:"#f59e0b"}}><Icon name="spark" size={38} stroke={1.6}/></div>
           <h3 style={{margin:"0 0 4px",fontSize:21,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.upgradeToPro}</h3>
         </div>
         <div style={{background:"linear-gradient(135deg,var(--color-sel-tint),var(--color-sel-tint))",borderRadius:12,padding:"12px 14px",marginBottom:14,fontSize:12.5,color:"var(--color-accent)",lineHeight:1.6,textAlign:"center"}}>{t.proDesc}</div>
@@ -451,7 +491,7 @@ function ProModal({ onClose, onMonthly, onYearly, busy, error, t }) {
           <div style={{flex:1,border:"2px solid #f59e0b",background:"#fffbeb",borderRadius:14,padding:"16px 12px",textAlign:"center",boxShadow:"0 4px 16px rgba(245,158,11,0.25)"}}>
             <div style={{fontSize:12,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:"#92400e",marginBottom:6}}>{t.planYearly}</div>
             <div style={{fontSize:22,fontWeight:800,color:"#92400e"}}>€39.99</div>
-            <div style={{fontSize:10,fontWeight:700,color:"#b45309",marginTop:4}}>Save 33% ⭐ {t.bestValue}</div>
+            <div style={{fontSize:10,fontWeight:700,color:"#b45309",marginTop:4}}>Save 33% · {t.bestValue}</div>
             <button onClick={onYearly} disabled={!!busy} style={{...Sb.btnPrimary,width:"100%",marginTop:8,background:"#f59e0b",fontFamily:"inherit",fontSize:13,opacity:busy?0.7:1}}>
               {busy==="yearly" ? "Starting…" : t.upgradeToPro}
             </button>
@@ -479,7 +519,7 @@ function PacksModal({ onClose, buyPack, t }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>!busy&&onClose()}>
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"26px 20px 36px",width:"100%",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box"}}>
         <div style={{textAlign:"center",marginBottom:16}}>
-          <div style={{fontSize:36,marginBottom:6}}>💎</div>
+          <div style={{marginBottom:8,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="gem" size={32} stroke={1.7}/></div>
           <h3 style={{margin:"0 0 6px",fontSize:20,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.questionPacks || "Question packs"}</h3>
           <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55}}>{t.questionPacksDesc || "One-time top-ups for everyone. They never expire and are used once your daily allowance runs out. Your other plan limits (quiz types, per-quiz max, file size) still apply."}</p>
         </div>
@@ -509,11 +549,11 @@ function PacksModal({ onClose, buyPack, t }) {
 // ── Per-feature ad-unlock modal ───────────────────────────────────────
 // One modal per feature; watching a (placeholder) ad starts a 1-hour window.
 const UNLOCK_META = {
-  flashcard:   { icon:"🃏", title:"Flashcards",        gives:"the Flashcards quiz type",        daily:false },
-  fillinblank: { icon:"✏️", title:"Fill in the blank", gives:"the Fill-in-the-blank quiz type", daily:true  },
-  matchterms:  { icon:"🔗", title:"Match terms",        gives:"the Match-terms quiz type",        daily:true  },
-  questions:   { icon:"🔢", title:"50 questions",       gives:"up to 50 questions per quiz",      daily:true  },
-  filesize:    { icon:"📦", title:"10 MB uploads",      gives:"file uploads up to 10 MB",         daily:true  },
+  flashcard:   { icon:"layers", title:"Flashcards",        gives:"the Flashcards quiz type",        daily:false },
+  fillinblank: { icon:"pencil", title:"Fill in the blank", gives:"the Fill-in-the-blank quiz type", daily:true  },
+  matchterms:  { icon:"link",   title:"Match terms",        gives:"the Match-terms quiz type",        daily:true  },
+  questions:   { icon:"list",   title:"50 questions",       gives:"up to 50 questions per quiz",      daily:true  },
+  filesize:    { icon:"folder", title:"10 MB uploads",      gives:"file uploads up to 10 MB",         daily:true  },
 };
 
 function UnlockModal({ feature, unlocks, onClose, onUpgrade, t }) {
@@ -528,7 +568,7 @@ function UnlockModal({ feature, unlocks, onClose, onUpgrade, t }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:300,display:"flex",alignItems:"flex-end"}} onClick={onClose}>
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"24px 20px 36px",width:"100%",maxHeight:"80vh",overflowY:"auto",boxSizing:"border-box"}}>
         <div style={{textAlign:"center",marginBottom:18}}>
-          <div style={{fontSize:38,marginBottom:8}}>{active ? "🔓" : "🔒"}</div>
+          <div style={{marginBottom:10,display:"flex",justifyContent:"center",color:active?"#16a34a":"var(--color-text-tertiary)"}}><Icon name={active?"check":"lock"} size={32} stroke={1.9}/></div>
           <h3 style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{m.title}</h3>
           <p style={{margin:0,fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>
             {(()=>{const [a,b=""]=t.unlockWatchLine.split("{gives}");return <>{a}<strong style={{color:"var(--color-text-primary)"}}>{m.gives}</strong>{b}</>;})()} {m.daily ? t.unlockDaily : t.unlockUnlimited}
@@ -676,7 +716,7 @@ function MatchQuiz({ questions, onDone, t }) {
             const bc=isOk?"#22c55e":isBad?"#ef4444":isSel?"#4338ca":matched?pc:"var(--color-border-tertiary)";
             return <button key={i} onClick={()=>pickTerm(i)} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:bc,background:isSel?"var(--color-sel-tint)":matched?"var(--color-background-secondary)":"var(--color-background-primary)",fontSize:12,fontWeight:600,cursor:matched||checked?"default":"pointer",color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left",transition:"all 0.15s"}}>
               {matched && <PairBadge n={pairNo[i]} color={pc}/>}
-              <span style={{flex:1}}>{isOk&&"✅ "}{isBad&&"❌ "}{term}</span>
+              <span style={{flex:1,display:"inline-flex",alignItems:"center",gap:6}}>{isOk&&<Icon name="check" size={14} stroke={2.6} style={{color:"#16a34a",flexShrink:0}}/>}{isBad&&<Icon name="x" size={14} stroke={2.6} style={{color:"#dc2626",flexShrink:0}}/>}{term}</span>
             </button>;
           })}
         </div>
@@ -730,7 +770,7 @@ function ExplainBox({ ctx, t }) {
       {text && <div style={{fontSize:12.5,color:"var(--color-text-primary)",lineHeight:1.55,whiteSpace:"pre-wrap"}}>{text}</div>}
       {turns.map((turn,i)=>(
         <div key={i} style={{marginTop:8,paddingTop:8,borderTop:"0.5px solid var(--color-border-tertiary)"}}>
-          <div style={{fontSize:12,fontWeight:700,color:"var(--color-text-secondary)"}}>❓ {turn.q}</div>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--color-text-secondary)",display:"flex",alignItems:"center",gap:5}}><Icon name="chat" size={12} stroke={2}/>{turn.q}</div>
           <div style={{fontSize:12.5,color:"var(--color-text-primary)",lineHeight:1.55,marginTop:3,whiteSpace:"pre-wrap"}}>{turn.a}</div>
         </div>
       ))}
@@ -745,53 +785,81 @@ function ExplainBox({ ctx, t }) {
   );
 }
 
-// Feature A: "Where did this come from?" Shows whether a question is grounded
-// in the learner's own material (with the exact supporting quote, tap to open)
-// or leaned on general knowledge (flagged so they double-check it). Revyy's
+// Feature A: a small marker placed at the end of a question (and, in the review,
+// next to the answer). Hover tells you what it is; click reveals the exact words
+// in the learner's OWN material that the question/answer came from. When nothing
+// was found in their notes, it says so, so they know to double-check. Revyy's
 // edge: because quizzes come from YOUR notes, we can show the receipt.
-function SourceNote({ q, t }) {
+function SourceMark({ source, label, quoteLabel, t }) {
   const [open, setOpen] = useState(false);
-  const grounded = typeof q.source === "string" && q.source.trim().length > 0;
+  const [hover, setHover] = useState(false);
+  const has = typeof source === "string" && source.trim().length > 0;
+  const ql = quoteLabel || t.srcQuoteLabel;
   return (
-    <div style={{marginTop:10}}>
+    <span style={{position:"relative",display:"inline-flex",verticalAlign:"middle",marginLeft:5}}>
       <button
-        onClick={()=>grounded&&setOpen((o)=>!o)}
-        aria-expanded={grounded?open:undefined}
-        style={{display:"inline-flex",alignItems:"center",gap:6,background:grounded?"var(--color-sel-tint)":"var(--color-background-secondary)",color:grounded?"var(--color-accent)":"var(--color-text-secondary)",border:grounded?"none":"0.5px solid var(--color-border-tertiary)",borderRadius:20,padding:"5px 11px",fontSize:11,fontWeight:700,cursor:grounded?"pointer":"default",fontFamily:"inherit"}}>
-        <Icon name={grounded?"notes":"alert"} size={13} stroke={2}/>
-        {grounded ? t.srcFromNotes : t.srcVerify}
-        {grounded && <Icon name="chevron" size={11} stroke={2.4} style={{transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}/>}
+        type="button"
+        onClick={()=>setOpen((o)=>!o)}
+        onMouseEnter={()=>setHover(true)}
+        onMouseLeave={()=>setHover(false)}
+        onBlur={()=>setHover(false)}
+        aria-label={label}
+        aria-expanded={open}
+        style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:19,height:19,padding:0,borderRadius:"50%",border:"none",cursor:"pointer",background:open?"var(--color-accent)":"var(--color-sel-tint)",color:open?"#fff":"var(--color-accent)",flexShrink:0,lineHeight:0}}>
+        <Icon name="help" size={13} stroke={2.2}/>
       </button>
-      {grounded && open && (
-        <div className="fade-in" style={{marginTop:8,background:"var(--color-background-secondary)",borderLeft:"3px solid var(--color-accent)",borderRadius:"0 8px 8px 0",padding:"9px 12px"}}>
-          <div style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase",color:"var(--color-text-tertiary)",marginBottom:4}}>{t.srcQuoteLabel}</div>
-          <div style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55,fontStyle:"italic"}}>&ldquo;{q.source}&rdquo;</div>
-        </div>
+      {hover && !open && (
+        <span style={{position:"absolute",bottom:"calc(100% + 6px)",right:0,whiteSpace:"nowrap",background:"var(--color-text-primary)",color:"var(--color-background-primary)",fontSize:10.5,fontWeight:600,padding:"4px 8px",borderRadius:6,pointerEvents:"none",zIndex:60,boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}}>{label}</span>
       )}
-    </div>
+      {open && (
+        <span className="fade-in" style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:55,width:"max-content",maxWidth:"min(280px,74vw)",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${has?"var(--color-accent)":"var(--color-border-secondary)"}`,borderRadius:8,padding:"9px 12px",textAlign:"left",boxShadow:"0 8px 24px rgba(0,0,0,0.16)"}}>
+          <span style={{display:"block",fontSize:9.5,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase",color:"var(--color-text-tertiary)",marginBottom:4}}>{has?ql:t.srcVerify}</span>
+          <span style={{display:"block",fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55,fontStyle:has?"italic":"normal"}}>{has?`“${source}”`:t.srcUngroundedNote}</span>
+        </span>
+      )}
+    </span>
   );
 }
 
-// Feature B: flag a bad question and get a corrected one in its place. Low-key
-// until tapped; then the learner says what is off and Revyy rewrites the
-// question (grounded in the same material) and swaps it in via onReplace.
+// Feature B: flag a bad question. If the learner says the answer is WRONG, Revyy
+// first VERIFIES the claim against their material + its own knowledge and tells
+// them the verdict (the answer holds up, with proof, or they were right and it
+// gets corrected). Confusing / off-material flags just rewrite the question. The
+// swap goes through onReplace.
 function FlagFix({ q, subject, blocks, uiLangName, diff, onReplace, t }) {
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");        // "" | "checking" | "writing"
   const [err, setErr] = useState("");
-  const [done, setDone] = useState(false);
-  const regen = async (reason) => {
-    setBusy(true); setErr("");
+  const [done, setDone] = useState("");        // success message shown after a swap
+  const [verdict, setVerdict] = useState(null);// {explanation, source} when the answer holds up
+  const doRegen = async (reason) => {
+    setBusy("writing"); setErr("");
+    try { const nq = await regenerateQuestion({ blocks, q, subject, reason, uiLangName, diff }); onReplace(nq); setVerdict(null); setDone(t.flagReplaced); setOpen(false); }
+    catch { setErr(t.flagFailed); }
+    finally { setBusy(""); }
+  };
+  const act = async (reason) => {
+    if (reason !== "wrong") return doRegen(reason);
+    setBusy("checking"); setErr("");
     try {
-      const nq = await regenerateQuestion({ blocks, q, subject, reason, uiLangName, diff });
-      onReplace(nq);
-      setDone(true); setOpen(false);
+      const v = await verifyFlaggedQuestion({ blocks, q, uiLangName, diff });
+      if (v.verdict === "answer_correct") { setVerdict({ explanation: v.explanation, source: v.answerSource }); setOpen(false); }
+      else if (v.replacement) { onReplace(v.replacement); setDone(v.verdict === "student_right" ? t.flagGoodCatch : t.flagClearer); setOpen(false); }
+      else { setBusy(""); return doRegen("wrong"); }
     } catch { setErr(t.flagFailed); }
-    finally { setBusy(false); }
+    finally { setBusy((b)=> b === "checking" ? "" : b); }
   };
   if (done) return (
-    <div style={{marginTop:10,fontSize:12,color:"#16a34a",fontWeight:700,display:"inline-flex",alignItems:"center",gap:6}}>
-      <Icon name="check" size={14} stroke={2.4}/>{t.flagReplaced}
+    <div style={{marginTop:10,fontSize:12,color:"#16a34a",fontWeight:700,display:"inline-flex",alignItems:"flex-start",gap:6,textAlign:"left"}}>
+      <Icon name="check" size={14} stroke={2.4}/><span>{done}</span>
+    </div>
+  );
+  if (verdict) return (
+    <div className="fade-in" style={{marginTop:10,textAlign:"left",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderLeft:"3px solid #16a34a",borderRadius:10,padding:"11px 12px"}}>
+      <div style={{fontSize:12.5,fontWeight:700,color:"var(--color-text-primary)",display:"inline-flex",alignItems:"center",gap:6,marginBottom:5}}><Icon name="check" size={14} stroke={2.4} style={{color:"#16a34a"}}/>{t.flagVerifiedTitle}</div>
+      {verdict.explanation && <div style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55}}>{verdict.explanation}</div>}
+      {verdict.source && <div style={{marginTop:6,fontSize:12,color:"var(--color-text-secondary)",fontStyle:"italic",borderLeft:"2px solid var(--color-border-secondary)",paddingLeft:8}}>{`“${verdict.source}”`}</div>}
+      <button onClick={()=>doRegen("wrong")} style={{marginTop:9,background:"none",border:"none",color:"var(--color-accent)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0,textDecoration:"underline",textUnderlineOffset:2}}>{t.flagRewriteAnyway}</button>
     </div>
   );
   if (!open) return (
@@ -800,15 +868,15 @@ function FlagFix({ q, subject, blocks, uiLangName, diff, onReplace, t }) {
     </button>
   );
   return (
-    <div className="fade-in" style={{marginTop:10,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"11px 12px"}}>
+    <div className="fade-in" style={{marginTop:10,textAlign:"left",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"11px 12px"}}>
       {busy ? (
-        <div style={{fontSize:12.5,color:"var(--color-text-secondary)",fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}><Icon name="repeat" size={13}/>{t.flagWriting}</div>
+        <div style={{fontSize:12.5,color:"var(--color-text-secondary)",fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}><Icon name={busy==="checking"?"target":"repeat"} size={13}/>{busy==="checking"?t.flagChecking:t.flagWriting}</div>
       ) : (
         <>
           <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginBottom:8,fontWeight:600}}>{t.flagPrompt}</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
             {[["wrong",t.flagWrong],["unclear",t.flagUnclear],["offnotes",t.flagNotInNotes]].map(([r,label])=>(
-              <button key={r} onClick={()=>regen(r)} style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-tertiary)",borderRadius:8,padding:"6px 10px",fontSize:11.5,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>{label}</button>
+              <button key={r} onClick={()=>act(r)} style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-tertiary)",borderRadius:8,padding:"6px 10px",fontSize:11.5,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>{label}</button>
             ))}
             <button onClick={()=>{setOpen(false);setErr("");}} style={{background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:11.5,cursor:"pointer",fontFamily:"inherit",padding:"6px 4px"}}>{t.cancel}</button>
           </div>
@@ -825,7 +893,7 @@ function ShareModal({ link, err, copied, onCopy, onClose, challengeScore, t }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={onClose}>
       <div className="slide-up" onClick={(e)=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"26px 20px 36px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box"}}>
         <div style={{textAlign:"center",marginBottom:16}}>
-          <div style={{fontSize:34,marginBottom:6}}>🏆</div>
+          <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Icon name="trophy" size={32} style={{color:"var(--color-clay,#b5502f)"}}/></div>
           <h3 style={{margin:"0 0 6px",fontSize:19,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{challengeScore?t.challengeTitle:t.shareTitle}</h3>
           <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{challengeScore?t.challengeDesc.replace("{s}",challengeScore):t.shareDesc}</p>
         </div>
@@ -874,13 +942,13 @@ function ContactModal({ defaultEmail, onClose, t }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:600,display:"flex",alignItems:"flex-end"}} onClick={onClose}>
       <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"26px 20px 36px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box"}}>
         <div style={{textAlign:"center",marginBottom:16}}>
-          <div style={{fontSize:34,marginBottom:6}}>🐛</div>
+          <div style={{marginBottom:8,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="chat" size={30} stroke={1.7}/></div>
           <h3 style={{margin:"0 0 6px",fontSize:19,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.reportTitle}</h3>
           <p style={{margin:0,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.reportSub}</p>
         </div>
         {state === "sent" ? (
           <div style={{textAlign:"center",padding:"14px 0 4px"}}>
-            <div style={{fontSize:40,marginBottom:8}}>🙌</div>
+            <div style={{marginBottom:10,display:"flex",justifyContent:"center",color:"#16a34a"}}><Icon name="check" size={36} stroke={2}/></div>
             <p style={{fontSize:14,color:"var(--color-text-primary)",fontWeight:600,margin:"0 0 16px",lineHeight:1.5}}>{t.reportSuccess}</p>
             <button onClick={onClose} style={{...Sb.btnPrimary,width:"100%"}}>{t.reportDone}</button>
           </div>
@@ -982,11 +1050,11 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
             ? <button disabled={adBusy} onClick={onWatchAd} style={{marginTop:10,width:"100%",background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:adBusy ? "default" : "pointer",fontFamily:"inherit",opacity:adBusy ? 0.6 : 1}}>
                 {adBusy ? (s.loadingAd || "Loading ad…") : `${(s.watchAdForQuestions || "Watch ad for +{n} questions").replace("{n}", u.ad_question_bonus ?? 10)} · ${u.ad_watches_today ?? 0}/${u.max_ad_watches ?? 2}`}
               </button>
-            : <div style={{marginTop:10,width:"100%",background:"var(--color-background-tertiary)",color:"var(--color-text-tertiary)",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:600,textAlign:"center",boxSizing:"border-box"}}>
-                📵 {(s.adLimitReached || "Daily ad limit reached")} · {u.max_ad_watches ?? 2}/{u.max_ad_watches ?? 2}
+            : <div style={{marginTop:10,width:"100%",background:"var(--color-background-tertiary)",color:"var(--color-text-tertiary)",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6,boxSizing:"border-box"}}>
+                <Icon name="alert" size={13} style={{flexShrink:0}}/><span>{(s.adLimitReached || "Daily ad limit reached")} · {u.max_ad_watches ?? 2}/{u.max_ad_watches ?? 2}</span>
               </div>}
           <button onClick={() => startCheckout?.(STRIPE_MONTHLY_PRICE)} style={{marginTop:8,width:"100%",background:"#4338ca",color:"#fff",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-            ⭐ {s.upgradeForMore || "Upgrade to Pro, 250 questions/day"}
+            <span style={{display:"inline-flex",alignItems:"center",gap:7,justifyContent:"center"}}><Icon name="spark" size={15}/>{s.upgradeForMore || "Upgrade to Pro, 250 questions/day"}</span>
           </button>
         </>}
 
@@ -1321,7 +1389,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
       {confirmDel && (
         <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}} onClick={closeConfirm}>
           <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:16,padding:"26px 22px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.28)"}}>
-            <div style={{fontSize:38,marginBottom:10}}>⚠️</div>
+            <div style={{marginBottom:12,display:"flex",justifyContent:"center",color:"#dc2626"}}><Icon name="alert" size={34} stroke={1.9}/></div>
             <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{s.confirmTitle}</h3>
             <p style={{margin:"0 0 16px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.55}}>{s.confirmDesc}</p>
             {requiresPassword ? (
@@ -1370,7 +1438,7 @@ function ExitModal({ show, onStay, onLeave, message, title, stayLabel, leaveLabe
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:550,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
       <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"28px 22px",maxWidth:320,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
-        <div style={{fontSize:36,marginBottom:10}}>⚠️</div>
+        <div style={{marginBottom:12,display:"flex",justifyContent:"center",color:"#f59e0b"}}><Icon name="alert" size={32} stroke={1.9}/></div>
         <h3 style={{margin:"0 0 8px",fontSize:17,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{title||t.exitTitle||"Leave this page?"}</h3>
         <p style={{margin:"0 0 22px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{message||t.exitMsg||"Your progress will be lost and cannot be recovered."}</p>
         <div style={{display:"flex",gap:10}}>
@@ -1402,7 +1470,7 @@ function TimeUpModal() {
   return (
     <div style={{position:"fixed",inset:0,zIndex:950,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",background:"rgba(15,16,32,0.7)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
       <div style={{background:"var(--color-background-primary)",borderRadius:18,padding:"32px 26px",maxWidth:320,width:"100%",textAlign:"center",boxShadow:"0 12px 40px rgba(0,0,0,0.4)"}}>
-        <div style={{fontSize:46,marginBottom:10}}>⏰</div>
+        <div style={{marginBottom:12,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="clock" size={42} stroke={1.7}/></div>
         <h3 style={{margin:"0 0 6px",fontSize:22,fontWeight:800,color:"#dc2626",fontFamily:"'Fraunces',Georgia,serif"}}>{t.timesUp}</h3>
         <p style={{margin:"0 0 20px",fontSize:14,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.examSubmittingNow}</p>
         <div style={{width:36,height:36,margin:"0 auto",border:"3px solid var(--color-border-secondary)",borderTopColor:"#4338ca",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
@@ -1419,7 +1487,7 @@ function ResumeModal({ info, onResume, onDiscard, fmtClock }) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:560,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
       <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"28px 22px",maxWidth:330,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.25)"}}>
-        <div style={{fontSize:36,marginBottom:10}}>📝</div>
+        <div style={{marginBottom:12,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="exam" size={32} stroke={1.8}/></div>
         <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{t.examInProgressQ}</h3>
         <p style={{margin:"0 0 20px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>
           {t.resumeQInfo.replace("{q}",info.examQs?.length||0).replace("{a}",answered)}{info.examTimerOn && info.examTimeLeft!=null ? " · "+fmtClock(info.examTimeLeft)+" left" : ""}
@@ -2418,7 +2486,7 @@ export default function StudyQuiz() {
 
   const score = answers.filter(a=>a.isCorrect).length;
   const pct   = quiz ? Math.round((score/quiz.questions.length)*100) : 0;
-  const badge = pct>=90?{emoji:"🏆",text:t.excellent}:pct>=75?{emoji:"🎯",text:t.great}:pct>=60?{emoji:"📚",text:t.good}:{emoji:"💪",text:t.keep};
+  const badge = pct>=90?{icon:"trophy",text:t.excellent}:pct>=75?{icon:"target",text:t.great}:pct>=60?{icon:"notes",text:t.good}:{icon:"flame",text:t.keep};
 
   // ── Coach actions ────────────────────────────────────────────────
   const openPlanSetup = () => { if (requireLogin()) return; setPlanErr(""); setScreen("plan_setup"); };
@@ -2563,7 +2631,7 @@ export default function StudyQuiz() {
             </div>
             {srs.dueCount>0
               ? <button onClick={startReview} style={{flexShrink:0,background:"#fff",color:"#4338ca",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
-              : srs.totalCount>0 && <span style={{flexShrink:0,fontSize:20}}>✅</span>}
+              : srs.totalCount>0 && <Icon name="check" size={20} stroke={2.4} style={{color:"#16a34a",flexShrink:0}}/>}
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,paddingTop:12,borderTop:srs.dueCount>0?"0.5px solid rgba(255,255,255,0.2)":"0.5px solid var(--color-border-tertiary)"}}>
             <span style={{fontSize:12,fontWeight:600,color:srs.dueCount>0?"rgba(255,255,255,0.9)":"var(--color-text-secondary)"}}>
@@ -2638,7 +2706,7 @@ export default function StudyQuiz() {
               </div>
               {!complete && day && (
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,paddingTop:12,borderTop:due?"0.5px solid rgba(255,255,255,0.2)":"0.5px solid var(--color-border-tertiary)"}}>
-                  <span style={{fontSize:12,fontWeight:600,color:due?"rgba(255,255,255,0.9)":"var(--color-text-secondary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📖 {day.label}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:due?"rgba(255,255,255,0.9)":"var(--color-text-secondary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:6}}><Icon name="notes" size={13} style={{flexShrink:0}}/>{day.label}</span>
                   <span style={{flexShrink:0,fontSize:10,fontWeight:700,letterSpacing:0.3,background:due?"rgba(255,255,255,0.2)":"var(--color-sel-tint)",color:due?"#fff":"var(--color-accent)",borderRadius:8,padding:"3px 8px"}}>{day.format==="exam"?t.coachExamFormat:(t.quizTypes?.[day.format]||day.format)}</span>
                 </div>
               )}
@@ -2875,8 +2943,8 @@ export default function StudyQuiz() {
           </div>
         ))}
       </div>
-      <p style={{marginTop:28,maxWidth:300,fontSize:12,lineHeight:1.55,color:"var(--color-text-tertiary)"}}>
-        ⏳ {t.genNotice || "Bigger files or a high question count can make generation take a little longer, hang tight."}
+      <p style={{marginTop:28,maxWidth:300,fontSize:12,lineHeight:1.55,color:"var(--color-text-tertiary)",display:"flex",alignItems:"flex-start",gap:7,textAlign:"left"}}>
+        <Icon name="clock" size={14} style={{flexShrink:0,marginTop:1}}/><span>{t.genNotice || "Bigger files or a high question count can make generation take a little longer, hang tight."}</span>
       </p>
     </div>
   );
@@ -2913,7 +2981,7 @@ export default function StudyQuiz() {
           {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} feedback={settings.feedback} autoAdvance={settings.autoAdvance} autoSec={autoAdvanceSec} onNext={(ok,picked)=>{const u=[...answers,{isCorrect:ok,picked}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="mcq"  &&(
             <>
-              <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}</h3>
+              <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></h3>
               <div style={{display:"flex",flexDirection:"column",gap:9,marginTop:20}}>
                 {q.options.map((opt,i)=>{
                   const isChosen=selected===i,isCorrect=q.correct===i;
@@ -2928,12 +2996,11 @@ export default function StudyQuiz() {
                   return <button key={i} onClick={()=>pick(i)} disabled={selected!==null} className={selected===null?"quiz-opt":""} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"13px 14px",cursor:selected!==null?"default":"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",transition:"all 0.18s",...extra}}>
                     <span style={{width:28,height:28,borderRadius:"50%",background:"var(--color-background-secondary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{LETTERS[i]}</span>
                     <span style={{flex:1,textAlign:"left",lineHeight:1.4}}>{opt}</span>
-                    {instant&&selected!==null&&isCorrect&&"✅"}{instant&&selected!==null&&isChosen&&!isCorrect&&"❌"}
+                    {instant&&selected!==null&&isCorrect&&<Icon name="check" size={17} stroke={2.6} style={{color:"#16a34a",flexShrink:0}}/>}{instant&&selected!==null&&isChosen&&!isCorrect&&<Icon name="x" size={17} stroke={2.6} style={{color:"#dc2626",flexShrink:0}}/>}
                   </button>;
                 })}
               </div>
               {selected!==null&&instant&&<div style={{borderRadius:10,padding:"12px 14px",marginTop:14,...(selected===q.correct?{background:"#f0fdf4",border:"0.5px solid #86efac",color:"#15803d"}:{background:"#fef2f2",border:"0.5px solid #fca5a5",color:"#b91c1c"})}} className="slide-up"><strong style={{fontSize:14}}>{selected===q.correct?t.correct:t.incorrect}</strong><p style={{margin:"5px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p></div>}
-              {selected!==null&&instant&&<SourceNote q={q} t={t}/>}
               {settings.autoAdvance && instant && selected!==null && <AutoAdvanceBar sec={autoAdvanceSec} runId={qIdx} t={t}/>}
               {(!settings.autoAdvance || instant) && <button style={{...Sb.btnPrimary,width:"100%",marginTop:settings.autoAdvance?12:20,opacity:selected===null?0.35:1,cursor:selected===null?"not-allowed":"pointer"}} onClick={nextMCQ} disabled={selected===null}>{settings.autoAdvance?t.skip||t.next:(isLast?t.finish:t.next)}</button>}
               <div style={{textAlign:"center",marginTop:12}}><FlagFix q={q} subject={quiz.subject} blocks={genBlocksRef.current} uiLangName={LANGS[lang]?.name} diff={diff} t={t} onReplace={replaceCurrentQuestion}/></div>
@@ -2951,16 +3018,16 @@ export default function StudyQuiz() {
       <AdBanners isPro={isPro} bottom={false}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
       <div style={{background:"#2c2870",padding:"36px 20px 28px",textAlign:"center"}}>
-        <div style={{fontSize:50,marginBottom:8}}>{badge.emoji}</div>
+        <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}><Icon name={badge.icon} size={46} stroke={1.7} style={{color:"#fff"}}/></div>
         <h2 style={{margin:"0 0 4px",fontSize:22,fontWeight:700,color:"#fff"}}>{badge.text}</h2>
         <div style={{fontSize:46,fontWeight:800,color:"#fff",letterSpacing:-1,fontFamily:"'Fraunces',Georgia,serif"}}>{pct}%</div>
         <div style={{fontSize:14,color:"rgba(255,255,255,0.7)",marginTop:4}}>{score} {t.outOf} {quiz.questions.length}</div>
-        <div style={{fontSize:22,letterSpacing:4,marginTop:14}}>{answers.map((a,i)=><span key={i}>{a.isCorrect?"🟩":"🟥"}</span>)}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,justifyContent:"center",marginTop:16}}>{answers.map((a,i)=><span key={i} style={{width:14,height:14,borderRadius:4,background:a.isCorrect?"#4ade80":"#f87171"}}/>)}</div>
       </div>
       <div className="rv-center" style={{padding:"20px 16px"}}>
         {srsAdded>0 && (
           <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
-            <span style={{fontSize:18}}>🔁</span>
+            <Icon name="repeat" size={18} style={{color:"var(--color-accent)",flexShrink:0}}/>
             <span style={{flex:1,fontSize:12.5,color:"var(--color-accent)",lineHeight:1.4}}>{t.srsAddedMsg.replace("{n}",srsAdded).replace("{s}",srsAdded>1?"s":"")}</span>
             <button onClick={startReview} style={{flexShrink:0,background:"#4338ca",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
           </div>
@@ -2975,7 +3042,7 @@ export default function StudyQuiz() {
         </div>
         {planSession && (
           <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4338ca,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:14,color:"#fff"}}>
-            <span style={{fontSize:18}}>🧭</span>
+            <Icon name="compass" size={18} style={{color:"#fff",flexShrink:0}}/>
             <span style={{flex:1,fontSize:12.5,fontWeight:700,lineHeight:1.4}}>{t.coachComplete}</span>
             <button onClick={backToPlan} style={{flexShrink:0,background:"rgba(255,255,255,0.2)",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachBackToPlan}</button>
           </div>
@@ -2984,17 +3051,17 @@ export default function StudyQuiz() {
           <button style={{...Sb.btnPrimary,flex:1,margin:0}} onClick={retry}>{t.retry}</button>
           <button style={{...Sb.btnOutline,flex:1}} onClick={newMat}>{t.newMat}</button>
         </div>
-        <button style={{...Sb.btnPrimary,width:"100%",margin:"0 0 14px",background:"var(--color-clay,#b5502f)"}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:`🏆 ${t.challengeFriend}`}</button>
+        <button style={{...Sb.btnPrimary,width:"100%",margin:"0 0 14px",background:"var(--color-clay,#b5502f)"}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="trophy" size={16}/>{t.challengeFriend}</span>}</button>
         {shareOpen && <ShareModal link={shareLink} err={shareErr} copied={shareCopied} onCopy={copyShare} onClose={()=>setShareOpen(false)} challengeScore={`${score}/${quiz.questions.length}`} t={t}/>}
-        {!isPro&&adsOn&&<div style={{background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",textAlign:"center",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}>📣 {t.advertisement}</div>}
+        {!isPro&&adsOn&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}><Icon name="volume" size={13}/>{t.advertisement}</div>}
         <p style={Sb.secLabel}>{t.review}</p>
         {quiz.type==="match"?
           quiz.questions.map((q,i)=>{
             const a=answers[i];
             return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"14px 14px 14px 11px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${a?.isCorrect?"#22c55e":"#ef4444"}`}} className="fade-in">
-              <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{fontSize:15,flexShrink:0}}>{a?.isCorrect?"✅":"❌"}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}</span></div>
+              <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{flexShrink:0,display:"inline-flex",marginTop:1}}>{a?.isCorrect?<Icon name="check" size={16} stroke={2.6} style={{color:"#16a34a"}}/>:<Icon name="x" size={16} stroke={2.6} style={{color:"#dc2626"}}/>}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></span></div>
               {!a?.isCorrect&&a&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {a.chosen||", "}</div>}
-              <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {q.answer||""}</div>
+              <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {q.answer||""}<SourceMark source={q.source} label={t.srcSeeAnswer} quoteLabel={t.srcConfirmsAnswer} t={t}/></div>
               {!a?.isCorrect&&<ExplainBox t={t} ctx={{question:q.question,correct:q.answer||"",picked:a?.chosen||"",subject:quiz.subject}}/>}
             </div>;
           })
@@ -3002,11 +3069,10 @@ export default function StudyQuiz() {
           quiz.questions.map((q,i)=>{
             const a=answers[i];
             return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"14px 14px 14px 11px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${a?.isCorrect?"#22c55e":"#ef4444"}`}} className="fade-in">
-              <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{fontSize:15,flexShrink:0}}>{a?.isCorrect?"✅":"❌"}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}</span></div>
+              <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{flexShrink:0,display:"inline-flex",marginTop:1}}>{a?.isCorrect?<Icon name="check" size={16} stroke={2.6} style={{color:"#16a34a"}}/>:<Icon name="x" size={16} stroke={2.6} style={{color:"#dc2626"}}/>}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></span></div>
               {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="fill")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {quiz.type==="mcq"?(q.options?.[a.selected]??", "):(a.picked||", ")}</div>}
-              <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {quiz.type==="mcq"?q.options?.[q.correct]:(q.answer||"")}</div>
+              <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {quiz.type==="mcq"?q.options?.[q.correct]:(q.answer||"")}<SourceMark source={q.source} label={t.srcSeeAnswer} quoteLabel={t.srcConfirmsAnswer} t={t}/></div>
               {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.55,paddingTop:8,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:23}}>{q.explanation}</div>}
-              <div style={{paddingLeft:23}}><SourceNote q={q} t={t}/></div>
               {!a?.isCorrect&&<ExplainBox t={t} ctx={{question:q.question,correct:quiz.type==="mcq"?(q.options?.[q.correct]??""):(q.answer||""),picked:quiz.type==="mcq"?(q.options?.[a?.selected]??""):(a?.picked||""),subject:quiz.subject}}/>}
             </div>;
           })
@@ -3026,14 +3092,14 @@ export default function StudyQuiz() {
         <AdBanners isPro={isPro}/>
         <div style={Sb.topbar} className="rv-topbar">
           <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
-          <span style={{...Sb.brand,color:"var(--color-accent)"}}>🔁 {t.srsReview}</span>
+          <span style={{...Sb.brand,color:"var(--color-accent)",display:"inline-flex",alignItems:"center",gap:7}}><Icon name="repeat" size={18}/>{t.srsReview}</span>
           <span style={{fontSize:12,color:"var(--color-text-secondary)",fontWeight:600}}>{done?"":`${Math.min(reviewPos+1,reviewQueue.length)}/${reviewQueue.length}`}</span>
         </div>
         {!done && <PBar v={reviewPos} max={reviewQueue.length||1}/>}
         <div className="rv-center-narrow" style={{padding:"22px 16px 32px"}}>
           {done ? (
             <div style={{textAlign:"center",padding:"30px 0"}}>
-              <div style={{fontSize:52,marginBottom:10}}>{reviewQueue.length?"🎉":"✅"}</div>
+              <div style={{marginBottom:12,display:"flex",justifyContent:"center"}}><Icon name={reviewQueue.length?"spark":"check"} size={44} stroke={1.8} style={{color:"var(--color-accent)"}}/></div>
               <h2 style={{...Sb.h2,margin:"0 0 6px"}}>{reviewQueue.length?t.reviewComplete:t.nothingDue}</h2>
               <p style={{fontSize:14,color:"var(--color-text-secondary)",lineHeight:1.6,maxWidth:320,margin:"0 auto 22px"}}>
                 {reviewQueue.length
@@ -3207,7 +3273,7 @@ export default function StudyQuiz() {
                 <input ref={examFileRefs[idx]} type="file" accept=".pdf,.txt,.md,.csv,image/*" style={{display:"none"}} onChange={e=>addExamFile(e.target.files[0],idx)}/>
                 {ef?(
                   <div style={{background:"var(--color-sel-tint)",border:"1px solid #a5b4fc",borderRadius:10,padding:"10px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",minHeight:56}} onClick={()=>removeExamFile(idx)}>
-                    <span style={{fontSize:18,flexShrink:0}}>{ef.type==="pdf"?"📄":ef.type==="image"?"🖼️":"📝"}</span>
+                    <span style={{flexShrink:0,display:"inline-flex",color:"var(--color-accent)"}}><Icon name={ef.type==="pdf"?"notes":ef.type==="image"?"camera":"pencil"} size={18}/></span>
                     <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:600,color:"var(--color-accent)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ef.name}</div><div style={{fontSize:9,color:"var(--color-text-secondary)"}}>{t.tapToRemove}</div></div>
                   </div>
                 ):(
@@ -3220,8 +3286,8 @@ export default function StudyQuiz() {
             );
           })}
         </div>
-        {error&&<div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {error}</div>}
-        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4338ca"}}>💎 {t.getMoreQuestions}</button>}
+        {error&&<div style={{display:"flex",alignItems:"center",gap:8,background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}><Icon name="alert" size={15} style={{flexShrink:0}}/><span>{error}</span></div>}
+        {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4338ca"}}><span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="gem" size={16}/>{t.getMoreQuestions}</span></button>}
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#2c2870,#4338ca)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
@@ -3241,11 +3307,11 @@ export default function StudyQuiz() {
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.examProgress} {examIdx+1}/{examQs.length}</span>
             {examTimerOn && examTimeLeft!=null && (
-              <span className={examTimeLeft<60?"rv-timer-flash":""} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:14,fontWeight:800,fontVariantNumeric:"tabular-nums",color: examTimeLeft<60?"#ef4444" : (examTimeLeft/examTotalSec)>0.5?"var(--color-text-primary)" : (examTimeLeft/examTotalSec)>0.25?"#f59e0b":"#ef4444"}}>🕐 {fmtClock(examTimeLeft)}</span>
+              <span className={examTimeLeft<60?"rv-timer-flash":""} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:14,fontWeight:800,fontVariantNumeric:"tabular-nums",color: examTimeLeft<60?"#ef4444" : (examTimeLeft/examTotalSec)>0.5?"var(--color-text-primary)" : (examTimeLeft/examTotalSec)>0.25?"#f59e0b":"#ef4444"}}><Icon name="clock" size={14} style={{flexShrink:0}}/>{fmtClock(examTimeLeft)}</span>
             )}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            {examTimerOn && !examTimeUp && <button onClick={()=>setExamPaused(true)} title={t.pauseLbl} style={{background:"none",border:"1px solid var(--color-border-secondary)",borderRadius:8,padding:"3px 9px",fontSize:13,cursor:"pointer",color:"var(--color-text-secondary)",fontFamily:"inherit"}}>⏸</button>}
+            {examTimerOn && !examTimeUp && <button onClick={()=>setExamPaused(true)} title={t.pauseLbl} aria-label={t.pauseLbl} style={{background:"none",border:"1px solid var(--color-border-secondary)",borderRadius:8,padding:"4px 9px",cursor:"pointer",color:"var(--color-text-secondary)",fontFamily:"inherit",display:"inline-flex",alignItems:"center"}}><Icon name="pause" size={14} stroke={2}/></button>}
             <span style={{fontSize:11,color:answered===examQs.length?"#16a34a":"var(--color-text-tertiary)",fontWeight:600}}>{answered}/{examQs.length}</span>
           </div>
         </div>
@@ -3302,7 +3368,7 @@ export default function StudyQuiz() {
         {showSubmitPrompt && (
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:560,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
             <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:16,padding:"26px 22px",maxWidth:330,width:"100%",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.25)"}}>
-              <div style={{fontSize:34,marginBottom:8}}>📋</div>
+              <div style={{marginBottom:10,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="list" size={30} stroke={1.8}/></div>
               <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{t.submitExamQ}</h3>
               <p style={{margin:"0 0 18px",fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.submitStillHave} <strong style={{color:"var(--color-accent)"}}>{fmtClock(examTimeLeft||0)}</strong> {t.submitReviewBefore}</p>
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -3322,7 +3388,7 @@ export default function StudyQuiz() {
   // ── EXAM EVAL ─────────────────────────────────────────────────────
   if(screen==="exam_eval") return (
     <div style={{...Sb.root,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 24px",textAlign:"center",minHeight:"100vh"}}><style>{CSS}</style>
-      <div style={{fontSize:52,marginBottom:16}}>🤖</div>
+      <div style={{marginBottom:18,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="spark" size={46} stroke={1.6}/></div>
       <h2 style={{...Sb.h2,textAlign:"center"}}>{t.evaluating}</h2>
       <p style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:24}}>{t.aiGradingMsg}</p>
       <div style={{display:"flex",flexDirection:"column",gap:12,alignItems:"flex-start"}}>
@@ -3337,26 +3403,26 @@ export default function StudyQuiz() {
     const total=examEvals.reduce((s,e,i)=>s+(e.score||0)*(examQs[i]?.marksPerQ||1),0);
     const pct=Math.round((total/totalPossible)*100);
     const passed=pct>=50,excellent=pct>=90;
-    const theme=excellent?{bg:"linear-gradient(145deg,#052e16,#16a34a)",emoji:"🏆",title:t.excellentTitle,msg:t.excellentMsg}:passed?{bg:"linear-gradient(145deg,#451a03,#b45309)",emoji:"🎯",title:t.passTitle,msg:t.passMsg}:{bg:"linear-gradient(145deg,#1c0f0f,#b91c1c)",emoji:"📚",title:t.failTitle,msg:t.failMsg};
+    const theme=excellent?{bg:"linear-gradient(145deg,#052e16,#16a34a)",icon:"trophy",title:t.excellentTitle,msg:t.excellentMsg}:passed?{bg:"linear-gradient(145deg,#451a03,#b45309)",icon:"target",title:t.passTitle,msg:t.passMsg}:{bg:"linear-gradient(145deg,#1c0f0f,#b91c1c)",icon:"notes",title:t.failTitle,msg:t.failMsg};
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 2px 12px rgba(0,0,0,0.25)"}}>{t.welcomePro}</div>}
         {showConfetti&&<Confetti/>}
         <div style={{background:theme.bg,padding:"40px 20px 32px",textAlign:"center"}}>
-          <div style={{fontSize:56,marginBottom:8}}>{theme.emoji}</div>
+          <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}><Icon name={theme.icon} size={50} stroke={1.7} style={{color:"#fff"}}/></div>
           <h2 style={{margin:"0 0 8px",fontSize:24,fontWeight:700,color:"#fff",fontFamily:"'Fraunces',Georgia,serif"}}>{theme.title}</h2>
           <div style={{fontSize:52,fontWeight:900,color:"#fff",letterSpacing:-2,fontFamily:"'Fraunces',Georgia,serif"}}>{pct}%</div>
           <div style={{fontSize:13,color:"rgba(255,255,255,0.7)",marginTop:4}}>
             {(Math.round(total*10)/10)+" / "+totalPossible+(examMode==="custom"?" "+t.marksSuffix:" "+t.ptsSuffix)} · {t.passMark}
           </div>
-          {excellent&&<div style={{marginTop:12,fontSize:28,letterSpacing:4}}>🎉🎓🎉</div>}
+          {excellent&&<div style={{marginTop:14,display:"flex",justifyContent:"center",gap:12}}><Icon name="spark" size={22} style={{color:"#fff"}}/><Icon name="cap" size={24} style={{color:"#fff"}}/><Icon name="spark" size={22} style={{color:"#fff"}}/></div>}
           <p style={{margin:"14px 0 0",fontSize:14,color:"rgba(255,255,255,0.88)",lineHeight:1.6,maxWidth:300,marginLeft:"auto",marginRight:"auto"}}>{theme.msg}</p>
         </div>
         <div className="rv-center" style={{padding:"20px 16px"}}>
           {srsAdded>0 && (
             <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
-              <span style={{fontSize:18}}>🔁</span>
+              <Icon name="repeat" size={18} style={{color:"var(--color-accent)",flexShrink:0}}/>
               <span style={{flex:1,fontSize:12.5,color:"var(--color-accent)",lineHeight:1.4}}>{t.srsAddedMsg.replace("{n}",srsAdded).replace("{s}",srsAdded>1?"s":"")}</span>
               <button onClick={startReview} style={{flexShrink:0,background:"#4338ca",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
             </div>
@@ -3409,7 +3475,7 @@ export default function StudyQuiz() {
           )}
           {planSession && (
             <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#4338ca,#6366f1)",borderRadius:12,padding:"11px 14px",marginBottom:16,color:"#fff"}}>
-              <span style={{fontSize:18}}>🧭</span>
+              <Icon name="compass" size={18} style={{color:"#fff",flexShrink:0}}/>
               <span style={{flex:1,fontSize:12.5,fontWeight:700,lineHeight:1.4}}>{t.coachComplete}</span>
               <button onClick={backToPlan} style={{flexShrink:0,background:"rgba(255,255,255,0.2)",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.coachBackToPlan}</button>
             </div>
@@ -3503,8 +3569,8 @@ export default function StudyQuiz() {
         <div style={{background:isPro?"#fffbeb":"var(--color-background-secondary)",border:"0.5px solid "+(isPro?"#f59e0b44":"var(--color-border-tertiary)"),borderRadius:10,padding:"10px 14px",fontSize:12,color:isPro?"#92400e":"var(--color-text-secondary)",lineHeight:1.5,marginBottom:14}}>
           {isPro ? ("✦ "+t.coachTierPro) : t.coachTierFree}
         </div>
-        {planErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>⚠️ {planErr}</div>}
-        <button style={{...Sb.btnPrimary,width:"100%"}} onClick={buildAndSavePlan}>🧭 {t.coachBuild}</button>
+        {planErr && <div style={{display:"flex",alignItems:"center",gap:8,background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}><Icon name="alert" size={15} style={{flexShrink:0}}/><span>{planErr}</span></div>}
+        <button style={{...Sb.btnPrimary,width:"100%"}} onClick={buildAndSavePlan}><span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="compass" size={16}/>{t.coachBuild}</span></button>
       </div>
     </div>
   );
@@ -3530,7 +3596,7 @@ export default function StudyQuiz() {
           <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",marginBottom:4}}>{t.coachYourPlan}</div>
           <h2 style={{margin:0,fontSize:21,fontWeight:700,color:"#fff",fontFamily:"'Fraunces',Georgia,serif"}}>{activePlan.title}</h2>
           <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,flexWrap:"wrap"}}>
-            <span style={{fontSize:12,fontWeight:700,color:"#fff",background:"rgba(255,255,255,0.18)",borderRadius:20,padding:"4px 12px"}}>🎯 {countdown}</span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color:"#fff",background:"rgba(255,255,255,0.18)",borderRadius:20,padding:"4px 12px"}}><Icon name="target" size={13}/>{countdown}</span>
             <span style={{fontSize:12,color:"rgba(255,255,255,0.85)"}}>{t.coachProgressLbl.replace("{done}",prog.done).replace("{total}",prog.total)}</span>
           </div>
           <div style={{height:6,background:"rgba(255,255,255,0.2)",borderRadius:3,overflow:"hidden",marginTop:12}}>
@@ -3540,7 +3606,7 @@ export default function StudyQuiz() {
         <div className="rv-center" style={{padding:"18px 16px 40px"}}>
           {activePlan.mode==="remind" && activePlan.reminderTime && (
             <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"var(--color-text-secondary)",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"9px 12px",marginBottom:14}}>
-              🔔 <span style={{flex:1}}>{t.coachReminderTime} <strong style={{color:"var(--color-text-primary)"}}>{activePlan.reminderTime}</strong></span>
+              <Icon name="clock" size={15} style={{flexShrink:0}}/> <span style={{flex:1}}>{t.coachReminderTime} <strong style={{color:"var(--color-text-primary)"}}>{activePlan.reminderTime}</strong></span>
               {notifPerm!=="granted" && notifPerm!=="unsupported" && <button onClick={enableReminders} style={{background:"none",border:"none",color:"var(--color-accent)",fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",padding:0}}>{t.coachEnableNotif}</button>}
             </div>
           )}
@@ -3675,7 +3741,7 @@ export default function StudyQuiz() {
               <span style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)"}}>{totalQ} Qs · {Math.floor(totalMin/60)}h {totalMin%60}m</span>
             </div>
           </div>
-          <div style={{background:"#fffbeb",border:"0.5px solid #f59e0b44",borderRadius:10,padding:"11px 14px",fontSize:12,color:"#92400e",lineHeight:1.5,marginBottom:14}}>⏱️ {t.mockWarn}</div>
+          <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"#fffbeb",border:"0.5px solid #f59e0b44",borderRadius:10,padding:"11px 14px",fontSize:12,color:"#92400e",lineHeight:1.5,marginBottom:14}}><Icon name="clock" size={15} style={{flexShrink:0,marginTop:1}}/><span>{t.mockWarn}</span></div>
           {mockGenErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,display:"flex",alignItems:"flex-start",gap:7}}><Icon name="alert" size={15} style={{flexShrink:0,marginTop:1}}/><span>{mockGenErr}</span></div>}
           {isPro
             ? <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={startMock}><Icon name="cap" size={17}/>{t.mockStart}</button>
@@ -3758,7 +3824,7 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
         <div className="rv-center-narrow" style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"40px 20px"}}>
-          <div style={{fontSize:52,marginBottom:12}}>☕</div>
+          <div style={{marginBottom:14,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="pause" size={44} stroke={1.8}/></div>
           <h2 style={{...Sb.h2,margin:"0 0 6px"}}>{t.mockBreakTitle}</h2>
           <p style={{fontSize:14,color:"var(--color-text-secondary)",lineHeight:1.6,maxWidth:340,margin:"0 auto 6px"}}>{t.mockBreakSub}</p>
           <div style={{fontSize:12,color:"var(--color-text-tertiary)",marginBottom:24}}>{t.mockSectionDone.replace("{n}",mockSecIdx+1).replace("{total}",mock.sections.length)}</div>
@@ -3769,7 +3835,7 @@ export default function StudyQuiz() {
               <div style={{fontSize:12.5,color:"var(--color-text-secondary)",marginTop:4}}>{next.count} {t.questionsLow} · {next.minutes} min</div>
             </div>
           )}
-          {mockGenErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,maxWidth:360,width:"100%",boxSizing:"border-box"}}>⚠️ {mockGenErr}</div>}
+          {mockGenErr && <div style={{display:"flex",alignItems:"center",gap:8,background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,maxWidth:360,width:"100%",boxSizing:"border-box"}}><Icon name="alert" size={15} style={{flexShrink:0}}/><span>{mockGenErr}</span></div>}
           <button onClick={startNextSection} style={{...Sb.btnPrimary,maxWidth:360,width:"100%",margin:0}}>{t.mockStartNext}</button>
         </div>
       </div>
@@ -3808,7 +3874,7 @@ export default function StudyQuiz() {
                 const chosen=(mockAns[si]||[])[i];
                 const ok=chosen===q.correct;
                 return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 13px 12px 11px",marginBottom:9,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${ok?"#22c55e":"#ef4444"}`}} className="fade-in">
-                  <div style={{display:"flex",gap:8,alignItems:"flex-start"}}><span style={{fontSize:14,flexShrink:0}}>{ok?"✅":"❌"}</span><span style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{q.question}</span></div>
+                  <div style={{display:"flex",gap:8,alignItems:"flex-start"}}><span style={{flexShrink:0,display:"inline-flex",marginTop:1}}>{ok?<Icon name="check" size={15} stroke={2.6} style={{color:"#16a34a"}}/>:<Icon name="x" size={15} stroke={2.6} style={{color:"#dc2626"}}/>}</span><span style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{q.question}</span></div>
                   {!ok&&<div style={{fontSize:12,color:"#dc2626",marginTop:5,paddingLeft:22}}>{t.yourAns} {chosen!=null?q.options[chosen]:", "}</div>}
                   <div style={{fontSize:12,color:"#16a34a",marginTop:3,paddingLeft:22,fontWeight:500}}>{t.correctAns} {q.options[q.correct]}</div>
                   {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingTop:6,marginTop:6,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:22}}>{q.explanation}</div>}
