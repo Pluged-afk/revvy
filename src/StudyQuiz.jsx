@@ -3236,6 +3236,11 @@ export default function StudyQuiz() {
     const card = srs.cards.find(c=>c.id===reviewQueue[reviewPos]);
     const done = reviewPos>=reviewQueue.length || !card;
     const gradeCard = (ok) => { if(card) srs.grade(card.id, ok); setReviewShown(false); setReviewPos(p=>p+1); };
+    // Feature H, explainable SRS: mirror the SM-2 schedule so the learner can see
+    // WHY this card is up and WHEN a "Got it" sends it back (no more black box).
+    const goodDays = card ? (card.reps===0 ? 1 : card.reps===1 ? 3 : Math.max(1, Math.round((card.interval||1) * (card.ease||2.3)))) : 0;
+    const whyLabel = card ? (card.lapses>0 ? t.srsWhyMissed : card.reps===0 ? t.srsWhyNew : t.srsWhySeen.replace("{n}",card.reps).replace("{s}",card.reps>1?"s":"")) : "";
+    const whyMissed = !!(card && card.lapses>0);
     return (
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
@@ -3262,7 +3267,10 @@ export default function StudyQuiz() {
           ) : (
             <>
               <div style={{background:"var(--color-background-primary)",borderRadius:16,border:"0.5px solid var(--color-border-tertiary)",padding:"24px 20px",minHeight:150,display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:"var(--color-text-tertiary)",marginBottom:10,textTransform:"uppercase"}}>{t.question}</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:10}}>
+                  <span style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase"}}>{t.question}</span>
+                  {whyLabel && <span style={{flexShrink:0,fontSize:10,fontWeight:700,color:whyMissed?"#b45309":"var(--color-accent)",background:whyMissed?"#fffbeb":"var(--color-sel-tint)",borderRadius:20,padding:"3px 9px",display:"inline-flex",alignItems:"center",gap:4}}><Icon name={whyMissed?"repeat":card.reps===0?"spark":"check"} size={11} stroke={2.2}/>{whyLabel}</span>}
+                </div>
                 <div style={{fontSize:18,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.45,fontFamily:"'Fraunces',Georgia,serif"}}>{card.front}</div>
                 {reviewShown && (
                   <div className="slide-up" style={{marginTop:18,paddingTop:16,borderTop:"0.5px solid var(--color-border-tertiary)"}}>
@@ -3276,8 +3284,14 @@ export default function StudyQuiz() {
                 <button style={{...Sb.btnPrimary,width:"100%",marginTop:18}} onClick={()=>setReviewShown(true)}>{t.showAnswer}</button>
               ) : (
                 <div style={{display:"flex",gap:10,marginTop:18}}>
-                  <button style={{flex:1,background:"#fef2f2",border:"1.5px solid #fca5a5",color:"#b91c1c",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>gradeCard(false)}>{t.againBtn}</button>
-                  <button style={{flex:1,background:"#16a34a",border:"none",color:"#fff",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>gradeCard(true)}>{t.gotIt}</button>
+                  <button style={{flex:1,background:"#fef2f2",border:"1.5px solid #fca5a5",color:"#b91c1c",borderRadius:12,padding:"11px",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",gap:2}} onClick={()=>gradeCard(false)}>
+                    <span style={{fontSize:14,fontWeight:700}}>{t.againBtn}</span>
+                    <span style={{fontSize:10.5,fontWeight:600,opacity:0.85}}>{t.srsAgainNext}</span>
+                  </button>
+                  <button style={{flex:1,background:"#16a34a",border:"none",color:"#fff",borderRadius:12,padding:"11px",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",gap:2}} onClick={()=>gradeCard(true)}>
+                    <span style={{fontSize:14,fontWeight:700}}>{t.gotIt}</span>
+                    <span style={{fontSize:10.5,fontWeight:600,opacity:0.9}}>{t.srsGoodNext.replace("{n}",goodDays).replace("{s}",goodDays>1?"s":"")}</span>
+                  </button>
                 </div>
               )}
               <p style={{textAlign:"center",fontSize:11,color:"var(--color-text-tertiary)",marginTop:14,lineHeight:1.5}}>{t.reviewHint}</p>

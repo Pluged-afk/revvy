@@ -198,6 +198,9 @@ const T_EN = {
   // ── Smart Review card (spaced repetition) ──
   srsTitle:"Smart Review", srsDue:"{n} card{s} due for review", srsCaughtUp:"All caught up · {n} card{s} in your deck",
   srsEmpty:"Missed questions land here for spaced review", srsReview:"Review", quick10:"Quick 10",
+  // Feature H, explainable spaced repetition (why a card is up + when it returns).
+  srsWhyNew:"New card", srsWhySeen:"Seen {n} time{s}", srsWhyMissed:"Missed before",
+  srsGoodNext:"in {n} day{s}", srsAgainNext:"in ~10 min",
   srsExamIn:"Exam in {n} day{s}", srsSetExam:"Set your exam date",
   srsAddedMsg:"{n} question{s} added to Smart Review.",
   // ── Generic exit / exam-exit modals + exam result labels ──
@@ -329,6 +332,11 @@ const T_EN = {
 
 const T_LANGS = {
   "zh":{
+    "srsWhyNew":"新卡片",
+    "srsWhySeen":"已复习 {n} 次",
+    "srsWhyMissed":"曾答错",
+    "srsGoodNext":"{n} 天后",
+    "srsAgainNext":"约 10 分钟后",
     "mediaTab":"讲座",
     "mediaTitle":"上传讲座",
     "mediaHint":"音频或视频。我们会转写并据此出题。",
@@ -904,6 +912,11 @@ const T_LANGS = {
     }
   },
   "hi":{
+    "srsWhyNew":"नया कार्ड",
+    "srsWhySeen":"{n} बार देखा",
+    "srsWhyMissed":"पहले चूके",
+    "srsGoodNext":"{n} दिन में",
+    "srsAgainNext":"~10 मिनट में",
     "mediaTab":"लेक्चर",
     "mediaTitle":"लेक्चर अपलोड करें",
     "mediaHint":"ऑडियो या वीडियो। हम इसे ट्रांसक्राइब करके क्विज़ बनाते हैं।",
@@ -1479,6 +1492,11 @@ const T_LANGS = {
     }
   },
   "es":{
+    "srsWhyNew":"Tarjeta nueva",
+    "srsWhySeen":"Vista {n} veces",
+    "srsWhyMissed":"Fallada antes",
+    "srsGoodNext":"en {n} día{s}",
+    "srsAgainNext":"en ~10 min",
     "mediaTab":"Clase",
     "mediaTitle":"Sube una clase",
     "mediaHint":"Audio o vídeo. Lo transcribimos y te hacemos preguntas.",
@@ -2049,6 +2067,11 @@ const T_LANGS = {
     }
   },
   "fr":{
+    "srsWhyNew":"Nouvelle carte",
+    "srsWhySeen":"Vue {n} fois",
+    "srsWhyMissed":"Ratée avant",
+    "srsGoodNext":"dans {n} jour{s}",
+    "srsAgainNext":"dans ~10 min",
     "mediaTab":"Cours",
     "mediaTitle":"Importer un cours",
     "mediaHint":"Audio ou vidéo. On le transcrit et on vous interroge dessus.",
@@ -2600,6 +2623,11 @@ const T_LANGS = {
     }
   },
   "ar":{
+    "srsWhyNew":"بطاقة جديدة",
+    "srsWhySeen":"شوهد {n} مرة",
+    "srsWhyMissed":"أخطأت بها سابقاً",
+    "srsGoodNext":"خلال {n} يوم",
+    "srsAgainNext":"خلال ~10 دقائق",
     "mediaTab":"محاضرة",
     "mediaTitle":"ارفع محاضرة",
     "mediaHint":"صوت أو فيديو. نُفرّغه ونعدّ منه اختباراً.",
@@ -3174,6 +3202,11 @@ const T_LANGS = {
     }
   },
   "pt":{
+    "srsWhyNew":"Cartão novo",
+    "srsWhySeen":"Vista {n} vezes",
+    "srsWhyMissed":"Errada antes",
+    "srsGoodNext":"em {n} dia{s}",
+    "srsAgainNext":"em ~10 min",
     "mediaTab":"Aula",
     "mediaTitle":"Envie uma aula",
     "mediaHint":"Áudio ou vídeo. Transcrevemos e criamos perguntas.",
@@ -3743,6 +3776,11 @@ const T_LANGS = {
     }
   },
   "ru":{
+    "srsWhyNew":"Новая карточка",
+    "srsWhySeen":"Повторено {n} раз",
+    "srsWhyMissed":"Была ошибка",
+    "srsGoodNext":"через {n} дн.",
+    "srsAgainNext":"через ~10 мин",
     "mediaTab":"Лекция",
     "mediaTitle":"Загрузите лекцию",
     "mediaHint":"Аудио или видео. Мы расшифруем и составим по ней тест.",
@@ -4315,6 +4353,11 @@ const T_LANGS = {
     }
   },
   "id":{
+    "srsWhyNew":"Kartu baru",
+    "srsWhySeen":"Dilihat {n}×",
+    "srsWhyMissed":"Pernah salah",
+    "srsGoodNext":"dalam {n} hari",
+    "srsAgainNext":"dalam ~10 mnt",
     "mediaTab":"Kuliah",
     "mediaTitle":"Unggah kuliah",
     "mediaHint":"Audio atau video. Kami transkripsikan dan buat kuisnya.",
@@ -4885,6 +4928,11 @@ const T_LANGS = {
     }
   },
   "de":{
+    "srsWhyNew":"Neue Karte",
+    "srsWhySeen":"{n}× gesehen",
+    "srsWhyMissed":"Zuvor falsch",
+    "srsGoodNext":"in {n} Tagen",
+    "srsAgainNext":"in ~10 Min.",
     "mediaTab":"Vorlesung",
     "mediaTitle":"Vorlesung hochladen",
     "mediaHint":"Audio oder Video. Wir transkribieren es und fragen dich ab.",
@@ -5455,6 +5503,11 @@ const T_LANGS = {
     }
   },
   "ja":{
+    "srsWhyNew":"新しいカード",
+    "srsWhySeen":"{n}回目",
+    "srsWhyMissed":"前回間違えた",
+    "srsGoodNext":"{n}日後",
+    "srsAgainNext":"約10分後",
     "mediaTab":"講義",
     "mediaTitle":"講義をアップロード",
     "mediaHint":"音声または動画。文字起こしして出題します。",
@@ -6027,6 +6080,11 @@ const T_LANGS = {
     }
   },
   "tr":{
+    "srsWhyNew":"Yeni kart",
+    "srsWhySeen":"{n} kez görüldü",
+    "srsWhyMissed":"Önce yanlıştı",
+    "srsGoodNext":"{n} gün sonra",
+    "srsAgainNext":"~10 dk sonra",
     "mediaTab":"Ders",
     "mediaTitle":"Bir ders yükle",
     "mediaHint":"Ses veya video. Deşifre edip üzerinden sınav yaparız.",
@@ -6598,6 +6656,11 @@ const T_LANGS = {
     }
   },
   "ko":{
+    "srsWhyNew":"새 카드",
+    "srsWhySeen":"{n}번째",
+    "srsWhyMissed":"이전에 틀림",
+    "srsGoodNext":"{n}일 후",
+    "srsAgainNext":"~10분 후",
     "mediaTab":"강의",
     "mediaTitle":"강의 업로드",
     "mediaHint":"오디오나 영상. 받아쓰기 후 문제를 만들어 드려요.",
@@ -7173,6 +7236,11 @@ const T_LANGS = {
     }
   },
   "vi":{
+    "srsWhyNew":"Thẻ mới",
+    "srsWhySeen":"Đã xem {n} lần",
+    "srsWhyMissed":"Đã sai trước đó",
+    "srsGoodNext":"sau {n} ngày",
+    "srsAgainNext":"sau ~10 phút",
     "mediaTab":"Bài giảng",
     "mediaTitle":"Tải lên bài giảng",
     "mediaHint":"Âm thanh hoặc video. Chúng tôi gỡ băng và tạo câu hỏi.",
@@ -7745,6 +7813,11 @@ const T_LANGS = {
     }
   },
   "it":{
+    "srsWhyNew":"Nuova scheda",
+    "srsWhySeen":"Vista {n} volte",
+    "srsWhyMissed":"Sbagliata prima",
+    "srsGoodNext":"tra {n} giorni",
+    "srsAgainNext":"tra ~10 min",
     "mediaTab":"Lezione",
     "mediaTitle":"Carica una lezione",
     "mediaHint":"Audio o video. La trascriviamo e ti interroghiamo.",
@@ -8311,6 +8384,11 @@ const T_LANGS = {
     }
   },
   "th":{
+    "srsWhyNew":"การ์ดใหม่",
+    "srsWhySeen":"ทบทวน {n} ครั้ง",
+    "srsWhyMissed":"เคยตอบผิด",
+    "srsGoodNext":"อีก {n} วัน",
+    "srsAgainNext":"อีก ~10 นาที",
     "mediaTab":"เลกเชอร์",
     "mediaTitle":"อัปโหลดเลกเชอร์",
     "mediaHint":"เสียงหรือวิดีโอ เราจะถอดความและออกข้อสอบให้",
@@ -8883,6 +8961,11 @@ const T_LANGS = {
     }
   },
   "pl":{
+    "srsWhyNew":"Nowa karta",
+    "srsWhySeen":"Powtórzone {n}×",
+    "srsWhyMissed":"Wcześniej błąd",
+    "srsGoodNext":"za {n} dni",
+    "srsAgainNext":"za ~10 min",
     "mediaTab":"Wykład",
     "mediaTitle":"Prześlij wykład",
     "mediaHint":"Audio lub wideo. Transkrybujemy i tworzymy quiz.",
@@ -9454,6 +9537,11 @@ const T_LANGS = {
     }
   },
   "nl":{
+    "srsWhyNew":"Nieuwe kaart",
+    "srsWhySeen":"{n}× gezien",
+    "srsWhyMissed":"Eerder fout",
+    "srsGoodNext":"over {n} dagen",
+    "srsAgainNext":"over ~10 min",
     "mediaTab":"College",
     "mediaTitle":"Upload een college",
     "mediaHint":"Audio of video. We transcriberen het en overhoren je.",
@@ -10017,6 +10105,11 @@ const T_LANGS = {
     }
   },
   "sv":{
+    "srsWhyNew":"Nytt kort",
+    "srsWhySeen":"Sedd {n} gånger",
+    "srsWhyMissed":"Fel tidigare",
+    "srsGoodNext":"om {n} dagar",
+    "srsAgainNext":"om ~10 min",
     "mediaTab":"Föreläsning",
     "mediaTitle":"Ladda upp en föreläsning",
     "mediaHint":"Ljud eller video. Vi transkriberar och gör frågor på det.",
@@ -10586,6 +10679,11 @@ const T_LANGS = {
     }
   },
   "he":{
+    "srsWhyNew":"כרטיס חדש",
+    "srsWhySeen":"נראה {n} פעמים",
+    "srsWhyMissed":"טעית בעבר",
+    "srsGoodNext":"בעוד {n} ימים",
+    "srsAgainNext":"בעוד ~10 דק'",
     "mediaTab":"הרצאה",
     "mediaTitle":"העלה הרצאה",
     "mediaHint":"אודיו או וידאו. נתמלל וניצור ממנו בוחן.",
