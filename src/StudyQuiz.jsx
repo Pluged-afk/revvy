@@ -1747,6 +1747,17 @@ export default function StudyQuiz() {
     setReviewQueue(srs.dueCards.map((c) => c.id));
     setReviewPos(0); setReviewShown(false); setScreen("review");
   };
+  // Feature E: "Quick 10", a commute-sized micro-session. Pulls the 10 most-due
+  // review cards (due first, then soonest-due, so it works even when nothing is
+  // strictly due yet), instant and free, no upload. If more are still due after,
+  // the review-complete screen offers to keep going.
+  const QUICK_N = 10;
+  const startQuick10 = () => {
+    const deck = [...srs.cards].sort((a, b) => a.due - b.due).slice(0, QUICK_N);
+    if (!deck.length) return;
+    setReviewQueue(deck.map((c) => c.id));
+    setReviewPos(0); setReviewShown(false); setScreen("review");
+  };
   const srsAddedRef = useRef(null);
   const fileRef  = useRef();
   const photoRef = useRef();
@@ -2646,9 +2657,12 @@ export default function StudyQuiz() {
                  t.srsEmpty}
               </div>
             </div>
-            {srs.dueCount>0
-              ? <button onClick={startReview} style={{flexShrink:0,background:"#fff",color:"#4338ca",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.srsReview}</button>
-              : srs.totalCount>0 && <Icon name="check" size={20} stroke={2.4} style={{color:"#16a34a",flexShrink:0}}/>}
+            {srs.totalCount>0 && (
+              <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                {srs.dueCount===0 && <Icon name="check" size={18} stroke={2.4} style={{color:"#16a34a"}}/>}
+                <button onClick={startQuick10} style={{border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",...(srs.dueCount>0?{background:"#fff",color:"#4338ca"}:{background:"var(--color-accent)",color:"#fff"})}}>{t.quick10}</button>
+              </div>
+            )}
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,paddingTop:12,borderTop:srs.dueCount>0?"0.5px solid rgba(255,255,255,0.2)":"0.5px solid var(--color-border-tertiary)"}}>
             <span style={{fontSize:12,fontWeight:600,color:srs.dueCount>0?"rgba(255,255,255,0.9)":"var(--color-text-secondary)"}}>

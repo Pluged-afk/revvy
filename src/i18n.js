@@ -190,7 +190,7 @@ const T_EN = {
   progressTitle:"Your progress", dayStreak:"Day streak", accuracyLbl:"Accuracy", inReviewLbl:"In review",
   // ── Smart Review card (spaced repetition) ──
   srsTitle:"Smart Review", srsDue:"{n} card{s} due for review", srsCaughtUp:"All caught up · {n} card{s} in your deck",
-  srsEmpty:"Missed questions land here for spaced review", srsReview:"Review",
+  srsEmpty:"Missed questions land here for spaced review", srsReview:"Review", quick10:"Quick 10",
   srsExamIn:"Exam in {n} day{s}", srsSetExam:"Set your exam date",
   srsAddedMsg:"{n} question{s} added to Smart Review.",
   // ── Generic exit / exam-exit modals + exam result labels ──
@@ -318,6 +318,7 @@ const T_EN = {
 
 const T_LANGS = {
   "zh":{
+    "quick10":"快速10题",
     "diffDesc":["直接考核核心事实。","理解并运用知识点。标准考试难度。","跨多个概念推理。有难度但公平，绝不刁钻。"],
     "fixMisses":"订正错题 ({n})",
     "fixMissesTitle":"订正错题",
@@ -880,6 +881,7 @@ const T_LANGS = {
     }
   },
   "hi":{
+    "quick10":"झटपट 10",
     "diffDesc":["मुख्य तथ्य, सीधे पूछे गए।","विचारों को समझें और लागू करें। मानक परीक्षा स्तर।","कई अवधारणाओं पर तर्क करें। कठिन पर निष्पक्ष, कभी पेचीदा नहीं।"],
     "fixMisses":"गलतियाँ सुधारें ({n})",
     "fixMissesTitle":"गलतियाँ सुधारें",
@@ -1442,6 +1444,7 @@ const T_LANGS = {
     }
   },
   "es":{
+    "quick10":"10 rápidas",
     "diffDesc":["Datos clave, preguntados directamente.","Comprende y aplica las ideas. Nivel de examen estándar.","Razona entre varios conceptos. Difícil pero justo, nunca con trampa."],
     "fixMisses":"Corrige tus fallos ({n})",
     "fixMissesTitle":"Corrige tus fallos",
@@ -1999,6 +2002,7 @@ const T_LANGS = {
     }
   },
   "fr":{
+    "quick10":"10 rapides",
     "diffDesc":["Faits essentiels, demandés directement.","Comprendre et appliquer les idées. Niveau d'examen standard.","Raisonner sur plusieurs concepts. Difficile mais juste, jamais piégeux."],
     "fixMisses":"Corrige tes erreurs ({n})",
     "fixMissesTitle":"Corrige tes erreurs",
@@ -2537,6 +2541,7 @@ const T_LANGS = {
     }
   },
   "ar":{
+    "quick10":"10 سريعة",
     "diffDesc":["حقائق أساسية، تُسأل مباشرة.","افهم الأفكار وطبّقها. مستوى امتحان قياسي.","استدلّ عبر عدة مفاهيم. صعب لكن عادل، دون خداع."],
     "fixMisses":"صحّح أخطاءك ({n})",
     "fixMissesTitle":"صحّح أخطاءك",
@@ -3098,6 +3103,7 @@ const T_LANGS = {
     }
   },
   "pt":{
+    "quick10":"10 rápidas",
     "diffDesc":["Fatos essenciais, perguntados diretamente.","Entenda e aplique as ideias. Nível de prova padrão.","Raciocine entre vários conceitos. Difícil mas justo, nunca com pegadinha."],
     "fixMisses":"Corrija seus erros ({n})",
     "fixMissesTitle":"Corrija seus erros",
@@ -3654,6 +3660,7 @@ const T_LANGS = {
     }
   },
   "ru":{
+    "quick10":"Быстрые 10",
     "diffDesc":["Ключевые факты, спрошены напрямую.","Понимать и применять идеи. Стандартный уровень экзамена.","Рассуждать через несколько понятий. Сложно, но честно, без подвохов."],
     "fixMisses":"Исправить ошибки ({n})",
     "fixMissesTitle":"Исправить ошибки",
@@ -4213,6 +4220,7 @@ const T_LANGS = {
     }
   },
   "id":{
+    "quick10":"10 Cepat",
     "diffDesc":["Fakta inti, ditanya langsung.","Pahami dan terapkan idenya. Level ujian standar.","Bernalar lintas beberapa konsep. Sulit tapi adil, tanpa jebakan."],
     "fixMisses":"Perbaiki yang salah ({n})",
     "fixMissesTitle":"Perbaiki yang salah",
@@ -4770,6 +4778,7 @@ const T_LANGS = {
     }
   },
   "de":{
+    "quick10":"Schnelle 10",
     "diffDesc":["Kernfakten, direkt abgefragt.","Ideen verstehen und anwenden. Normales Prüfungsniveau.","Über mehrere Konzepte hinweg denken. Schwer aber fair, nie mit Fallstricken."],
     "fixMisses":"Fehler ausbessern ({n})",
     "fixMissesTitle":"Fehler ausbessern",
@@ -5327,6 +5336,7 @@ const T_LANGS = {
     }
   },
   "ja":{
+    "quick10":"クイック10",
     "diffDesc":["核心事実を直接問う。","考えを理解して応用する。標準的な試験レベル。","複数の概念にまたがって考える。手強いが公正、引っかけなし。"],
     "fixMisses":"間違いを直す ({n})",
     "fixMissesTitle":"間違いを直す",
@@ -5886,6 +5896,7 @@ const T_LANGS = {
     }
   },
   "tr":{
+    "quick10":"Hızlı 10",
     "diffDesc":["Temel gerçekler, doğrudan sorulur.","Fikirleri anla ve uygula. Standart sınav düzeyi.","Birkaç kavram arası akıl yürüt. Zor ama adil, asla kurnazca değil."],
     "fixMisses":"Yanlışları düzelt ({n})",
     "fixMissesTitle":"Yanlışları düzelt",
@@ -6444,6 +6455,7 @@ const T_LANGS = {
     }
   },
   "ko":{
+    "quick10":"빠른 10문제",
     "diffDesc":["핵심 사실을 직접 묻습니다.","개념을 이해하고 적용합니다. 표준 시험 수준.","여러 개념을 넘나들며 추론합니다. 어렵지만 공정하고, 함정은 없습니다."],
     "fixMisses":"틀린 문제 고치기 ({n})",
     "fixMissesTitle":"틀린 문제 고치기",
@@ -7006,6 +7018,7 @@ const T_LANGS = {
     }
   },
   "vi":{
+    "quick10":"10 nhanh",
     "diffDesc":["Sự kiện cốt lõi, hỏi trực tiếp.","Hiểu và áp dụng ý tưởng. Mức thi tiêu chuẩn.","Suy luận qua nhiều khái niệm. Khó nhưng công bằng, không đánh đố."],
     "fixMisses":"Sửa lỗi sai ({n})",
     "fixMissesTitle":"Sửa lỗi sai",
@@ -7565,6 +7578,7 @@ const T_LANGS = {
     }
   },
   "it":{
+    "quick10":"10 rapide",
     "diffDesc":["Fatti chiave, chiesti direttamente.","Comprendi e applica le idee. Livello d'esame standard.","Ragiona tra più concetti. Difficile ma giusto, mai con trabocchetti."],
     "fixMisses":"Correggi gli errori ({n})",
     "fixMissesTitle":"Correggi gli errori",
@@ -8118,6 +8132,7 @@ const T_LANGS = {
     }
   },
   "th":{
+    "quick10":"10 ข้อด่วน",
     "diffDesc":["ข้อเท็จจริงหลัก ถามตรงๆ","เข้าใจและนำแนวคิดไปใช้ ระดับข้อสอบมาตรฐาน","ใช้เหตุผลข้ามหลายแนวคิด ยากแต่ยุติธรรม ไม่มีกับดัก"],
     "fixMisses":"แก้ข้อที่ผิด ({n})",
     "fixMissesTitle":"แก้ข้อที่ผิด",
@@ -8677,6 +8692,7 @@ const T_LANGS = {
     }
   },
   "pl":{
+    "quick10":"Szybkie 10",
     "diffDesc":["Kluczowe fakty, pytane wprost.","Zrozum i zastosuj pomysły. Standardowy poziom egzaminu.","Rozumuj między kilkoma pojęciami. Trudne, ale uczciwe, nigdy podchwytliwe."],
     "fixMisses":"Popraw błędy ({n})",
     "fixMissesTitle":"Popraw błędy",
@@ -9235,6 +9251,7 @@ const T_LANGS = {
     }
   },
   "nl":{
+    "quick10":"Snelle 10",
     "diffDesc":["Kernfeiten, direct gevraagd.","Begrijp en pas de ideeën toe. Standaard examenniveau.","Redeneer over meerdere concepten. Moeilijk maar eerlijk, nooit met valstrikken."],
     "fixMisses":"Fouten herstellen ({n})",
     "fixMissesTitle":"Fouten herstellen",
@@ -9785,6 +9802,7 @@ const T_LANGS = {
     }
   },
   "sv":{
+    "quick10":"Snabba 10",
     "diffDesc":["Kärnfakta, frågas direkt.","Förstå och tillämpa idéerna. Standardnivå för prov.","Resonera över flera begrepp. Svårt men rättvist, aldrig lurigt."],
     "fixMisses":"Rätta dina misstag ({n})",
     "fixMissesTitle":"Rätta dina misstag",
@@ -10341,6 +10359,7 @@ const T_LANGS = {
     }
   },
   "he":{
+    "quick10":"10 מהירות",
     "diffDesc":["עובדות ליבה, נשאלות ישירות.","להבין וליישם את הרעיונות. רמת מבחן רגילה.","להסיק על פני כמה מושגים. קשה אך הוגן, לעולם לא מתחכם."],
     "fixMisses":"תקן את הטעויות ({n})",
     "fixMissesTitle":"תקן את הטעויות",
