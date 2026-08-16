@@ -24,7 +24,10 @@ const FEAT_ICONS = ["notes", "camera", "pencil", "layers", "chat", "globe"];
 // can show a clean SVG icon in front of it instead. Leaves the words intact.
 const stripEmoji = (s) => String(s ?? "").replace(/^[\u{1F000}-\u{1FAFF}☀-➿⬀-⯿←-⇿️‍\s]+/u, "").trim();
 // Icon per upload tab id (labels come from the translation data with emoji).
-const TAB_ICONS = { file: "folder", text: "pencil", photo: "camera" };
+const TAB_ICONS = { file: "folder", text: "pencil", photo: "camera", media: "play" };
+// Audio / video containers we accept for lecture transcription (Pro). Broad on
+// purpose; the transcriber pulls the audio out of whatever container it gets.
+const MEDIA_MAX_MB = 100;
 
 // Phone-style light/dark toggle: moon on the left, sun on the right, a knob that
 // slides to the side you're on (left = dark, right = light). `onDark` styles it
@@ -1640,6 +1643,8 @@ export default function StudyQuiz() {
   const requiresPassword = !!user?.identities?.some(i => i.provider === "email");
   const [tab,          setTab]          = useState("file");
   const [file,         setFile]         = useState(null);
+  const [mediaFile,    setMediaFile]    = useState(null); // audio/video for transcription (Pro)
+  const [mediaStatus,  setMediaStatus]  = useState("");   // loading-screen sub-message while transcribing
   const [textVal,      setTextVal]      = useState("");
   const [numQ,         setNumQ]         = useState(10);
   const [customQ,      setCustomQ]      = useState("25");
@@ -1799,6 +1804,7 @@ export default function StudyQuiz() {
   const srsAddedRef = useRef(null);
   const fileRef  = useRef();
   const photoRef = useRef();
+  const mediaRef = useRef();
   const examFileRef0=useRef(),examFileRef1=useRef(),examFileRef2=useRef(),examFileRef3=useRef(),examFileRef4=useRef();
   const examFileRefs=[examFileRef0,examFileRef1,examFileRef2,examFileRef3,examFileRef4];
   const [examMode,    setExamMode]    = useState(null);
@@ -2084,6 +2090,47 @@ export default function StudyQuiz() {
     fileIdCache.current.set(f, fileId);
     return fileId;
   }, [isPro, getToken]);
+
+  // Pick an audio/video file for transcription (Pro only; the Blob upload it
+  // rides on is Pro-gated server-side too).
+  const loadMedia = useCallback((f) => {
+    if (!f) return;
+    setError("");
+    if (!isPro) { setError(t.mediaProOnly); return; }
+    const mb = f.size / 1024 / 1024;
+    if (mb > MEDIA_MAX_MB) { setError(t.errMediaTooLarge.replace("{max}", MEDIA_MAX_MB)); return; }
+    setMediaFile({ raw: f, name: f.name, sizeMB: mb, mime: f.type });
+  }, [isPro, t]);
+
+  // Upload the media to Vercel Blob, kick off AssemblyAI transcription, and poll
+  // until the transcript is ready. Returns the transcript text (which then flows
+  // through the SAME content gate + generation as any pasted notes). The server
+  // deletes the Blob right after pulling the bytes, so nothing lingers publicly.
+  const transcribeMedia = useCallback(async (mf) => {
+    setMediaStatus(t.mediaUploading);
+    const token = await getToken?.();
+    const blob = await blobUpload(mf.name, mf.raw, {
+      access: "public",
+      handleUploadUrl: "/api/blob-upload",
+      clientPayload: token || "",
+    });
+    const sub = await fetch("/api/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(await authHeader()) },
+      body: JSON.stringify({ blobUrl: blob.url }),
+    });
+    const subData = await sub.json().catch(() => ({}));
+    if (!sub.ok || !subData.transcriptId) throw new Error(subData.error || t.errTranscribe);
+    setMediaStatus(t.mediaTranscribing);
+    const deadline = Date.now() + 6 * 60000; // give up after 6 minutes
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const p = await fetch(`/api/transcribe?id=${encodeURIComponent(subData.transcriptId)}`, { headers: { ...(await authHeader()) } });
+      const d = await p.json().catch(() => ({}));
+      if (d.status === "completed") { setMediaStatus(""); return String(d.text || "").trim(); }
+      if (d.status === "error" || Date.now() > deadline) { setMediaStatus(""); throw new Error(d.error || t.errTranscribe); }
+    }
+  }, [getToken, t]);
 
   const generateExam=useCallback(async()=>{
     if (requireLogin()) return;   // logged-out visitors are sent to sign-up
@@ -2417,14 +2464,22 @@ export default function StudyQuiz() {
     setError(""); setLimitHit(false);
     const finalType = canUseQType(qType)?qType:"mcq";
     const finalNumQ = effectiveNumQ();
-    if (tab==="file"||tab==="photo") {
+    if (tab==="media") {
+      if (!isPro) { setError(t.mediaProOnly); return; }
+      if (!mediaFile) { setError(t.errUploadFirst); return; }
+    } else if (tab==="file"||tab==="photo") {
       if (!file) { setError(t.errUploadFirst); return; }
     } else if (!textVal.trim()) { setError(t.errPasteFirst); return; }
 
     setScreen("loading");
     try {
       let blocks = [];
-      if (tab==="file"||tab==="photo") {
+      if (tab==="media") {
+        // Transcribe the lecture, then treat the transcript as pasted notes.
+        const transcript = await transcribeMedia(mediaFile);
+        if (!transcript) throw new Error(t.errTranscribe);
+        blocks=[{type:"text",text:`Lecture transcript:\n\n${transcript}`}];
+      } else if (tab==="file"||tab==="photo") {
         if (file.type==="text") blocks=[{type:"text",text:`Study material (${file.name}):\n\n${file.content}`}];
         else {
           const fileId = await uploadFileToAnthropic(file.raw);
@@ -2480,7 +2535,7 @@ export default function StudyQuiz() {
       setError(err.message.includes("parse")?t.errAiFormat:err.message);
       setScreen("upload");
     }
-  },[isPro,qType,tab,file,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,requireLogin]);
+  },[isPro,qType,tab,file,mediaFile,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,transcribeMedia,requireLogin]);
 
   // Generate a fresh MCQ quiz focused on the topics the learner is weakest on, 
   // no upload needed. Uses accumulated topic mastery + sample missed questions to
@@ -2542,7 +2597,7 @@ export default function StudyQuiz() {
     });
     setSelected(null);
   };
-  const newMat  = () => { setScreen("upload");setQuiz(null);setFile(null);setTextVal("");setError(""); };
+  const newMat  = () => { setScreen("upload");setQuiz(null);setFile(null);setMediaFile(null);setMediaStatus("");setTextVal("");setError(""); };
   // Feature D: re-drill ONLY the questions just missed, as a fresh mini-quiz
   // (active recall on exactly your weak spots, right now). Reuses the whole quiz
   // flow, no new generation, no quota spent, and no lockout: keep fixing until
@@ -2860,7 +2915,7 @@ export default function StudyQuiz() {
         )}
         <h2 style={Sb.h2}>{t.uploadTitle}</h2>
         <div style={{display:"flex",gap:5,marginBottom:16}}>
-          {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4338ca":"var(--color-border-secondary)",background:tab===id?"#4338ca":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name={TAB_ICONS[id]} size={15}/>{stripEmoji(lb)}</button>)}
+          {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]],["media",t.mediaTab]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4338ca":"var(--color-border-secondary)",background:tab===id?"#4338ca":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name={TAB_ICONS[id]} size={15}/>{stripEmoji(lb)}</button>)}
         </div>
         {tab==="file" && (
           <div style={{...Sb.dropzone,...(drag?{borderColor:"#4338ca",background:"var(--color-sel-tint)"}:{}),...(file?{borderStyle:"solid",borderColor:"#4338ca"}:{})}}
@@ -2885,6 +2940,18 @@ export default function StudyQuiz() {
           </div>
         )}
         {tab==="text" && <textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>}
+        {tab==="media" && (isPro ? (
+          <div style={{...Sb.dropzone,...(mediaFile?{borderStyle:"solid",borderColor:"#4338ca"}:{})}} onClick={()=>mediaRef.current.click()}>
+            <input ref={mediaRef} type="file" accept="audio/*,video/*" style={{display:"none"}} onChange={e=>loadMedia(e.target.files[0])}/>
+            {mediaFile?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="play" size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)",wordBreak:"break-word"}}>{mediaFile.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(mediaFile.sizeMB*1024*1024)} · {t.tapChange}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:4}}><Icon name="play" size={36} stroke={1.4}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.mediaTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.mediaHint}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{t.mediaSizeHint.replace("{max}",MEDIA_MAX_MB)}</div></>)}
+          </div>
+        ) : (
+          <div style={{...Sb.dropzone,cursor:"pointer"}} onClick={()=>setShowProModal(true)}>
+            <div style={{color:"var(--color-accent)",marginBottom:6}}><Icon name="play" size={34} stroke={1.4}/></div>
+            <div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.mediaTitle}</div>
+            <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:2}}>{t.mediaProOnly}</div>
+          </div>
+        ))}
         {error && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,lineHeight:1.5,display:"flex",alignItems:"flex-start",gap:7}}><Icon name="alert" size={15} style={{flexShrink:0,marginTop:1}}/><span>{error}</span></div>}
         {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4338ca",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="gem" size={16}/>{t.getMoreQuestions}</button>}
         </div>
@@ -3011,7 +3078,7 @@ export default function StudyQuiz() {
   if (screen==="loading") return (
     <div style={{...Sb.root,alignItems:"center",justifyContent:"center",padding:"0 24px",textAlign:"center",minHeight:"100vh",display:"flex",flexDirection:"column"}}><style>{CSS}</style>
       <div className="spin-ring" style={{width:52,height:52,borderRadius:"50%",border:"4px solid var(--color-border-tertiary)",borderTopColor:"#4338ca"}}/>
-      <h2 style={{...Sb.h2,textAlign:"center",marginTop:28}}>{t.generating}</h2>
+      <h2 style={{...Sb.h2,textAlign:"center",marginTop:28}}>{mediaStatus || t.generating}</h2>
       <div style={{display:"flex",flexDirection:"column",gap:12,marginTop:24,alignItems:"flex-start"}}>
         {t.genSteps.map((s,i)=>(
           <div key={i} className={`step step-${i}`} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:"var(--color-text-secondary)",opacity:0}}>

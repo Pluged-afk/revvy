@@ -29,7 +29,15 @@ export default async function handler(req, res) {
         const rows = await sql`SELECT is_pro FROM profiles WHERE clerk_user_id = ${userId} OR id = ${userId} LIMIT 1`;
         if (!rows[0]?.is_pro) throw new Error("Large uploads are a Pro feature.");
         return {
-          allowedContentTypes: ["application/pdf", "image/png", "image/jpeg", "image/webp", "image/gif"],
+          allowedContentTypes: [
+            "application/pdf", "image/png", "image/jpeg", "image/webp", "image/gif",
+            // Audio / video for lecture transcription (Pro feature). Kept broad
+            // because browsers report container types inconsistently.
+            "audio/mpeg", "audio/mp3", "audio/mp4", "audio/wav", "audio/x-wav",
+            "audio/webm", "audio/ogg", "audio/aac", "audio/x-m4a", "audio/flac",
+            "video/mp4", "video/quicktime", "video/webm", "video/x-matroska",
+            "video/x-msvideo", "video/mpeg",
+          ],
           maximumSizeInBytes: 100 * 1024 * 1024, // 100 MB ceiling for Pro
           addRandomSuffix: true, // unique blob name per upload, no conflicts
           tokenPayload: JSON.stringify({ userId }),

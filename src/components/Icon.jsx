@@ -188,6 +188,7 @@ const PATHS = {
   ),
   x: <path d="M6 6l12 12M18 6L6 18" />,
   pause: <path d="M9 5v14M15 5v14" />,
+  play: <path d="M8 5.5v13l11-6.5z" />,
   trophy: (
     <>
       <path d="M8 4h8v5a4 4 0 0 1-8 0V4z" />
