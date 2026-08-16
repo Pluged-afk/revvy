@@ -38,6 +38,10 @@ export default function Navbar() {
               {l.label}
             </NavLink>
           ))}
+          {/* CTA lives inside the menu on mobile (hidden on desktop via CSS). */}
+          <Link to="/app" className="nav-menu-cta" onClick={() => setOpen(false)}>
+            {user ? "Open App →" : "Try Revyy Free"}
+          </Link>
         </div>
 
         <div className="nav-right">

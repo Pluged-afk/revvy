@@ -37,6 +37,7 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
   font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
   color: var(--ink-soft);
   background: var(--paper);
+  overflow-x: clip; /* belt-and-suspenders against any horizontal overflow on mobile */
 }
 .site main { flex: 1; }
 
@@ -94,6 +95,7 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 .nav-links a.active::after { content: ""; display: block; height: 2px; width: 18px; background: var(--clay); border-radius: 2px; margin: 3px auto 0; }
 .nav-right { display: flex; align-items: center; gap: 10px; }
 .nav-toggle { display: none; background: none; border: none; cursor: pointer; font-size: 22px; color: var(--ink); padding: 4px 8px; line-height: 1; }
+.nav-menu-cta { display: none; }  /* shown only inside the open mobile menu */
 
 /* logo mark */
 .logo-mark { width: 30px; height: 30px; border-radius: 9px; background: var(--indigo-ink); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -102,7 +104,7 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 /* ── Hero (light, editorial) ─────────────────────────────────── */
 .hero { position: relative; overflow: hidden; background: var(--paper); color: var(--ink); padding: 84px 0 40px; }
 .hero .container { position: relative; z-index: 1; }
-.hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: center; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 56px; align-items: center; }
 .hero h1 { color: var(--ink); font-size: clamp(38px, 5.4vw, 60px); font-weight: 600; max-width: 620px; margin: 0 0 22px; }
 .hero-sub { font-size: clamp(16px, 1.6vw, 19px); color: var(--ink-soft); line-height: 1.62; max-width: 520px; margin: 0 0 30px; }
 .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -155,8 +157,8 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 
 /* ── Hero quiz preview (a faithful replica of the app's quiz screen,
    as a horizontal-scroll carousel of real example questions) ── */
-.qwrap { position: relative; }
-.qscroll { display: flex; gap: 18px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 2px; }
+.qwrap { position: relative; min-width: 0; }
+.qscroll { display: flex; gap: 18px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 2px; min-width: 0; }
 .qscroll::-webkit-scrollbar { display: none; }
 .qcard { flex: 0 0 100%; scroll-snap-align: center; background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-md); overflow: hidden; }
 .qcard-top { display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; border-bottom: 1px solid var(--line); }
@@ -335,7 +337,7 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 960px) {
-  .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+  .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 40px; }
   .hero { padding: 64px 0 32px; }
   .feature-list { grid-template-columns: 1fr; gap: 0 0; }
 }
@@ -346,12 +348,19 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
   .contact-grid { grid-template-columns: 1fr; }
   .pricing-grid-3 { grid-template-columns: 1fr; max-width: 460px; }
 }
-@media (max-width: 720px) {
+/* Nav collapses to a hamburger before the horizontal links would crowd the
+   CTA, so tablets (~768px) get the clean menu instead of an overflowing bar. */
+@media (max-width: 860px) {
   .nav-links { display: none; }
   .nav-links.open { display: flex; position: absolute; top: 68px; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 2px; background: var(--paper); border-bottom: 1px solid var(--line); padding: 10px 16px 16px; box-shadow: var(--shadow-md); }
   .nav-links.open a { padding: 12px 14px; }
   .nav-links a.active::after { display: none; }
   .nav-toggle { display: block; }
+  /* The top CTA moves into the menu, so logo + hamburger fit comfortably. */
+  .nav-right .btn { display: none; }
+  .nav-links.open .nav-menu-cta { display: block; margin-top: 8px; text-align: center; background: var(--ink); color: var(--paper); border-radius: 10px; font-weight: 600; }
+}
+@media (max-width: 720px) {
   .section { padding: 56px 0; }
   .grid-2, .grid-3, .grid-4, .steps, .pricing-grid, .pricing-grid-3 { grid-template-columns: 1fr; }
   .proof-stats { gap: 30px; }
