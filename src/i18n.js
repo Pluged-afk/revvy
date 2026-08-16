@@ -233,6 +233,10 @@ const T_EN = {
   errFileOver:"File is {size}, over your {limit}MB limit.", errUpgradeSize:"Upgrade to Pro for unlimited size.",
   errUploadFirst:"Please upload a file first.", errPasteFirst:"Please paste study text first.",
   errUnexpectedFormat:"Unexpected format, please try again.", errAiFormat:"AI returned unexpected format. Please try again.",
+  // Content gate (feature F) block messages, shown when an upload can't be used.
+  gateExplicit:"This looks like explicit content, so it can't be turned into a quiz. Upload study material instead.",
+  gateHarmful:"This looks like harmful content, so it can't be turned into a quiz. Upload study material instead.",
+  gateNonstudy:"We couldn't find study material to quiz you on here. Try notes, an article, slides, or a textbook page.",
   // ── Login / account / Pro badges ──
   loginPrompt:"Log in to save your quizzes, track your daily questions and upgrade to Pro.", loginOrSignup:"Log in or sign up →",
   logIn:"Log in", youArePro:"✓ You're Pro", makeQuiz:"Make a quiz", getMoreQuestions:"Get more questions",
@@ -318,6 +322,9 @@ const T_EN = {
 
 const T_LANGS = {
   "zh":{
+    "gateExplicit":"这看起来是露骨内容，无法用于生成测验。请上传学习材料。",
+    "gateHarmful":"这看起来是有害内容，无法用于生成测验。请上传学习材料。",
+    "gateNonstudy":"我们在这里没有找到可用于测验的学习材料。请试试笔记、文章、幻灯片或课本页面。",
     "quick10":"快速10题",
     "diffDesc":["直接考核核心事实。","理解并运用知识点。标准考试难度。","跨多个概念推理。有难度但公平，绝不刁钻。"],
     "fixMisses":"订正错题 ({n})",
@@ -881,6 +888,9 @@ const T_LANGS = {
     }
   },
   "hi":{
+    "gateExplicit":"यह अश्लील सामग्री लगती है, इसलिए इससे क्विज़ नहीं बनाई जा सकती। कृपया अध्ययन सामग्री अपलोड करें।",
+    "gateHarmful":"यह हानिकारक सामग्री लगती है, इसलिए इससे क्विज़ नहीं बनाई जा सकती। कृपया अध्ययन सामग्री अपलोड करें।",
+    "gateNonstudy":"हमें यहाँ क्विज़ के लिए कोई अध्ययन सामग्री नहीं मिली। नोट्स, कोई लेख, स्लाइड या पाठ्यपुस्तक का पृष्ठ आज़माएँ।",
     "quick10":"झटपट 10",
     "diffDesc":["मुख्य तथ्य, सीधे पूछे गए।","विचारों को समझें और लागू करें। मानक परीक्षा स्तर।","कई अवधारणाओं पर तर्क करें। कठिन पर निष्पक्ष, कभी पेचीदा नहीं।"],
     "fixMisses":"गलतियाँ सुधारें ({n})",
@@ -1444,6 +1454,9 @@ const T_LANGS = {
     }
   },
   "es":{
+    "gateExplicit":"Esto parece contenido explícito, así que no se puede convertir en un cuestionario. Sube material de estudio.",
+    "gateHarmful":"Esto parece contenido dañino, así que no se puede convertir en un cuestionario. Sube material de estudio.",
+    "gateNonstudy":"No encontramos material de estudio para hacerte preguntas. Prueba con apuntes, un artículo, diapositivas o una página de libro de texto.",
     "quick10":"10 rápidas",
     "diffDesc":["Datos clave, preguntados directamente.","Comprende y aplica las ideas. Nivel de examen estándar.","Razona entre varios conceptos. Difícil pero justo, nunca con trampa."],
     "fixMisses":"Corrige tus fallos ({n})",
@@ -2002,6 +2015,9 @@ const T_LANGS = {
     }
   },
   "fr":{
+    "gateExplicit":"Ceci ressemble à du contenu explicite, il ne peut donc pas devenir un quiz. Importez plutôt du matériel d'étude.",
+    "gateHarmful":"Ceci ressemble à du contenu nuisible, il ne peut donc pas devenir un quiz. Importez plutôt du matériel d'étude.",
+    "gateNonstudy":"Nous n'avons pas trouvé de matière à réviser ici. Essayez des notes, un article, des diapositives ou une page de manuel.",
     "quick10":"10 rapides",
     "diffDesc":["Faits essentiels, demandés directement.","Comprendre et appliquer les idées. Niveau d'examen standard.","Raisonner sur plusieurs concepts. Difficile mais juste, jamais piégeux."],
     "fixMisses":"Corrige tes erreurs ({n})",
@@ -2541,6 +2557,9 @@ const T_LANGS = {
     }
   },
   "ar":{
+    "gateExplicit":"يبدو أن هذا محتوى صريح، لذا لا يمكن تحويله إلى اختبار. يُرجى رفع مواد دراسية.",
+    "gateHarmful":"يبدو أن هذا محتوى ضار، لذا لا يمكن تحويله إلى اختبار. يُرجى رفع مواد دراسية.",
+    "gateNonstudy":"لم نجد هنا مادة دراسية لنختبرك بها. جرّب ملاحظات أو مقالة أو شرائح أو صفحة من كتاب.",
     "quick10":"10 سريعة",
     "diffDesc":["حقائق أساسية، تُسأل مباشرة.","افهم الأفكار وطبّقها. مستوى امتحان قياسي.","استدلّ عبر عدة مفاهيم. صعب لكن عادل، دون خداع."],
     "fixMisses":"صحّح أخطاءك ({n})",
@@ -3103,6 +3122,9 @@ const T_LANGS = {
     }
   },
   "pt":{
+    "gateExplicit":"Isto parece conteúdo explícito, então não pode virar um quiz. Envie material de estudo.",
+    "gateHarmful":"Isto parece conteúdo prejudicial, então não pode virar um quiz. Envie material de estudo.",
+    "gateNonstudy":"Não encontramos material de estudo para testar você aqui. Tente anotações, um artigo, slides ou uma página de livro.",
     "quick10":"10 rápidas",
     "diffDesc":["Fatos essenciais, perguntados diretamente.","Entenda e aplique as ideias. Nível de prova padrão.","Raciocine entre vários conceitos. Difícil mas justo, nunca com pegadinha."],
     "fixMisses":"Corrija seus erros ({n})",
@@ -3660,6 +3682,9 @@ const T_LANGS = {
     }
   },
   "ru":{
+    "gateExplicit":"Похоже на материалы откровенного характера, поэтому из них нельзя сделать тест. Загрузите учебный материал.",
+    "gateHarmful":"Похоже на вредный контент, поэтому из него нельзя сделать тест. Загрузите учебный материал.",
+    "gateNonstudy":"Здесь не нашлось учебного материала для теста. Попробуйте конспект, статью, слайды или страницу учебника.",
     "quick10":"Быстрые 10",
     "diffDesc":["Ключевые факты, спрошены напрямую.","Понимать и применять идеи. Стандартный уровень экзамена.","Рассуждать через несколько понятий. Сложно, но честно, без подвохов."],
     "fixMisses":"Исправить ошибки ({n})",
@@ -4220,6 +4245,9 @@ const T_LANGS = {
     }
   },
   "id":{
+    "gateExplicit":"Ini tampak seperti konten eksplisit, jadi tidak bisa dijadikan kuis. Unggah materi belajar.",
+    "gateHarmful":"Ini tampak seperti konten berbahaya, jadi tidak bisa dijadikan kuis. Unggah materi belajar.",
+    "gateNonstudy":"Kami tidak menemukan materi belajar untuk diujikan di sini. Coba catatan, artikel, slide, atau halaman buku.",
     "quick10":"10 Cepat",
     "diffDesc":["Fakta inti, ditanya langsung.","Pahami dan terapkan idenya. Level ujian standar.","Bernalar lintas beberapa konsep. Sulit tapi adil, tanpa jebakan."],
     "fixMisses":"Perbaiki yang salah ({n})",
@@ -4778,6 +4806,9 @@ const T_LANGS = {
     }
   },
   "de":{
+    "gateExplicit":"Das wirkt wie expliziter Inhalt und lässt sich nicht in ein Quiz umwandeln. Lade stattdessen Lernmaterial hoch.",
+    "gateHarmful":"Das wirkt wie schädlicher Inhalt und lässt sich nicht in ein Quiz umwandeln. Lade stattdessen Lernmaterial hoch.",
+    "gateNonstudy":"Wir haben hier kein Lernmaterial zum Abfragen gefunden. Versuche Notizen, einen Artikel, Folien oder eine Lehrbuchseite.",
     "quick10":"Schnelle 10",
     "diffDesc":["Kernfakten, direkt abgefragt.","Ideen verstehen und anwenden. Normales Prüfungsniveau.","Über mehrere Konzepte hinweg denken. Schwer aber fair, nie mit Fallstricken."],
     "fixMisses":"Fehler ausbessern ({n})",
@@ -5336,6 +5367,9 @@ const T_LANGS = {
     }
   },
   "ja":{
+    "gateExplicit":"これは露骨な内容のようで、クイズにはできません。学習用の資料をアップロードしてください。",
+    "gateHarmful":"これは有害な内容のようで、クイズにはできません。学習用の資料をアップロードしてください。",
+    "gateNonstudy":"ここには出題できる学習内容が見つかりませんでした。ノート、記事、スライド、教科書のページなどをお試しください。",
     "quick10":"クイック10",
     "diffDesc":["核心事実を直接問う。","考えを理解して応用する。標準的な試験レベル。","複数の概念にまたがって考える。手強いが公正、引っかけなし。"],
     "fixMisses":"間違いを直す ({n})",
@@ -5896,6 +5930,9 @@ const T_LANGS = {
     }
   },
   "tr":{
+    "gateExplicit":"Bu, müstehcen içerik gibi görünüyor, bu yüzden sınava dönüştürülemez. Lütfen çalışma materyali yükleyin.",
+    "gateHarmful":"Bu, zararlı içerik gibi görünüyor, bu yüzden sınava dönüştürülemez. Lütfen çalışma materyali yükleyin.",
+    "gateNonstudy":"Burada sınav yapılacak bir çalışma materyali bulamadık. Notlar, bir makale, slaytlar veya ders kitabı sayfası deneyin.",
     "quick10":"Hızlı 10",
     "diffDesc":["Temel gerçekler, doğrudan sorulur.","Fikirleri anla ve uygula. Standart sınav düzeyi.","Birkaç kavram arası akıl yürüt. Zor ama adil, asla kurnazca değil."],
     "fixMisses":"Yanlışları düzelt ({n})",
@@ -6455,6 +6492,9 @@ const T_LANGS = {
     }
   },
   "ko":{
+    "gateExplicit":"노골적인 콘텐츠로 보여 퀴즈로 만들 수 없어요. 학습 자료를 올려 주세요.",
+    "gateHarmful":"유해한 콘텐츠로 보여 퀴즈로 만들 수 없어요. 학습 자료를 올려 주세요.",
+    "gateNonstudy":"여기서 퀴즈로 낼 학습 자료를 찾지 못했어요. 필기, 기사, 슬라이드, 교과서 페이지를 시도해 보세요.",
     "quick10":"빠른 10문제",
     "diffDesc":["핵심 사실을 직접 묻습니다.","개념을 이해하고 적용합니다. 표준 시험 수준.","여러 개념을 넘나들며 추론합니다. 어렵지만 공정하고, 함정은 없습니다."],
     "fixMisses":"틀린 문제 고치기 ({n})",
@@ -7018,6 +7058,9 @@ const T_LANGS = {
     }
   },
   "vi":{
+    "gateExplicit":"Nội dung này có vẻ phản cảm nên không thể tạo bài kiểm tra. Hãy tải lên tài liệu học tập.",
+    "gateHarmful":"Nội dung này có vẻ có hại nên không thể tạo bài kiểm tra. Hãy tải lên tài liệu học tập.",
+    "gateNonstudy":"Chúng tôi không tìm thấy tài liệu học để kiểm tra ở đây. Hãy thử ghi chú, một bài viết, slide hoặc trang sách giáo khoa.",
     "quick10":"10 nhanh",
     "diffDesc":["Sự kiện cốt lõi, hỏi trực tiếp.","Hiểu và áp dụng ý tưởng. Mức thi tiêu chuẩn.","Suy luận qua nhiều khái niệm. Khó nhưng công bằng, không đánh đố."],
     "fixMisses":"Sửa lỗi sai ({n})",
@@ -7578,6 +7621,9 @@ const T_LANGS = {
     }
   },
   "it":{
+    "gateExplicit":"Sembra contenuto esplicito, quindi non può diventare un quiz. Carica invece materiale di studio.",
+    "gateHarmful":"Sembra contenuto dannoso, quindi non può diventare un quiz. Carica invece materiale di studio.",
+    "gateNonstudy":"Non abbiamo trovato materiale di studio da interrogare qui. Prova appunti, un articolo, diapositive o una pagina di libro.",
     "quick10":"10 rapide",
     "diffDesc":["Fatti chiave, chiesti direttamente.","Comprendi e applica le idee. Livello d'esame standard.","Ragiona tra più concetti. Difficile ma giusto, mai con trabocchetti."],
     "fixMisses":"Correggi gli errori ({n})",
@@ -8132,6 +8178,9 @@ const T_LANGS = {
     }
   },
   "th":{
+    "gateExplicit":"เนื้อหานี้ดูโจ่งแจ้ง จึงนำมาสร้างแบบทดสอบไม่ได้ กรุณาอัปโหลดสื่อการเรียน",
+    "gateHarmful":"เนื้อหานี้ดูเป็นอันตราย จึงนำมาสร้างแบบทดสอบไม่ได้ กรุณาอัปโหลดสื่อการเรียน",
+    "gateNonstudy":"เราไม่พบเนื้อหาการเรียนสำหรับออกข้อสอบที่นี่ ลองใช้โน้ต บทความ สไลด์ หรือหน้าหนังสือเรียน",
     "quick10":"10 ข้อด่วน",
     "diffDesc":["ข้อเท็จจริงหลัก ถามตรงๆ","เข้าใจและนำแนวคิดไปใช้ ระดับข้อสอบมาตรฐาน","ใช้เหตุผลข้ามหลายแนวคิด ยากแต่ยุติธรรม ไม่มีกับดัก"],
     "fixMisses":"แก้ข้อที่ผิด ({n})",
@@ -8692,6 +8741,9 @@ const T_LANGS = {
     }
   },
   "pl":{
+    "gateExplicit":"To wygląda na treści o charakterze jednoznacznym, więc nie da się z tego zrobić quizu. Prześlij materiał do nauki.",
+    "gateHarmful":"To wygląda na szkodliwe treści, więc nie da się z tego zrobić quizu. Prześlij materiał do nauki.",
+    "gateNonstudy":"Nie znaleźliśmy tu materiału do nauki, z którego można zrobić quiz. Wypróbuj notatki, artykuł, slajdy lub stronę podręcznika.",
     "quick10":"Szybkie 10",
     "diffDesc":["Kluczowe fakty, pytane wprost.","Zrozum i zastosuj pomysły. Standardowy poziom egzaminu.","Rozumuj między kilkoma pojęciami. Trudne, ale uczciwe, nigdy podchwytliwe."],
     "fixMisses":"Popraw błędy ({n})",
@@ -9251,6 +9303,9 @@ const T_LANGS = {
     }
   },
   "nl":{
+    "gateExplicit":"Dit lijkt expliciete inhoud, dus er kan geen quiz van worden gemaakt. Upload in plaats daarvan studiemateriaal.",
+    "gateHarmful":"Dit lijkt schadelijke inhoud, dus er kan geen quiz van worden gemaakt. Upload in plaats daarvan studiemateriaal.",
+    "gateNonstudy":"We konden hier geen studiemateriaal vinden om je over te overhoren. Probeer aantekeningen, een artikel, dia's of een lesboekpagina.",
     "quick10":"Snelle 10",
     "diffDesc":["Kernfeiten, direct gevraagd.","Begrijp en pas de ideeën toe. Standaard examenniveau.","Redeneer over meerdere concepten. Moeilijk maar eerlijk, nooit met valstrikken."],
     "fixMisses":"Fouten herstellen ({n})",
@@ -9802,6 +9857,9 @@ const T_LANGS = {
     }
   },
   "sv":{
+    "gateExplicit":"Det här ser ut som explicit innehåll och kan inte bli ett quiz. Ladda upp studiematerial i stället.",
+    "gateHarmful":"Det här ser ut som skadligt innehåll och kan inte bli ett quiz. Ladda upp studiematerial i stället.",
+    "gateNonstudy":"Vi hittade inget studiematerial att fråga dig om här. Prova anteckningar, en artikel, bilder eller en lärobokssida.",
     "quick10":"Snabba 10",
     "diffDesc":["Kärnfakta, frågas direkt.","Förstå och tillämpa idéerna. Standardnivå för prov.","Resonera över flera begrepp. Svårt men rättvist, aldrig lurigt."],
     "fixMisses":"Rätta dina misstag ({n})",
@@ -10359,6 +10417,9 @@ const T_LANGS = {
     }
   },
   "he":{
+    "gateExplicit":"זה נראה כמו תוכן מפורש, ולכן אי אפשר להפוך אותו לבוחן. אנא העלה חומר לימוד.",
+    "gateHarmful":"זה נראה כמו תוכן מזיק, ולכן אי אפשר להפוך אותו לבוחן. אנא העלה חומר לימוד.",
+    "gateNonstudy":"לא מצאנו כאן חומר לימוד לבחון אותך עליו. נסה סיכומים, מאמר, שקופיות או עמוד מספר לימוד.",
     "quick10":"10 מהירות",
     "diffDesc":["עובדות ליבה, נשאלות ישירות.","להבין וליישם את הרעיונות. רמת מבחן רגילה.","להסיק על פני כמה מושגים. קשה אך הוגן, לעולם לא מתחכם."],
     "fixMisses":"תקן את הטעויות ({n})",

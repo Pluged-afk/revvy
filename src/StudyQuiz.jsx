@@ -355,7 +355,45 @@ Return ONLY raw JSON, no markdown: {"verdict":"answer_correct","explanation":"..
   };
 }
 
-// Generate one section of a standardized mock exam from its spec (no upload), 
+// Content gate (feature F, safety). Before generating, judge the uploaded
+// material by INTENT, not surface keywords, so factual/educational content on
+// ANY subject passes (Wikipedia, articles, studies, and sensitive-but-academic
+// topics like anatomy, war or toxicology) and only genuine porn / CSAM / hate /
+// weapon-instructions / junk is blocked. Runs on the same blocks (image / pdf /
+// text) as generation, so it sees the real content. Errs toward allowing, and
+// FAILS OPEN on any error so an infra hiccup never blocks a real learner.
+async function gateContent({ blocks, uiLangName }) {
+  const prompt = `You gate uploads for a study app. A student wants to make a quiz from this material. Judge it and return ONLY JSON: {"decision":"allow"|"block","category":"ok"|"explicit"|"harmful"|"nonstudy","reason":"a few words"}.
+
+ALLOW anything a person could genuinely learn from or be tested on, on ANY subject and in ANY format: textbooks, notes, transcripts, slides, articles, encyclopedia or Wikipedia pages, news, research papers or abstracts, documentation, study guides. Informational content counts fully; it does NOT need to be a textbook. A factual article about space, a medical study, or a Wikipedia page IS valid study material. Sensitive topics treated factually (anatomy, reproduction, medicine, drugs, mental health, war, toxicology, weapons in a historical or scientific context, religion, politics) are ALLOWED.
+
+BLOCK only when it is clearly NOT for learning:
+- "explicit": pornographic or erotic content meant for arousal, or ANY sexual content involving minors.
+- "harmful": gratuitous gore, content promoting hatred or harassment of a group, or operational step-by-step instructions to build weapons or seriously harm people.
+- "nonstudy": no learnable substance, e.g. spam, advertising, a private personal conversation, a shopping list, pure gibberish, or too little text to quiz on.
+
+When unsure, choose "allow". A real student's material must never be blocked for being informational or for factually covering a hard topic. Only "block" when it clearly matches a block category.${uiLangName ? ` Write "reason" in ${uiLangName}.` : ""}`;
+  try {
+    const res = await fetch("/api/anthropic", {
+      method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
+      body: JSON.stringify({ model:AI_MODEL, max_tokens:120,
+        system:"You are a precise, fair content classifier for an educational app. Return ONLY valid raw JSON.",
+        messages:[{ role:"user", content:[...(blocks||[]),{type:"text",text:prompt}] }] }),
+    });
+    if (!res.ok) return { decision:"allow", category:"ok" }; // fail open
+    const parsed = JSON.parse(stripFences(await readStream(res)));
+    const category = ["ok","explicit","harmful","nonstudy"].includes(parsed.category) ? parsed.category : "ok";
+    const decision = (parsed.decision === "block" && category !== "ok") ? "block" : "allow";
+    return { decision, category, reason: String(parsed.reason || "").slice(0, 120) };
+  } catch { return { decision:"allow", category:"ok" }; } // fail open on any error
+}
+// Map a gate block category to the localized message shown to the learner.
+const gateMessage = (category, t) =>
+  category === "explicit" ? t.gateExplicit :
+  category === "harmful"  ? t.gateHarmful  :
+  t.gateNonstudy;
+
+// Generate one section of a standardized mock exam from its spec (no upload),
 // authentic style, self-contained MCQs. Lenient on count: returns whatever
 // well-formed questions the model produces.
 async function callMockSection(exam, section, tilt) {
@@ -2061,16 +2099,6 @@ export default function StudyQuiz() {
     const dg = DIFFICULTY[diff] || DIFFICULTY[1];
     const totalQ = examMode==="custom" ? sectionTotalQs : (isPro ? Math.min(Math.max(parseInt(examTotalQ)||5,1),100) : 20);
 
-    // Exam questions count toward the daily question limit (reserve them first).
-    const consumed = await consumeQuestions(totalQ);
-    if (consumed && consumed.allowed === false) {
-      const left = consumed.remaining ?? 0;
-      setLimitHit(true); // Pro-only screen → offer the question-pack button
-      setError(t.errExamOverLimit.replace("{q}",totalQ).replace("{left}",left).replace("{limit}",consumed.daily_limit));
-      setScreen("exam_setup");
-      return;
-    }
-
     // Exams carry model answers/explanations → ~200 tokens/Q. Cap at 20k.
     const maxTokens = Math.min(Math.max(Math.round(totalQ*260)+3000, 6000), 48000);
 
@@ -2107,6 +2135,18 @@ export default function StudyQuiz() {
           ? {type:"document",source:{type:"file",file_id:fid}}
           : {type:"image",source:{type:"file",file_id:fid}};
       }));
+      // Content gate BEFORE charging quota (same as the quiz flow): stop
+      // explicit / harmful / non-study uploads; real study material passes.
+      const gate = await gateContent({ blocks, uiLangName: LANGS[lang]?.name });
+      if (gate.decision === "block") { setError(gateMessage(gate.category, t)); setScreen("exam_setup"); return; }
+      // Exam questions count toward the daily question limit (reserve them now).
+      const consumed = await consumeQuestions(totalQ);
+      if (consumed && consumed.allowed === false) {
+        const left = consumed.remaining ?? 0;
+        setLimitHit(true); // Pro-only screen → offer the question-pack button
+        setError(t.errExamOverLimit.replace("{q}",totalQ).replace("{left}",left).replace("{limit}",consumed.daily_limit));
+        setScreen("exam_setup"); return;
+      }
       const attempt=async(scale)=>{
         const { prompt, marksMap }=buildPrompt(scale);
         const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json", ...(await authHeader())},
@@ -2381,21 +2421,6 @@ export default function StudyQuiz() {
       if (!file) { setError(t.errUploadFirst); return; }
     } else if (!textVal.trim()) { setError(t.errPasteFirst); return; }
 
-    // Enforce the daily question limit (server-side; reserves the questions).
-    const consumed = await consumeQuestions(finalNumQ);
-    if (consumed && consumed.allowed === false) {
-      const left = consumed.remaining ?? 0;
-      setLimitHit(true); // offer the question-pack button under the error (all users)
-      setError(
-        isPro
-          ? `Daily limit reached (${consumed.daily_limit}/day). You have ${left} questions left, grab a question pack for more.`
-          : left > 0
-            ? `That's ${finalNumQ} questions but you only have ${left} left today. Lower the count, watch an ad for +10, buy a question pack, or go Pro.`
-            : `Daily question limit reached. Watch an ad for +10, buy a question pack, or upgrade to Pro.`
-      );
-      return;
-    }
-
     setScreen("loading");
     try {
       let blocks = [];
@@ -2409,6 +2434,26 @@ export default function StudyQuiz() {
         }
       } else {
         blocks=[{type:"text",text:`Study material:\n\n${textVal.trim()}`}];
+      }
+      // Content gate BEFORE charging quota, so a wrongly-blocked upload never
+      // costs a real learner. Explicit / harmful / non-study material is stopped
+      // here; everything a student could genuinely study from passes through.
+      const gate = await gateContent({ blocks, uiLangName: LANGS[lang]?.name });
+      if (gate.decision === "block") { setError(gateMessage(gate.category, t)); setScreen("upload"); return; }
+
+      // Enforce the daily question limit (server-side; reserves the questions).
+      const consumed = await consumeQuestions(finalNumQ);
+      if (consumed && consumed.allowed === false) {
+        const left = consumed.remaining ?? 0;
+        setLimitHit(true); // offer the question-pack button under the error (all users)
+        setError(
+          isPro
+            ? `Daily limit reached (${consumed.daily_limit}/day). You have ${left} questions left, grab a question pack for more.`
+            : left > 0
+              ? `That's ${finalNumQ} questions but you only have ${left} left today. Lower the count, watch an ad for +10, buy a question pack, or go Pro.`
+              : `Daily question limit reached. Watch an ad for +10, buy a question pack, or upgrade to Pro.`
+        );
+        setScreen("upload"); return;
       }
       // Generate, then validate the count. The model sometimes returns fewer
       // questions than asked, if so, regenerate (up to 2 extra tries) and keep
