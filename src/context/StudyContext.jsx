@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthContext.jsx";
+import { makePerfEntry } from "../lib/studentModel.js";
+import { normBank, bankAddItems, bankRejectQ, bankMarkUsed, bankMerge } from "../lib/questionBank.js";
+import { normLibrary, libraryAddDoc, libraryRemove, libraryMerge } from "../lib/studyLibrary.js";
 
 // ── Server-synced study data ──────────────────────────────────────────
 // Single source of truth for the spaced-repetition deck, lifetime stats +
@@ -28,9 +31,30 @@ function normStats(s) {
   };
 }
 function emptyData() {
-  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, updatedAt: 0 };
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), updatedAt: 0 };
 }
 const asTopicStats = (t) => (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
+
+// Rolling performance log that powers the student model + adaptive difficulty
+// (see lib/studentModel.js). Deliberately tiny: the last PERF_MAX graded quiz
+// rounds, each { at, type, diff, total, correct }. Capped so the synced blob
+// never grows unbounded.
+const PERF_MAX = 40;
+function normPerf(p) {
+  const recent = Array.isArray(p?.recent) ? p.recent : [];
+  return {
+    recent: recent
+      .filter((s) => s && typeof s === "object" && (s.total || 0) > 0)
+      .slice(-PERF_MAX)
+      .map((s) => ({
+        at: s.at || 0,
+        type: String(s.type || "mcq"),
+        diff: Math.max(0, Math.min(2, Math.round(Number(s.diff) || 0))),
+        total: Math.max(0, Math.round(s.total) || 0),
+        correct: Math.max(0, Math.min(Math.round(s.correct) || 0, Math.round(s.total) || 0)),
+      })),
+  };
+}
 
 // Load from the new blob, falling back to (and migrating) the pre-sync keys so
 // existing users keep their deck, streak and exam date.
@@ -43,6 +67,9 @@ function loadLocal() {
       stats: normStats(blob.stats),
       plans: Array.isArray(blob.plans) ? blob.plans : [],
       topicStats: asTopicStats(blob.topicStats),
+      perf: normPerf(blob.perf),
+      bank: normBank(blob.bank),
+      library: normLibrary(blob.library),
       updatedAt: blob.updatedAt || 0,
     };
   }
@@ -53,6 +80,9 @@ function loadLocal() {
     stats: normStats(safeParse(localStorage.getItem("revyy_stats_v1"), {})),
     plans: [],
     topicStats: {},
+    perf: normPerf({}),
+    bank: normBank({}),
+    library: normLibrary({}),
     updatedAt: 0,
   };
 }
@@ -90,6 +120,10 @@ function mergeStudy(server, local) {
   for (const [k, v] of Object.entries(asTopicStats(local.topicStats))) {
     if (!ts[k] || (v.seen || 0) > (ts[k].seen || 0)) ts[k] = v;
   }
+  // Perf log: union both devices' sessions, dedupe by timestamp, keep newest.
+  const byAt = new Map();
+  for (const s of [...normPerf(server.perf).recent, ...normPerf(local.perf).recent]) byAt.set(s.at, s);
+  const mergedPerf = [...byAt.values()].sort((a, b) => a.at - b.at).slice(-PERF_MAX);
   return {
     cards: [...byFront.values()],
     examDate: server.examDate || local.examDate || null,
@@ -102,6 +136,9 @@ function mergeStudy(server, local) {
     },
     plans: [...byId.values()],
     topicStats: ts,
+    perf: { recent: mergedPerf },
+    bank: bankMerge(server.bank, local.bank),
+    library: libraryMerge(server.library, local.library),
     updatedAt: Date.now(),
   };
 }
@@ -253,6 +290,46 @@ export function StudyProvider({ children }) {
     });
   }, [commit]);
 
+  // Log one graded quiz round into the rolling performance history that powers
+  // the student model + adaptive difficulty (lib/studentModel.js). Only called
+  // for fresh, difficulty-calibrated quiz rounds (not fix-your-misses re-drills
+  // or retries of already-seen sets), so the accuracy signal stays honest.
+  const recordPerf = useCallback((entry) => {
+    const e = makePerfEntry(entry || {});
+    if (!e.total) return;
+    commit((p) => ({ ...p, perf: { recent: [...(normPerf(p.perf).recent), e].slice(-PERF_MAX) } }));
+  }, [commit]);
+
+  // ── Vetted question bank (Phase 2, lib/questionBank.js) ──
+  // Store well-formed MCQs the learner saw and did not flag (reusable), record
+  // flagged-bad ones as rejects (never reused + fed to generation as "avoid"),
+  // and mark reused ones so drills rotate. All go through the same commit, so
+  // the bank syncs and merges like the rest of the study blob.
+  const bankAdd = useCallback((items) => {
+    if (!items || !items.length) return;
+    commit((p) => ({ ...p, bank: bankAddItems(p.bank, items) }));
+  }, [commit]);
+  const bankReject = useCallback((question, reason) => {
+    if (!question) return;
+    commit((p) => ({ ...p, bank: bankRejectQ(p.bank, { question, reason }) }));
+  }, [commit]);
+  const bankUsed = useCallback((hashes) => {
+    if (!hashes || !hashes.length) return;
+    commit((p) => ({ ...p, bank: bankMarkUsed(p.bank, hashes) }));
+  }, [commit]);
+
+  // ── Study library (Phase 3, lib/studyLibrary.js) ──
+  // Remember a compact summary of each uploaded material (never the material
+  // itself) so Revyy can build a cumulative "quiz me on everything" review.
+  const addLibraryDoc = useCallback((doc) => {
+    if (!doc) return;
+    commit((p) => ({ ...p, library: libraryAddDoc(p.library, doc) }));
+  }, [commit]);
+  const removeLibraryDoc = useCallback((id) => {
+    if (!id) return;
+    commit((p) => ({ ...p, library: libraryRemove(p.library, id) }));
+  }, [commit]);
+
   // ── Study plans ──
   const savePlan = useCallback((plan) => {
     commit((p) => ({ ...p, plans: [...(p.plans || []).filter((x) => x.id !== plan.id), plan] }));
@@ -272,8 +349,9 @@ export function StudyProvider({ children }) {
   }, [commit]);
 
   const value = {
-    cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans, topicStats: data.topicStats,
-    addMissed, grade, removeCard, clearAll, setExamDate, recordSession, recordTopics,
+    cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans, topicStats: data.topicStats, perf: data.perf, bank: data.bank, library: data.library,
+    addMissed, grade, removeCard, clearAll, setExamDate, recordSession, recordTopics, recordPerf,
+    bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };
   return <StudyContext.Provider value={value}>{children}</StudyContext.Provider>;

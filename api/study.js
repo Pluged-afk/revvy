@@ -28,7 +28,26 @@ function ensureTables() {
         data       JSONB       NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
-    ]).then(() => true).catch(() => { ensured = null; return false; });
+      // GLOBAL, cross-user mock-exam learning bank. Mock questions come from the
+      // model's general knowledge of standardized tests (SAT/ACT/etc.), NOT from
+      // any user's private material, so pooling them across everyone is safe.
+      // We keep questions the crowd generates + a flag count, and feed the good
+      // ones back into generation as STYLE exemplars and the flagged ones as an
+      // avoid-list, so mocks get more authentic for everyone over time. We never
+      // serve exact copies; generation stays fresh.
+      sql`CREATE TABLE IF NOT EXISTS mock_bank (
+        id         BIGSERIAL   PRIMARY KEY,
+        exam       TEXT        NOT NULL,
+        section    TEXT        NOT NULL,
+        qhash      TEXT        NOT NULL,
+        data       JSONB       NOT NULL,
+        uses       INT         NOT NULL DEFAULT 1,
+        flags      INT         NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (exam, section, qhash)
+      )`,
+    ]).then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
+      .then(() => true).catch(() => { ensured = null; return false; });
   }
   return ensured;
 }
@@ -134,6 +153,68 @@ async function createShare(req, res, body, userId) {
   return res.status(200).json({ id });
 }
 
+// ── Global mock-exam learning bank ──
+// Standardized-test questions the crowd generates, pooled to make everyone's
+// mocks more authentic. Keyed by exam + section. Privacy-safe (general test
+// knowledge, never user material). All endpoints require a signed-in user.
+const MOCK_BANK_CAP = 300;    // questions kept per (exam, section) bucket
+const examKey = (s) => clean(s, 40);
+const sectionKey = (s) => clean(s, 60);
+
+// Keep only a clean, well-formed MCQ, size-capped, with an optional safe SVG.
+function sanitizeMockItem(x) {
+  if (!x || typeof x !== "object") return null;
+  const q = clean(x.question, 1200);
+  if (q.length < 8) return null;
+  const options = Array.isArray(x.options) ? x.options.slice(0, 8).map((o) => clean(o, 400)).filter(Boolean) : [];
+  if (options.length < 2) return null;
+  const correct = Number.isInteger(x.correct) && x.correct >= 0 && x.correct < options.length ? x.correct : null;
+  if (correct == null) return null;
+  const qhash = clean(x.qhash, 24) || String(Math.abs([...q.toLowerCase()].reduce((h, c) => (h * 33 + c.charCodeAt(0)) | 0, 5381)));
+  const data = { question: q, options, correct, explanation: clean(x.explanation, 400) };
+  const svg = typeof x.svg === "string" ? x.svg.trim() : "";
+  if (/^<svg[\s>]/i.test(svg) && svg.length < 8000 && !/<script|<foreignobject|\son\w+\s*=|javascript:/i.test(svg)) data.svg = svg;
+  return { qhash, data };
+}
+
+// Contribute freshly generated (filter-passed) questions to the global bank.
+async function mockContribute(req, res, body) {
+  const exam = examKey(body.exam), section = sectionKey(body.section);
+  if (!exam || !section) return res.status(400).json({ error: "Missing exam/section." });
+  const items = (Array.isArray(body.items) ? body.items : []).map(sanitizeMockItem).filter(Boolean).slice(0, 60);
+  for (const it of items) {
+    await sql`INSERT INTO mock_bank (exam, section, qhash, data) VALUES (${exam}, ${section}, ${it.qhash}, ${JSON.stringify(it.data)}::jsonb)
+              ON CONFLICT (exam, section, qhash) DO UPDATE SET uses = mock_bank.uses + 1`;
+  }
+  // Prune the bucket: keep the best (fewest flags, most uses, newest), drop the rest.
+  await sql`DELETE FROM mock_bank WHERE id IN (
+    SELECT id FROM mock_bank WHERE exam = ${exam} AND section = ${section}
+    ORDER BY flags ASC, uses DESC, created_at DESC OFFSET ${MOCK_BANK_CAP})`;
+  return res.status(200).json({ ok: true, stored: items.length });
+}
+
+// Flag a mock question as bad (learner reported a problem). Feeds the avoid-list.
+async function mockFlag(req, res, body) {
+  const exam = examKey(body.exam), section = sectionKey(body.section), qhash = clean(body.qhash, 24);
+  if (!exam || !section || !qhash) return res.status(400).json({ error: "Missing fields." });
+  await sql`UPDATE mock_bank SET flags = flags + 1 WHERE exam = ${exam} AND section = ${section} AND qhash = ${qhash}`;
+  return res.status(200).json({ ok: true });
+}
+
+// Draw a few good questions as STYLE exemplars + recent flagged stems to avoid,
+// for the next generation of this exam section. Never returns exact copies to
+// reuse; these only steer fresh generation.
+async function mockDraw(req, res, body) {
+  const exam = examKey(body.exam), section = sectionKey(body.section);
+  if (!exam || !section) return res.status(400).json({ error: "Missing exam/section." });
+  const good = await sql`SELECT data FROM mock_bank WHERE exam = ${exam} AND section = ${section} AND flags = 0 ORDER BY random() LIMIT 3`;
+  const bad = await sql`SELECT data->>'question' AS q FROM mock_bank WHERE exam = ${exam} AND section = ${section} AND flags > 0 ORDER BY flags DESC, created_at DESC LIMIT 4`;
+  return res.status(200).json({
+    exemplars: good.map((r) => r.data).filter(Boolean),
+    avoid: bad.map((r) => r.q).filter(Boolean),
+  });
+}
+
 export default async function handler(req, res) {
   try {
     await ensureTables();
@@ -152,6 +233,9 @@ export default async function handler(req, res) {
       if (!userId) return res.status(401).json({ error: "Invalid session." });
 
       if (body?.action === "createShare") return createShare(req, res, body, userId);
+      if (body?.action === "mockContribute") return mockContribute(req, res, body);
+      if (body?.action === "mockFlag") return mockFlag(req, res, body);
+      if (body?.action === "mockDraw") return mockDraw(req, res, body);
 
       // Default: save the user's study blob.
       const data = body?.data;

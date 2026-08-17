@@ -47,5 +47,10 @@ export function useSRS() {
     clearAll: study?.clearAll || (() => {}),
     examDate, setExamDate: study?.setExamDate || (() => {}), daysToExam,
     topicStats: study?.topicStats || {}, recordTopics: study?.recordTopics || (() => {}),
+    perf: study?.perf || { recent: [] }, recordPerf: study?.recordPerf || (() => {}),
+    bank: study?.bank || { items: [], rejects: [] },
+    bankAdd: study?.bankAdd || (() => {}), bankReject: study?.bankReject || (() => {}), bankUsed: study?.bankUsed || (() => {}),
+    library: study?.library || { docs: [] },
+    addLibraryDoc: study?.addLibraryDoc || (() => {}), removeLibraryDoc: study?.removeLibraryDoc || (() => {}),
   };
 }

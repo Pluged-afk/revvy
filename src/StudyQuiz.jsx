@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { LANGS } from "./i18n.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { useLang } from "./context/LanguageContext.jsx";
@@ -12,6 +12,9 @@ import { useStudyStats } from "./lib/stats.js";
 import { usePlans } from "./context/StudyContext.jsx";
 import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, dayState } from "./lib/planner.js";
 import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
+import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/studentModel.js";
+import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
+import { makeLibraryDoc, buildLibraryMaterial, librarySize } from "./lib/studyLibrary.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scaledScore, compositeScore, compositeMax } from "./lib/mockExams.js";
 import Icon from "./components/Icon.jsx";
 
@@ -79,12 +82,22 @@ const PRO_MAX_Q    = 100;
 const FREE_FILE_MB = 5;
 const AD_FILE_MB   = 10;
 const PRO_FILE_MB  = 999;
+// How many files one quiz / exam may draw from. Free stays tight (1 for a quiz,
+// 5 for an exam); Pro can attach many, capped at a generous-but-realistic number
+// so a single generation can't balloon past sane context limits.
+const QUIZ_FILES_PRO  = 20;
+const EXAM_FILES_FREE = 5;
+const EXAM_FILES_PRO  = 20;
 const AD_HOURS     = 1;
 const FREE_DAILY   = 50;  // free daily QUESTION allowance (shown in plan lists)
 const Q_FREE       = [5, 10, 15, 20];
 const Q_EXTRA      = [25, 30, 40, 50];
 const QUIZ_TYPES   = ["mcq","cards","fill","match"];
 const LETTERS      = ["A","B","C","D","E","F"];
+// Phase 2: how many of a 10-question weak-spot drill may be reused from the
+// learner's vetted bank (rest are freshly generated). Caps API cost saving at
+// half so drills still feel fresh.
+const DRILL_REUSE_MAX = 5;
 // Model for all generation/grading. Haiku 4.5: cheap + fast, plenty for
 // question writing. ($0.80/1M in, $4/1M out vs Sonnet's $3/$15.)
 const AI_MODEL     = "claude-haiku-4-5-20251001";
@@ -209,7 +222,7 @@ async function authHeader() {
   try { const t = await _getToken?.(); return t ? { Authorization: `Bearer ${t}` } : {}; }
   catch { return {}; }
 }
-async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
+async function callClaude({ blocks, numQ, diff, type, uiLangName, learnerBrief, withSummary }) {
   const typeMap = {
     mcq:   `Multiple choice: exactly 4 options. "correct" is 0-based index of the right answer.`,
     cards: `Flashcards: "question" = front (term/concept), "answer" = back (full explanation). Set options:[] correct:0.`,
@@ -218,7 +231,7 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
   };
   // `diff` is the 0/1/2 index; map to the difficulty rubric.
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
-  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nFAIRNESS: whatever the level, difficulty must come from the depth of thinking and the number of concepts a learner must connect, NEVER from trick wording, deliberate ambiguity, obscure trivia, or gotchas. Every question must be clearly answerable from a genuine understanding of the material and have exactly ONE defensible correct answer.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic","source":"..."}]}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Set "source" to SHORT verbatim words copied straight from the study material (a phrase or one sentence, max ~25 words, exact wording, no paraphrasing) that back up the correct answer, so the learner can see exactly where it came from; if a question leans on general knowledge NOT stated in the material, set "source" to an empty string "". Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.`;
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nFAIRNESS: whatever the level, difficulty must come from the depth of thinking and the number of concepts a learner must connect, NEVER from trick wording, deliberate ambiguity, obscure trivia, or gotchas. Every question must be clearly answerable from a genuine understanding of the material and have exactly ONE defensible correct answer.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}${learnerBrief?`\n${learnerBrief}`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic","source":"..."}]${withSummary?`,"summary":"a compact digest of this material for the study library"`:""}}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Set "source" to SHORT verbatim words copied straight from the study material (a phrase or one sentence, max ~25 words, exact wording, no paraphrasing) that back up the correct answer, so the learner can see exactly where it came from; if a question leans on general knowledge NOT stated in the material, set "source" to an empty string "". Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.${withSummary?`\nALSO add a top-level "summary" field LAST: a compact digest (max 120 words) of the KEY concepts, definitions and facts this material covers, in the SAME language as the material, so the learner's study library can remember what it was about later. Cover the material as a whole, not any single question.`:""}`;
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
@@ -256,6 +269,9 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName }) {
         : q
     );
   }
+  // Phase 3: cap the optional material summary (study library "memory"). Absent
+  // on a truncated response, which is fine, the library just skips that upload.
+  if (parsed && typeof parsed.summary === "string") parsed.summary = parsed.summary.trim().slice(0, 1200);
   return parsed;
 }
 
@@ -421,9 +437,19 @@ const gateMessage = (category, t) =>
 // Generate one section of a standardized mock exam from its spec (no upload),
 // authentic style, self-contained MCQs. Lenient on count: returns whatever
 // well-formed questions the model produces.
-async function callMockSection(exam, section, tilt) {
+async function callMockSection(exam, section, tilt, exemplars = [], avoid = []) {
   const nOpt = section.options || 4;
   const optTemplate = Array(nOpt).fill('"..."').join(",");
+  // Universal mock learning: a few good questions the crowd generated, as STYLE
+  // exemplars (never to copy), plus recent flagged-bad stems to avoid. Both come
+  // from the global mock bank and are empty until it has data, so early forms are
+  // unchanged. `correct` is withheld from exemplars, they steer style, not keys.
+  const exBlock = (exemplars && exemplars.length)
+    ? `\nSTYLE EXAMPLES from our question bank of authentic ${exam.name} ${section.name} questions. Study their phrasing, difficulty, structure and format, then write BRAND NEW questions of the same quality. Do NOT copy, translate, or lightly reword them, they are references only:\n${exemplars.slice(0,3).map((q,i)=>`Example ${i+1}: ${JSON.stringify({question:String(q.question||"").slice(0,700),options:(Array.isArray(q.options)?q.options:[]).map(o=>String(o).slice(0,200))})}`).join("\n")}`
+    : "";
+  const avoidBlock = (avoid && avoid.length)
+    ? `\nAVOID: learners flagged questions like these as flawed, mis-keyed or ambiguous. Do NOT produce anything similar:\n- ${avoid.slice(0,4).map(s=>String(s).slice(0,160)).join("\n- ")}`
+    : "";
   // Pure test environment: the learner can't set difficulty. Each generated
   // form gets one randomly-chosen overall difficulty (luck of the draw), and
   // within it the questions span the authentic range, like a real exam.
@@ -438,7 +464,7 @@ ${section.instr}
 ${diff} Do NOT make every question the same difficulty, this is a real, un-adjustable test, so vary it like the actual exam.
 Each question needs: "question" (the full stem, with any passage/data/context written into it as text), "options" (an array of exactly ${nOpt} answer choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary the skills/topics across the section and make every distractor plausible.
 DIAGRAMS: when a question genuinely needs a figure to be answerable, a geometry diagram, a coordinate graph, a bar/line chart, a number line, or a labelled scientific figure, add an "svg" field containing a SELF-CONTAINED inline SVG that draws it accurately to the numbers in the question and is consistent with your correct answer. Use a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text> with clear labels and units, and SINGLE quotes for attributes (e.g. <circle cx='50' cy='50' r='40'/>) so the JSON stays valid. Never include <script>, event handlers, external images, links or fonts. Most questions need NO figure, omit "svg" entirely for those; never add a decorative one.
-CRITICAL, accuracy: for any question involving a calculation or data, work the answer out fully yourself FIRST, then set "correct" to the index of the option that exactly matches your computed result; double-check every calculation and unit. Every question must have exactly ONE clearly correct option, and its "explanation" must agree with that option. Discard any question you are not certain is correct.
+CRITICAL, accuracy: for any question involving a calculation or data, work the answer out fully yourself FIRST, then set "correct" to the index of the option that exactly matches your computed result; double-check every calculation and unit. Every question must have exactly ONE clearly correct option, and its "explanation" must agree with that option. Discard any question you are not certain is correct.${exBlock}${avoidBlock}
 Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"...","svg":"OPTIONAL, an inline <svg>…</svg>, only when a figure is required"}]}
 The "questions" array MUST contain ${section.count} items.`;
   const maxTokens = Math.min(section.count * 500 + 4000, 64000); // roomy, data/diagram questions run long
@@ -479,6 +505,34 @@ The "questions" array MUST contain ${section.count} items.`;
   });
 }
 
+// ── Global mock-learning bank (client) ──
+// Thin best-effort calls to the /api/study mock endpoints. Every one fails soft:
+// the mock flow must never break because the shared bank is unreachable. Keyed
+// by exam + section names (general test knowledge, never user material).
+async function mockDrawGlobal(exam, section) {
+  try {
+    const res = await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
+      body: JSON.stringify({ action:"mockDraw", exam, section }) });
+    if (!res.ok) return { exemplars: [], avoid: [] };
+    const j = await res.json().catch(() => ({}));
+    return { exemplars: Array.isArray(j.exemplars) ? j.exemplars : [], avoid: Array.isArray(j.avoid) ? j.avoid : [] };
+  } catch { return { exemplars: [], avoid: [] }; }
+}
+async function mockContributeGlobal(exam, section, questions) {
+  try {
+    const items = (questions || []).map((q) => ({ qhash: qhashOf(q.question), data: q })).slice(0, 60);
+    if (!items.length) return;
+    await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
+      body: JSON.stringify({ action:"mockContribute", exam, section, items }) });
+  } catch { /* best effort */ }
+}
+async function mockFlagGlobal(exam, section, question) {
+  try {
+    await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
+      body: JSON.stringify({ action:"mockFlag", exam, section, qhash: qhashOf(question) }) });
+  } catch { /* best effort */ }
+}
+
 function readText(f)   { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error("Read failed")); r.readAsText(f); }); }
 
 function Logo({ size=28 }) {
@@ -516,7 +570,7 @@ function AutoAdvanceBar({ sec, runId, t }) {
   );
 }
 
-function Chip({ label, active, onClick, locked, small, hideBadge }) {
+function Chip({ label, active, onClick, locked, small, hideBadge, rec }) {
   return (
     <button onClick={onClick} style={{
       padding:small?"4px 10px":"6px 14px", borderRadius:20,
@@ -529,6 +583,7 @@ function Chip({ label, active, onClick, locked, small, hideBadge }) {
       boxShadow:locked?"0 0 0 1px #f59e0b33, inset 0 0 0 1px #f59e0b22":undefined,
     }}>
       {label}
+      {rec && !active && <span style={{marginLeft:5,display:"inline-block",width:6,height:6,borderRadius:"50%",background:"var(--color-accent)",verticalAlign:"middle"}}/>}
       {locked && !hideBadge && <span style={{marginLeft:4,fontSize:7,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"1px 4px",fontWeight:700,verticalAlign:"middle"}}>PRO</span>}
     </button>
   );
@@ -901,7 +956,7 @@ function FlagFix({ q, subject, blocks, uiLangName, diff, onReplace, t }) {
   const [verdict, setVerdict] = useState(null);// {explanation, source} when the answer holds up
   const doRegen = async (reason) => {
     setBusy("writing"); setErr("");
-    try { const nq = await regenerateQuestion({ blocks, q, subject, reason, uiLangName, diff }); onReplace(nq); setVerdict(null); setDone(t.flagReplaced); setOpen(false); }
+    try { const nq = await regenerateQuestion({ blocks, q, subject, reason, uiLangName, diff }); onReplace(nq, reason); setVerdict(null); setDone(t.flagReplaced); setOpen(false); }
     catch { setErr(t.flagFailed); }
     finally { setBusy(""); }
   };
@@ -911,7 +966,7 @@ function FlagFix({ q, subject, blocks, uiLangName, diff, onReplace, t }) {
     try {
       const v = await verifyFlaggedQuestion({ blocks, q, uiLangName, diff });
       if (v.verdict === "answer_correct") { setVerdict({ explanation: v.explanation, source: v.answerSource }); setOpen(false); }
-      else if (v.replacement) { onReplace(v.replacement); setDone(v.verdict === "student_right" ? t.flagGoodCatch : t.flagClearer); setOpen(false); }
+      else if (v.replacement) { onReplace(v.replacement, "wrong"); setDone(v.verdict === "student_right" ? t.flagGoodCatch : t.flagClearer); setOpen(false); }
       else { setBusy(""); return doRegen("wrong"); }
     } catch { setErr(t.flagFailed); }
     finally { setBusy((b)=> b === "checking" ? "" : b); }
@@ -951,6 +1006,20 @@ function FlagFix({ q, subject, blocks, uiLangName, diff, onReplace, t }) {
         </>
       )}
     </div>
+  );
+}
+
+// Universal mock learning: on the mock review screen, let a learner flag a bad
+// question. The flag is aggregated GLOBALLY (by exam + section) so future mock
+// generations for everyone avoid questions like it. Best-effort, fires once.
+function MockReport({ exam, section, question, t }) {
+  const [state, setState] = useState(""); // "" | "busy" | "done"
+  if (state === "done") return <div style={{marginTop:6,paddingLeft:22,fontSize:11,color:"#16a34a",fontWeight:600}}>{t.mockReported}</div>;
+  return (
+    <button disabled={state==="busy"} onClick={async()=>{ setState("busy"); await mockFlagGlobal(exam, section, question); setState("done"); }}
+      style={{marginTop:6,marginLeft:22,background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:11,cursor:state==="busy"?"default":"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:5,padding:0,opacity:state==="busy"?0.6:1}}>
+      <Icon name="alert" size={12} stroke={2}/><span style={{textDecoration:"underline",textUnderlineOffset:2}}>{t.flagBtn}</span>
+    </button>
   );
 }
 
@@ -1666,6 +1735,7 @@ export default function StudyQuiz() {
   const [tab,          setTab]          = useState("file");
   const [file,         setFile]         = useState(null);
   const [mediaFile,    setMediaFile]    = useState(null); // audio/video for transcription (Pro)
+  const [extraFiles,   setExtraFiles]   = useState([]);   // Pro: extra files added to a quiz beyond the primary
   const [mediaStatus,  setMediaStatus]  = useState("");   // loading-screen sub-message while transcribing
   const [showQuizlet,  setShowQuizlet]  = useState(false); // Quizlet-import modal
   const [quizletText,  setQuizletText]  = useState("");
@@ -1677,6 +1747,11 @@ export default function StudyQuiz() {
   const [useCustomQ,   setUseCustomQ]   = useState(false);
   const [importCount,  setImportCount]  = useState(null); // count requested by the browser extension hand-off (wins over the default-count sync)
   const [diff,         setDiff]         = useState(1);
+  // Adaptive difficulty (Phase 1): once the learner hand-picks a level we stop
+  // auto-adjusting it for the rest of the session; `settingsReady` gates the
+  // one-time auto-apply so it lands after the saved-default sync, not before.
+  const [diffTouched,  setDiffTouched]  = useState(false);
+  const [settingsReady,setSettingsReady]= useState(false);
   const [qType,        setQType]        = useState("mcq");
   const [quiz,         setQuiz]         = useState(null);
   const [qIdx,         setQIdx]         = useState(0);
@@ -1768,8 +1843,12 @@ export default function StudyQuiz() {
     try {
       const exam = getMock(mock.presetId) || MOCK_EXAMS[0];
       const spec = exam.sections[ni];
-      const qs = await callMockSection(exam, spec, mockTilt);
+      // Universal learning: steer this section with the crowd's good/flagged
+      // questions, then contribute this form back so everyone's mocks improve.
+      const { exemplars, avoid } = await mockDrawGlobal(exam.name, spec.name);
+      const qs = await callMockSection(exam, spec, mockTilt, exemplars, avoid);
       if (!qs.length) throw new Error("section");
+      mockContributeGlobal(exam.name, spec.name, qs);
       setMock(m => ({ ...m, sections: m.sections.map((s, i) => i === ni ? { ...s, questions: qs } : s) }));
       setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(spec.minutes * 60);
       setScreen("mock_run");
@@ -1792,6 +1871,19 @@ export default function StudyQuiz() {
   const activePlan = plans.find(p=>p.id===activePlanId) || homePlan;
   const topicsWeak = weakTopics(srs.cards); // weak areas from the review deck
   const mastery = topicMastery(srs.topicStats); // per-topic mastery across all quizzes/exams
+  // ── Student model + adaptive difficulty (Phase 1) ──
+  // One object gathering the signals the model reads (lifetime stats, per-topic
+  // mastery, the rolling perf log, the review deck). `diffRec` is the level the
+  // learner should be quizzed at next; it drives the "Recommended for you"
+  // affordance on setup and the one-time auto-apply below. Memoized so it only
+  // recomputes when the underlying study data actually changes.
+  const studyModel = useMemo(
+    () => ({ stats, topicStats: srs.topicStats, perf: srs.perf, cards: srs.cards }),
+    [stats, srs.topicStats, srs.perf, srs.cards]
+  );
+  const diffRec = useMemo(() => recommendDifficulty(studyModel), [studyModel]);
+  // Learner hand-picks a level -> respect it (stop auto-adapting this session).
+  const pickDiff = useCallback((i) => { setDiff(i); setDiffTouched(true); }, []);
   // Best-effort browser reminder, fires only while Revyy is open in the tab
   // (real push arrives with the mobile app). Schedules the plan's reminder time.
   useEffect(() => {
@@ -1831,8 +1923,8 @@ export default function StudyQuiz() {
   const fileRef  = useRef();
   const photoRef = useRef();
   const mediaRef = useRef();
-  const examFileRef0=useRef(),examFileRef1=useRef(),examFileRef2=useRef(),examFileRef3=useRef(),examFileRef4=useRef();
-  const examFileRefs=[examFileRef0,examFileRef1,examFileRef2,examFileRef3,examFileRef4];
+  const extraRef = useRef();
+  const examAddRef=useRef();
   const [examMode,    setExamMode]    = useState(null);
   const [examFiles,   setExamFiles]   = useState([]);
   const [examMCQCount,setExamMCQCount]= useState("20");
@@ -1851,14 +1943,32 @@ export default function StudyQuiz() {
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
       stats.recordSession(answers.length, answers.filter((a) => a && a.isCorrect).length);
       srs.recordTopics(quiz.questions.map((q, i) => ({ topic: q.topic, correct: answers[i]?.isCorrect === true })));
+      // Adaptive difficulty: log this round only if it was a fresh, difficulty-
+      // calibrated set (not a fix-your-misses re-drill or a retry of seen
+      // questions), so the ability signal stays honest.
+      if (quiz.fresh) srs.recordPerf({ type: quiz.type, diff: quiz.genDiff ?? diff, total: answers.length, correct: answers.filter((a) => a && a.isCorrect).length });
+      // Phase 2: bank the well-formed MCQs the learner saw and did NOT flag as
+      // vetted (reusable). leanQ inside makeBankItem drops non-MCQ types, and
+      // any question that was flagged is already on the reject list, so
+      // bankAddItems skips it. Only for MCQ quizzes.
+      if (quiz.type === "mcq") {
+        const items = quiz.questions.map((q) => makeBankItem({ q, diff: quiz.genDiff ?? diff, type: "mcq", quality: 1 })).filter(Boolean);
+        if (items.length) srs.bankAdd(items);
+      }
     } else if (screen === "exam_results" && examEvals && srsAddedRef.current !== examEvals) {
       srsAddedRef.current = examEvals;
       const missed = examQs.filter((_, i) => (examEvals[i]?.score ?? 0) < 1).map(toCard);
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
       stats.recordSession(examEvals.length, examEvals.filter((e) => (e?.score ?? 0) >= 1).length);
       srs.recordTopics(examQs.map((q, i) => ({ topic: q.topic, correct: (examEvals[i]?.score ?? 0) >= 1 })));
+      // Personalization for exam mode: feed the exam into the adaptive-difficulty
+      // history and bank its well-formed MCQs (leanQ skips written/fill), same as
+      // a quiz. Mock tests never reach this branch, so they stay untouched.
+      srs.recordPerf({ type: "exam", diff, total: examEvals.length, correct: examEvals.filter((e) => (e?.score ?? 0) >= 1).length });
+      const exItems = examQs.map((q) => makeBankItem({ q, diff, type: "mcq", quality: 1 })).filter(Boolean);
+      if (exItems.length) srs.bankAdd(exItems);
     }
-  }, [screen, quiz, answers, examEvals, examQs, srs, stats]);
+  }, [screen, quiz, answers, examEvals, examQs, srs, stats, diff]);
   // ── Exam timer ──
   const [examTimerOn,   setExamTimerOn]   = useState(false);
   const [examTimerMin,  setExamTimerMin]  = useState("60");
@@ -1910,6 +2020,7 @@ export default function StudyQuiz() {
           if(d.volume!==undefined) SoundEngine.setVolume(d.volume);
         }
       } catch {}
+      finally { setSettingsReady(true); } // unblocks the one-time adaptive apply
     })();
   },[]);
 
@@ -1931,6 +2042,17 @@ export default function StudyQuiz() {
   // on load (and whenever the default changes) so they persist across reloads
   // and logout/login, not only when Apply is pressed.
   useEffect(()=>{ setDiff(settings.defaultDiff); },[settings.defaultDiff]);
+  // Adaptive difficulty: once, after the saved default has synced, move the
+  // picker to the level the student model recommends, but only with enough
+  // signal to be confident and only if the learner hasn't hand-picked one. Runs
+  // a single time (ref-guarded) so it never fights a manual choice; the setup
+  // screen shows the reason so the change is never a surprise.
+  const recAppliedRef = useRef(false);
+  useEffect(()=>{
+    if (recAppliedRef.current || !settingsReady) return;
+    recAppliedRef.current = true;
+    if (!diffTouched && diffRec.confidence >= 0.6) setDiff(diffRec.diff);
+  },[settingsReady, diffRec, diffTouched]);
   // An extension-imported count (importCount) wins over the saved default, so a
   // count picked in the extension popup survives the async settings hydration.
   useEffect(()=>{ setNumQ(importCount ?? settings.defaultQCount); },[settings.defaultQCount, importCount]);
@@ -1949,7 +2071,7 @@ export default function StudyQuiz() {
       let p; try{ p=JSON.parse(raw); }catch{ p={ text:raw }; }
       const text=String(p?.text||"").trim();
       if(text.length<20) return;
-      setTab("text"); setFile(null); setError(""); setLimitHit(false);
+      setTab("text"); setFile(null); setExtraFiles([]); setError(""); setLimitHit(false);
       setTextVal(text.slice(0,20000));
       if(["mcq","cards","fill","match"].includes(p?.qtype)) setQType(p.qtype);
       const c=parseInt(p?.count,10);
@@ -2047,8 +2169,11 @@ export default function StudyQuiz() {
   const adsOn = dev.devMode && dev.ads!==null ? dev.ads : ADS_ENABLED;
   const openUpgrade = () => { setUnlockFeature(null); setShowProModal(true); };
 
-  const addExamFile=useCallback(async(f,idx)=>{
+  // Append a file to the exam (free: up to EXAM_FILES_FREE, Pro: EXAM_FILES_PRO).
+  const addExamFile=useCallback(async(f)=>{
     if(!f)return;
+    const cap = isPro ? EXAM_FILES_PRO : EXAM_FILES_FREE;
+    if(examFiles.filter(Boolean).length >= cap){ setError(t.errFilesMax.replace("{n}",cap)); return; }
     const lim=fileLimitMB();
     if(f.size/1024/1024>lim){setError(t.errFileTooLarge.replace("{n}",lim));return;}
     const isPdf=f.type==="application/pdf",isImg=f.type.startsWith("image/"),isTxt=f.type.startsWith("text/")||/\.(txt|md|csv)$/i.test(f.name);
@@ -2057,10 +2182,10 @@ export default function StudyQuiz() {
       let p;
       if(isTxt){const text=await readText(f);p={type:"text",content:text,mime:null,name:f.name};}
       else{p={type:isPdf?"pdf":"image",raw:f,mime:f.type,name:f.name};}
-      setExamFiles(prev=>{const a=[...prev];a[idx]=p;return a.filter(Boolean);});
+      setExamFiles(prev=>{const cur=prev.filter(Boolean); return cur.length>=cap ? cur : [...cur, p];});
       setError("");
     }catch{setError(t.errReadFile);}
-  },[fileLimitMB]);
+  },[fileLimitMB, isPro, examFiles]);
 
   const removeExamFile=useCallback(idx=>{setExamFiles(prev=>prev.filter((_,i)=>i!==idx));},[]);
 
@@ -2131,6 +2256,31 @@ export default function StudyQuiz() {
     setMediaFile({ raw: f, name: f.name, sizeMB: mb, mime: f.type });
   }, [isPro, t]);
 
+  // Pro: attach an EXTRA file (any supported type) to the quiz, beyond the
+  // primary one in the active tab. Generation combines the primary + all extras,
+  // so one quiz can be built from several sources at once. Free users never see
+  // this (their quiz stays single-file).
+  const addExtraFile = useCallback(async (f) => {
+    if (!f) return;
+    if (!isPro) { setError(t.mediaProOnly); return; }
+    setError("");
+    const isPdf = f.type === "application/pdf";
+    const isImg = f.type.startsWith("image/");
+    const isMed = f.type.startsWith("audio/") || f.type.startsWith("video/");
+    const isTxt = f.type.startsWith("text/") || /\.(txt|md|csv)$/i.test(f.name);
+    if (!isPdf && !isImg && !isMed && !isTxt) { setError(t.errFileType); return; }
+    const mb = f.size / 1024 / 1024;
+    if (isMed && mb > MEDIA_MAX_MB) { setError(t.errMediaTooLarge.replace("{max}", MEDIA_MAX_MB)); return; }
+    if (!isMed && mb > PRO_FILE_MB) { setError(t.errFileOverPro.replace("{size}", fmtMB(f.size)).replace("{max}", PRO_FILE_MB)); return; }
+    try {
+      let p;
+      if (isTxt) { const text = await readText(f); p = { kind:"doc", type:"text", content:text, name:f.name }; }
+      else if (isMed) { p = { kind:"media", type:"media", raw:f, name:f.name }; }
+      else { p = { kind:"doc", type:isPdf?"pdf":"image", raw:f, name:f.name }; }
+      setExtraFiles(prev => prev.length >= QUIZ_FILES_PRO - 1 ? prev : [...prev, p]);
+    } catch { setError(t.errReadFile); }
+  }, [isPro, t]);
+
   // Upload the media to Vercel Blob, kick off AssemblyAI transcription, and poll
   // until the transcript is ready. Returns the transcript text (which then flows
   // through the SAME content gate + generation as any pasted notes). The server
@@ -2199,6 +2349,10 @@ export default function StudyQuiz() {
     // Exams carry model answers/explanations → ~200 tokens/Q. Cap at 20k.
     const maxTokens = Math.min(Math.max(Math.round(totalQ*260)+3000, 6000), 48000);
 
+    // Personalize the exam to this learner (weak-topic emphasis + calibration)
+    // and fold in the content feedback loop's "avoid these" list, same as the
+    // quiz flow. Empty for newcomers.
+    const learnerBrief = [buildLearnerBrief(studyModel), buildAvoidNote(srs.bank)].filter(Boolean).join("\n\n");
     // Build the prompt; `scale` (≤1) shrinks the question counts for a retry.
     const buildPrompt=(scale)=>{
       const base=isPro?Math.min(Math.max(parseInt(examTotalQ)||5,1),100):20;
@@ -2218,7 +2372,7 @@ export default function StudyQuiz() {
           return "Section "+(i+1)+": generate exactly "+desc+". Set \"section\":" +(i+1)+" on EVERY question in this section.";
         }).join("\n");
       }
-      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nLANGUAGE: Write the ENTIRE exam, every question, all options, model answers, explanations and the title, in the SAME language as the study material provided. Match the material's language exactly; do NOT translate it into English."+(LANGS[lang]?.name?" If the material is too short to tell its language, use "+LANGS[lang].name+".":"")+"\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\",\"topic\":\"2-4 word sub-topic\"}]}\nSet \"topic\" to the specific concept each question tests (2-4 words), used to track weak areas. For written/fill: options:[], correct:0. Keep questions in section order.";
+      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nLANGUAGE: Write the ENTIRE exam, every question, all options, model answers, explanations and the title, in the SAME language as the study material provided. Match the material's language exactly; do NOT translate it into English."+(LANGS[lang]?.name?" If the material is too short to tell its language, use "+LANGS[lang].name+".":"")+(learnerBrief?"\n"+learnerBrief:"")+"\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\",\"topic\":\"2-4 word sub-topic\"}],\"summary\":\"a compact digest of this material for the study library\"}\nSet \"topic\" to the specific concept each question tests (2-4 words), used to track weak areas. For written/fill: options:[], correct:0. Keep questions in section order.\nALSO add a top-level \"summary\" field LAST: a compact digest (max 120 words) of the KEY concepts this material covers, in the same language as the material, for the learner's study library.";
       return { prompt, marksMap };
     };
 
@@ -2270,6 +2424,11 @@ export default function StudyQuiz() {
         else throw e1;
       }
       if(!parsed.questions?.length) throw new Error("No questions generated");
+      // Phase 3: remember a summary of this exam's material for the study library
+      // (never the material itself), same as the quiz flow.
+      const exTopics = [...new Set(parsed.questions.map(q=>q.topic).filter(Boolean))];
+      const exDoc = makeLibraryDoc({ title: parsed.title, subject: "", topics: exTopics, summary: parsed.summary, n: parsed.questions.length });
+      if (exDoc) srs.addLibraryDoc(exDoc);
       const annotated = parsed.questions.map(q=>({
         ...q,
         marksPerQ: examMode==="custom" ? (marksMap[q.section]||1) : 1,
@@ -2281,7 +2440,7 @@ export default function StudyQuiz() {
       setScreen("exam_run");
       if(!isPro) unlocks.consumeExam();   // free daily exam is now used up
     }catch(err){setError(err.message.includes("parse")?t.errUnexpectedFormat:err.message);setScreen("exam_setup");}
-  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks]);
+  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks,studyModel,srs.bank]);
 
   const evaluateExam=useCallback(async(answers)=>{
     const hasWritten=examQs.some(q=>q.type==="written");
@@ -2540,6 +2699,22 @@ export default function StudyQuiz() {
       } else {
         blocks=[{type:"text",text:`Study material:\n\n${textVal.trim()}`}];
       }
+      // Pro: fold in any EXTRA files attached beyond the primary (docs uploaded,
+      // media transcribed, text inlined), so one quiz can span several sources.
+      // A bad extra is skipped rather than failing the whole quiz.
+      for (const ex of (isPro ? extraFiles : [])) {
+        try {
+          if (ex.kind === "media") {
+            const tr = await transcribeMedia(ex);
+            if (tr) blocks.push({ type:"text", text:`Lecture transcript (${ex.name}):\n\n${tr}` });
+          } else if (ex.type === "text") {
+            blocks.push({ type:"text", text:`Study material (${ex.name}):\n\n${ex.content}` });
+          } else {
+            const fid = await uploadFileToAnthropic(ex.raw);
+            blocks.push(ex.type==="pdf" ? { type:"document", source:{type:"file",file_id:fid} } : { type:"image", source:{type:"file",file_id:fid} });
+          }
+        } catch { /* skip a bad extra, keep the rest of the quiz */ }
+      }
       // Content gate BEFORE charging quota, so a wrongly-blocked upload never
       // costs a real learner. Explicit / harmful / non-study material is stopped
       // here; everything a student could genuinely study from passes through.
@@ -2564,11 +2739,18 @@ export default function StudyQuiz() {
       // questions than asked, if so, regenerate (up to 2 extra tries) and keep
       // whichever attempt produced the most questions. A parse error (usually a
       // truncated response) counts as a failed attempt rather than aborting.
+      // Personalize the set to this learner (weak-topic emphasis + calibration),
+      // and fold in the content feedback loop: an "avoid these" list built from
+      // the questions they have flagged as bad, so generation self-improves.
+      // Both empty for newcomers, so their experience is unchanged at first.
+      const learnerBrief = [buildLearnerBrief(studyModel), buildAvoidNote(srs.bank)].filter(Boolean).join("\n\n");
       let res = null, lastErr = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         let r = null;
         try {
-          r = await callClaude({blocks, numQ:finalNumQ, diff, type:finalType, uiLangName:LANGS[lang]?.name});
+          // withSummary asks the same call to also return a compact digest of the
+          // material for the study library (Phase 3), so "memory" costs no extra call.
+          r = await callClaude({blocks, numQ:finalNumQ, diff, type:finalType, uiLangName:LANGS[lang]?.name, learnerBrief, withSummary:true});
         } catch (e1) { lastErr = e1; }
         if (r?.questions?.length) {
           // Keep the best-so-far (most questions).
@@ -2578,16 +2760,24 @@ export default function StudyQuiz() {
       }
       if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
       genBlocksRef.current = blocks; // keep the source material for FlagFix regen
-      setQuiz({...res, type:finalType});
+      // Phase 3: remember a summary of this upload (never the material itself) so
+      // Revyy can quiz across everything studied. Skipped for the cumulative
+      // review + weak-spot drill, which pass no summary.
+      const libTopics = [...new Set((res.questions || []).map((q) => q.topic).filter(Boolean))];
+      const libDoc = makeLibraryDoc({ title: res.title, subject: res.subject, topics: libTopics, summary: res.summary, n: res.questions.length });
+      if (libDoc) srs.addLibraryDoc(libDoc);
+      // fresh + genDiff mark this as a first-play, difficulty-calibrated round so
+      // the results handler logs it into the adaptive-difficulty perf history.
+      setQuiz({...res, type:finalType, fresh:true, genDiff:diff});
       setQIdx(0); setAnswers([]); setSelected(null);
       setScreen("quiz");
     } catch(err) {
       setError(err.message.includes("parse")?t.errAiFormat:err.message);
       setScreen("upload");
     }
-  },[isPro,qType,tab,file,mediaFile,textVal,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,transcribeMedia,requireLogin]);
+  },[isPro,qType,tab,file,mediaFile,textVal,extraFiles,diff,canUseQType,effectiveNumQ,consumeQuestions,uploadFileToAnthropic,transcribeMedia,requireLogin,studyModel,srs.bank]);
 
-  // Generate a fresh MCQ quiz focused on the topics the learner is weakest on, 
+  // Generate a fresh MCQ quiz focused on the topics the learner is weakest on,
   // no upload needed. Uses accumulated topic mastery + sample missed questions to
   // steer the model (and avoid repeating ones they've already seen).
   const drillWeakSpots = useCallback(async () => {
@@ -2605,26 +2795,82 @@ export default function StudyQuiz() {
     }
     setScreen("loading");
     try {
-      const keys = new Set(picks.map(x => x.topic.toLowerCase()));
+      const topicKeys = picks.map(x => x.topic);
+      const keys = new Set(topicKeys.map(s => s.toLowerCase()));
+      // Phase 2 cost cut: reuse vetted questions from the learner's OWN bank on
+      // these weak topics (up to half the set), then generate only the rest.
+      // Empty bank -> reused is [] and the whole set is generated, as before.
+      const reused = bankPick(srs.bank, topicKeys, DRILL_REUSE_MAX);
+      const reusedHashes = reused.map(q => q._bankHash);
+      const need = n - reused.length;
       const samples = (srs.cards || []).filter(c => keys.has(String(c.topic || "").toLowerCase())).slice(0, 12).map(c => c.front);
-      const material = `The student is weak on these topics: ${picks.map(x => x.topic).join(", ")}.\nWrite fresh multiple-choice practice questions spread across these topics that genuinely test understanding, not just recall.${samples.length ? `\nDo NOT reuse these exact questions they have already seen:\n- ${samples.join("\n- ")}` : ""}`;
+      // Tell the generator to avoid the questions already seen AND the exact ones
+      // being reused, so the fresh half never duplicates the banked half.
+      const avoidSamples = [...samples, ...reused.map(q => q.question)].slice(0, 16);
+      const material = `The student is weak on these topics: ${topicKeys.join(", ")}.\nWrite fresh multiple-choice practice questions spread across these topics that genuinely test understanding, not just recall.${avoidSamples.length ? `\nDo NOT reuse these exact questions they have already seen:\n- ${avoidSamples.join("\n- ")}` : ""}`;
       const blocks = [{ type: "text", text: material }];
+      const learnerBrief = [buildLearnerBrief(studyModel, { forDrill: true }), buildAvoidNote(srs.bank)].filter(Boolean).join("\n\n");
       let res = null, lastErr = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        let r = null;
-        try { r = await callClaude({ blocks, numQ: n, diff, type: "mcq", uiLangName: LANGS[lang]?.name }); } catch (e1) { lastErr = e1; }
-        if (r?.questions?.length) { if (!res || r.questions.length > res.questions.length) res = r; if (res.questions.length >= n) break; }
+      if (need > 0) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          let r = null;
+          try { r = await callClaude({ blocks, numQ: need, diff, type: "mcq", uiLangName: LANGS[lang]?.name, learnerBrief }); } catch (e1) { lastErr = e1; }
+          if (r?.questions?.length) { if (!res || r.questions.length > res.questions.length) res = r; if (res.questions.length >= need) break; }
+        }
+        if (!res?.questions?.length && !reused.length) throw (lastErr || new Error("No questions returned"));
       }
-      if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
+      const generated = res?.questions || [];
+      // Mix reused (internal hash stripped) with the freshly generated ones and
+      // shuffle so the banked half isn't all up front.
+      const stripHash = (q) => { const c = { ...q }; delete c._bankHash; return c; };
+      const merged = [...reused.map(stripHash), ...generated].sort(() => Math.random() - 0.5).slice(0, n);
+      if (!merged.length) throw (lastErr || new Error("No questions returned"));
       genBlocksRef.current = blocks; // keep the weak-spot brief for FlagFix regen
-      setQuiz({ ...res, type: "mcq" });
+      if (reusedHashes.length) srs.bankUsed(reusedHashes); // rotate what's served next time
+      setQuiz({ title: res?.title || t.drillWeak, subject: "", questions: merged, type: "mcq", fresh:true, genDiff:diff });
       setQIdx(0); setAnswers([]); setSelected(null);
       setScreen("quiz");
     } catch (err) {
       setError(err.message.includes("parse") ? t.errAiFormat : err.message);
       setScreen("upload");
     }
-  }, [requireLogin, srs.topicStats, srs.cards, consumeQuestions, diff, lang, t, isPro]);
+  }, [requireLogin, srs.topicStats, srs.cards, srs.bank, srs.bankUsed, consumeQuestions, diff, lang, t, isPro, studyModel]);
+
+  // Phase 3: "quiz me on everything" cumulative review. Generates a mixed MCQ
+  // set from the stored summaries of ALL the material the learner has studied
+  // (no upload needed), so it feels like Revyy remembers their whole term.
+  const reviewLibrary = useCallback(async () => {
+    if (requireLogin()) return;
+    const material = buildLibraryMaterial(srs.library);
+    if (!material) return;
+    const n = 10;
+    setError(""); setLimitHit(false);
+    const consumed = await consumeQuestions(n);
+    if (consumed && consumed.allowed === false) {
+      setLimitHit(true);
+      setError(isPro ? `Daily limit reached, grab a question pack for more.` : `Daily question limit reached. Watch an ad for +10, buy a question pack, or upgrade to Pro.`);
+      setScreen("upload"); return;
+    }
+    setScreen("loading");
+    try {
+      const blocks = [{ type: "text", text: material }];
+      const learnerBrief = [buildLearnerBrief(studyModel), buildAvoidNote(srs.bank)].filter(Boolean).join("\n\n");
+      let res = null, lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let r = null;
+        try { r = await callClaude({ blocks, numQ: n, diff, type: "mcq", uiLangName: LANGS[lang]?.name, learnerBrief }); } catch (e1) { lastErr = e1; }
+        if (r?.questions?.length) { if (!res || r.questions.length > res.questions.length) res = r; if (res.questions.length >= n) break; }
+      }
+      if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
+      genBlocksRef.current = blocks; // keep the summaries for FlagFix regen
+      setQuiz({ ...res, title: res.title || t.libraryReviewTitle, subject: "", type: "mcq", fresh:true, genDiff:diff });
+      setQIdx(0); setAnswers([]); setSelected(null);
+      setScreen("quiz");
+    } catch (err) {
+      setError(err.message.includes("parse") ? t.errAiFormat : err.message);
+      setScreen("upload");
+    }
+  }, [requireLogin, srs.library, srs.bank, consumeQuestions, diff, lang, t, isPro, studyModel]);
 
   const pick    = i => { if(selected===null){ setSelected(i); haptic(); } };
   const nextQ   = (isCorrect, detail) => {
@@ -2638,7 +2884,12 @@ export default function StudyQuiz() {
   const retry   = () => { setQIdx(0);setAnswers([]);setSelected(null);setScreen("quiz"); };
   // Swap the flagged question in place with a freshly-generated replacement and
   // clear any pick, so the learner answers the corrected question (FlagFix).
-  const replaceCurrentQuestion = (nq) => {
+  const replaceCurrentQuestion = (nq, reason) => {
+    // The question being swapped out was flagged as bad, so record it as a
+    // reject (Phase 2 feedback loop): it is dropped from the vetted bank and its
+    // gist is fed to future generation as an "avoid this" signal.
+    const old = quiz?.questions?.[qIdx];
+    if (old?.question) srs.bankReject(old.question, reason || "flagged");
     setQuiz((prev) => {
       if (!prev) return prev;
       const qs = prev.questions.slice();
@@ -2647,7 +2898,7 @@ export default function StudyQuiz() {
     });
     setSelected(null);
   };
-  const newMat  = () => { setScreen("upload");setQuiz(null);setFile(null);setMediaFile(null);setMediaStatus("");setTextVal("");setError(""); };
+  const newMat  = () => { setScreen("upload");setQuiz(null);setFile(null);setMediaFile(null);setExtraFiles([]);setMediaStatus("");setTextVal("");setError(""); };
   // Feature D: re-drill ONLY the questions just missed, as a fresh mini-quiz
   // (active recall on exactly your weak spots, right now). Reuses the whole quiz
   // flow, no new generation, no quota spent, and no lockout: keep fixing until
@@ -2657,7 +2908,9 @@ export default function StudyQuiz() {
     : [];
   const fixMisses = () => {
     if (!missedThisQuiz.length) return;
-    setQuiz((prev) => ({ ...prev, questions: missedThisQuiz, title: t.fixMissesTitle }));
+    // fresh:false so this re-drill of already-missed questions is NOT logged
+    // into the adaptive-difficulty perf history (it would skew accuracy low).
+    setQuiz((prev) => ({ ...prev, questions: missedThisQuiz, title: t.fixMissesTitle, fresh:false }));
     setQIdx(0); setAnswers([]); setSelected(null);
     setScreen("quiz");
   };
@@ -2665,6 +2918,10 @@ export default function StudyQuiz() {
   const score = answers.filter(a=>a.isCorrect).length;
   const pct   = quiz ? Math.round((score/quiz.questions.length)*100) : 0;
   const badge = pct>=90?{icon:"trophy",text:t.excellent}:pct>=75?{icon:"target",text:t.great}:pct>=60?{icon:"notes",text:t.good}:{icon:"flame",text:t.keep};
+  // Adaptive difficulty, forward nudge: after a very strong or rough round,
+  // offer to move the next quiz up or down a level (reward framing only). Uses
+  // the level this set was actually generated at, not the current picker value.
+  const resNudge = quiz ? resultNudge({ diff: quiz.genDiff ?? diff, correct: score, total: quiz.questions.length }) : null;
 
   // ── Coach actions ────────────────────────────────────────────────
   const openPlanSetup = () => { if (requireLogin()) return; setPlanErr(""); setScreen("plan_setup"); };
@@ -2691,7 +2948,7 @@ export default function StudyQuiz() {
     const type = ["mcq","cards","fill","match"].includes(day.format) ? day.format : "mcq";
     const n = Math.min(day.numQ||15, qCap());
     setQType(type); setNumQ(n); setCustomQ(String(n)); setUseCustomQ(false);
-    setTab("file"); setFile(null); setTextVal(""); setError(""); setLimitHit(false);
+    setTab("file"); setFile(null); setExtraFiles([]); setTextVal(""); setError(""); setLimitHit(false);
     setScreen("upload");
   };
   const backToPlan = () => { const pid = planSession?.planId; setPlanSession(null); if (pid) setActivePlanId(pid); setScreen("plan"); };
@@ -2734,8 +2991,11 @@ export default function StudyQuiz() {
       setMockTilt(tilt);
       // Build ONLY the first section now; the rest are built on demand as the
       // user proceeds, faster start, and no cost for sections never reached.
-      const qs = await callMockSection(exam, exam.sections[0], tilt);
+      const sec0 = exam.sections[0];
+      const { exemplars, avoid } = await mockDrawGlobal(exam.name, sec0.name);
+      const qs = await callMockSection(exam, sec0, tilt, exemplars, avoid);
       if (!qs.length) throw new Error("Couldn't generate the exam, please try again.");
+      mockContributeGlobal(exam.name, sec0.name, qs); // feed this form back to the shared bank
       submittedSecRef.current = -1;
       setMock({ presetId: exam.id, name: exam.name, scaleMin: exam.scaleMin, scaleMax: exam.scaleMax,
         sections: exam.sections.map((s, i) => ({ ...s, questions: i === 0 ? qs : [] })) });
@@ -2849,6 +3109,32 @@ export default function StudyQuiz() {
               );
             })}
             {mastery.some(t=>t.weak) && <button onClick={drillWeakSpots} style={{...Sb.btnPrimary,width:"100%",marginTop:6,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="target" size={15}/>{t.drillWeak}</button>}
+          </div>
+        )}
+        {/* Phase 3: study library, a memory of everything uploaded (summaries
+            only), with a one-tap cumulative "quiz me on everything" review. */}
+        {librarySize(srs.library)>0 && (
+          <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+              <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="layers" size={21}/></span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.libraryTitle}</div>
+                <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.librarySets.replace("{n}",librarySize(srs.library)).replace("{s}",librarySize(srs.library)>1?"s":"")}</div>
+              </div>
+            </div>
+            <div style={{marginBottom:10}}>
+              {srs.library.docs.slice(0,5).map((d)=>(
+                <div key={d.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.title}</div>
+                    {d.subject&&<div style={{fontSize:11,color:"var(--color-text-tertiary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.subject}</div>}
+                  </div>
+                  <button onClick={()=>srs.removeLibraryDoc(d.id)} style={{flexShrink:0,background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:2}}>{t.libraryRemove}</button>
+                </div>
+              ))}
+              {librarySize(srs.library)>5 && <div style={{fontSize:11,color:"var(--color-text-tertiary)",paddingTop:7,borderTop:"0.5px solid var(--color-border-tertiary)"}}>{t.libraryMore.replace("{n}",librarySize(srs.library)-5)}</div>}
+            </div>
+            <button onClick={reviewLibrary} style={{...Sb.btnPrimary,width:"100%",marginTop:2,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="layers" size={15}/>{t.libraryReview}</button>
           </div>
         )}
         {/* AI Study Coach, day-by-day exam plan */}
@@ -3003,6 +3289,26 @@ export default function StudyQuiz() {
             <div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:2}}>{t.mediaProOnly}</div>
           </div>
         ))}
+        {/* Pro: attach more files beyond the primary (the "+" the founder asked
+            for). Appears once a primary is picked, on the upload tabs. Free users
+            never see this, their quiz stays single-file. */}
+        {isPro && (file||mediaFile) && (tab==="file"||tab==="photo"||tab==="media") && (
+          <div style={{marginTop:12}}>
+            <input ref={extraRef} type="file" accept=".pdf,.txt,.md,.csv,image/*,audio/*,video/*" style={{display:"none"}} onChange={e=>{addExtraFile(e.target.files[0]); e.target.value="";}}/>
+            {extraFiles.map((ex,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:8,background:"var(--color-sel-tint)",border:"1px solid #c7d2fe",borderRadius:9,padding:"8px 11px",marginBottom:6}}>
+                <Icon name={ex.kind==="media"?"play":ex.type==="pdf"?"notes":ex.type==="image"?"camera":"pencil"} size={15} style={{color:"var(--color-accent)",flexShrink:0}}/>
+                <span style={{flex:1,minWidth:0,fontSize:12,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ex.name}</span>
+                <button onClick={()=>setExtraFiles(prev=>prev.filter((_,j)=>j!==i))} style={{flexShrink:0,background:"none",border:"none",color:"var(--color-text-tertiary)",cursor:"pointer",fontFamily:"inherit",fontSize:15,lineHeight:1,padding:0}}>✕</button>
+              </div>
+            ))}
+            {extraFiles.length < QUIZ_FILES_PRO-1 && (
+              <button onClick={()=>extraRef.current.click()} style={{width:"100%",background:"var(--color-background-primary)",border:"1.5px dashed var(--color-border-secondary)",borderRadius:9,padding:"9px",fontSize:12,fontWeight:600,color:"var(--color-accent)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                <Icon name="paperclip" size={14}/>{t.addAnotherFile}
+              </button>
+            )}
+          </div>
+        )}
         {error && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,lineHeight:1.5,display:"flex",alignItems:"flex-start",gap:7}}><Icon name="alert" size={15} style={{flexShrink:0,marginTop:1}}/><span>{error}</span></div>}
         {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4338ca",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="gem" size={16}/>{t.getMoreQuestions}</button>}
         </div>
@@ -3071,10 +3377,25 @@ export default function StudyQuiz() {
           <div style={Sb.settingRow}>
             <span style={Sb.settingLabel}>{t.difficulty}</span>
             <div style={{display:"flex",gap:5}}>
-              {t.diffOpts.map((d,i)=><Chip key={d} small label={d} active={diff===i} onClick={()=>setDiff(i)}/>)}
+              {t.diffOpts.map((d,i)=><Chip key={d} small label={d} active={diff===i} rec={diffRec.confidence>=0.6 && diffRec.diff===i} onClick={()=>pickDiff(i)}/>)}
             </div>
           </div>
           {t.diffDesc?.[diff] && <div style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.45,padding:"2px 2px 0",textAlign:"right"}}>{t.diffDesc[diff]}</div>}
+          {/* Adaptive difficulty (Phase 1): once there's enough history, show the
+              level the student model recommends and why. When the picker isn't
+              already on it (learner overrode), offer a one-tap switch. */}
+          {diffRec.confidence>=0.6 && (
+            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:9,background:"var(--color-sel-tint)",border:"1px solid #c7d2fe",borderRadius:10,padding:"8px 11px"}}>
+              <Icon name="target" size={15} style={{color:"var(--color-accent)",flexShrink:0}}/>
+              <span style={{flex:1,fontSize:11.5,color:"var(--color-accent)",lineHeight:1.4}}>
+                <strong>{t.recForYou}: {t.diffOpts[diffRec.diff]}</strong>{" · "}
+                {diffRec.reason==="up"?t.diffWhyUp:diffRec.reason==="down"?t.diffWhyDown:t.diffWhyHold}
+              </span>
+              {diffRec.diff!==diff && (
+                <button onClick={()=>pickDiff(diffRec.diff)} style={{flexShrink:0,background:"#4338ca",color:"#fff",border:"none",borderRadius:8,padding:"6px 11px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.useThis}</button>
+              )}
+            </div>
+          )}
         </div>
         {/* Usage strip, questions remaining today (server-tracked). */}
         <div style={{background:isPro?"var(--color-background-secondary)":"#fffbeb",border:isPro?"0.5px solid var(--color-border-tertiary)":"1px solid #f59e0b44",borderRadius:10,padding:"10px 14px",fontSize:12,color:isPro?"var(--color-text-secondary)":"#92400e",marginBottom:14}}>
@@ -3252,6 +3573,13 @@ export default function StudyQuiz() {
             </div>
           ))}
         </div>
+        {resNudge && (
+          <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
+            <Icon name={resNudge.dir==="up"?"spark":"flame"} size={18} style={{color:"var(--color-accent)",flexShrink:0}}/>
+            <span style={{flex:1,fontSize:12.5,color:"var(--color-accent)",lineHeight:1.4}}>{(resNudge.dir==="up"?t.nudgeHarder:t.nudgeEasier).replace("{n}",t.diffOpts[resNudge.to])}</span>
+            <button onClick={()=>{ pickDiff(resNudge.to); newMat(); }} style={{flexShrink:0,background:"#4338ca",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.useThis}</button>
+          </div>
+        )}
         {missedThisQuiz.length>0 && (
           <button onClick={fixMisses} style={{...Sb.btnPrimary,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:9,background:"linear-gradient(135deg,#15803d,#22c55e)"}}>
             <Icon name="target" size={17}/>{t.fixMisses.replace("{n}",missedThisQuiz.length)}
@@ -3492,31 +3820,31 @@ export default function StudyQuiz() {
         )}
         <div style={{marginBottom:22}}>
           <p style={Sb.secLabel}>{t.difficulty.toUpperCase()}</p>
-          <div style={{display:"flex",gap:8}}>{t.diffOpts.map((d,i)=><Chip key={d} label={d} active={diff===i} onClick={()=>setDiff(i)}/>)}</div>
+          <div style={{display:"flex",gap:8}}>{t.diffOpts.map((d,i)=><Chip key={d} label={d} active={diff===i} onClick={()=>pickDiff(i)}/>)}</div>
         </div>
-        <p style={Sb.secLabel}>{t.examFiles.toUpperCase()} ({examFiles.filter(Boolean).length}/5)</p>
+        {(() => {
+          const examCap = isPro ? EXAM_FILES_PRO : EXAM_FILES_FREE;
+          const efs = examFiles.filter(Boolean);
+          return (<>
+        <p style={Sb.secLabel}>{t.examFiles.toUpperCase()} ({efs.length}/{examCap})</p>
         <p style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:12,marginTop:-8}}>{t.examFilesHint}</p>
+        <input ref={examAddRef} type="file" accept=".pdf,.txt,.md,.csv,image/*" style={{display:"none"}} onChange={e=>{addExamFile(e.target.files[0]); e.target.value="";}}/>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:22}}>
-          {[0,1,2,3,4].map(idx=>{
-            const ef=examFiles[idx];
-            return (
-              <div key={idx}>
-                <input ref={examFileRefs[idx]} type="file" accept=".pdf,.txt,.md,.csv,image/*" style={{display:"none"}} onChange={e=>addExamFile(e.target.files[0],idx)}/>
-                {ef?(
-                  <div style={{background:"var(--color-sel-tint)",border:"1px solid #a5b4fc",borderRadius:10,padding:"10px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",minHeight:56}} onClick={()=>removeExamFile(idx)}>
-                    <span style={{flexShrink:0,display:"inline-flex",color:"var(--color-accent)"}}><Icon name={ef.type==="pdf"?"notes":ef.type==="image"?"camera":"pencil"} size={18}/></span>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:600,color:"var(--color-accent)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ef.name}</div><div style={{fontSize:9,color:"var(--color-text-secondary)"}}>{t.tapToRemove}</div></div>
-                  </div>
-                ):(
-                  <div style={{border:"1.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"14px 8px",textAlign:"center",cursor:"pointer",background:"var(--color-background-primary)",minHeight:56,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}} onClick={()=>examFileRefs[idx].current.click()}>
-                    <div style={{color:"var(--color-text-tertiary)",marginBottom:3,display:"flex"}}><Icon name="paperclip" size={17}/></div>
-                    <div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{t.addFile}</div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {efs.map((ef,idx)=>(
+            <div key={idx} style={{background:"var(--color-sel-tint)",border:"1px solid #a5b4fc",borderRadius:10,padding:"10px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",minHeight:56}} onClick={()=>removeExamFile(idx)}>
+              <span style={{flexShrink:0,display:"inline-flex",color:"var(--color-accent)"}}><Icon name={ef.type==="pdf"?"notes":ef.type==="image"?"camera":"pencil"} size={18}/></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:600,color:"var(--color-accent)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ef.name}</div><div style={{fontSize:9,color:"var(--color-text-secondary)"}}>{t.tapToRemove}</div></div>
+            </div>
+          ))}
+          {efs.length<examCap && (
+            <div style={{border:"1.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"14px 8px",textAlign:"center",cursor:"pointer",background:"var(--color-background-primary)",minHeight:56,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}} onClick={()=>examAddRef.current.click()}>
+              <div style={{color:"var(--color-text-tertiary)",marginBottom:3,display:"flex"}}><Icon name="paperclip" size={17}/></div>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{t.addFile}</div>
+            </div>
+          )}
         </div>
+          </>);
+        })()}
         {error&&<div style={{display:"flex",alignItems:"center",gap:8,background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}><Icon name="alert" size={15} style={{flexShrink:0}}/><span>{error}</span></div>}
         {limitHit && <button onClick={()=>setShowPacks(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,background:"#4338ca"}}><span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="gem" size={16}/>{t.getMoreQuestions}</span></button>}
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#2c2870,#4338ca)"}} onClick={generateExam}>{t.startExam}</button>
@@ -4110,6 +4438,7 @@ export default function StudyQuiz() {
                   <div style={{fontSize:12,color:"#16a34a",marginTop:3,paddingLeft:22,fontWeight:500}}>{t.correctAns} {q.options[q.correct]}</div>
                   {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingTop:6,marginTop:6,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:22}}>{q.explanation}</div>}
                   {!ok&&<ExplainBox t={t} ctx={{question:q.question,correct:q.options[q.correct],picked:chosen!=null?q.options[chosen]:"",subject:sec.name}}/>}
+                  <MockReport exam={mock.name} section={sec.name} question={q.question} t={t}/>
                 </div>;
               })}
             </div>

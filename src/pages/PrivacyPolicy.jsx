@@ -54,6 +54,12 @@ export default function PrivacyPolicy() {
           own servers.
         </p>
         <p>
+          So that Revyy can build a cumulative "quiz me on everything" review across what you have
+          studied, we keep a short AI-written summary of each set as part of your study data. These
+          summaries are a brief digest of the material, not the original files or their full text,
+          and you can remove any of them, or all of them, from your study library whenever you like.
+        </p>
+        <p>
           Anthropic and AssemblyAI process your content only to provide these features, under their
           own terms, and do not use it to train their models.
         </p>
