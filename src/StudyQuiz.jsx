@@ -148,9 +148,14 @@ const SoundEngine = (() => {
       master = ctx.createGain(); master.gain.value = 0.7;
       master.connect(ctx.destination);
     }
+    // Browsers start the context suspended until a user gesture; resume it (this
+    // runs inside click handlers) or no tone ever plays.
+    if (ctx.state === "suspended") { try { ctx.resume(); } catch { /* ignore */ } }
     return ctx;
   };
+  let enabled = true; // mirrors the user's sound setting so any caller self-gates
   const tone = (freq, type='sine', dur=0.08, vol=0.18, start=0) => {
+    if (!enabled) return;
     try {
       const c=ac(), o=c.createOscillator(), g=c.createGain();
       o.connect(g); g.connect(master);
@@ -171,6 +176,7 @@ const SoundEngine = (() => {
     fail:      ()=>tone(280,'sine',0.25,0.15),
     celebrate: ()=>[[523,0],[659,.08],[784,.16],[1047,.26],[784,.42],[1047,.52],[1319,.62]].forEach(([f,d])=>tone(f,'sine',0.18,0.22,d)),
     setVolume:(v)=>{ if(master) master.gain.value = Math.max(0,Math.min(1,v/100)); },
+    setEnabled:(v)=>{ enabled = !!v; },
   };
 })();
 
@@ -265,7 +271,7 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName, learnerBrief, 
   if (parsed && Array.isArray(parsed.questions)) {
     parsed.questions = parsed.questions.map((q) =>
       q && typeof q === "object"
-        ? { ...q, source: typeof q.source === "string" ? q.source.trim().slice(0, 240) : "" }
+        ? shuffleMCQOptions({ ...q, source: typeof q.source === "string" ? q.source.trim().slice(0, 240) : "" })
         : q
     );
   }
@@ -294,7 +300,7 @@ async function callClaudeText(prompt, max = 400) {
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
     body: JSON.stringify({ model:AI_MODEL, max_tokens:max,
-      system:"You are a warm, encouraging tutor. Reply in plain text, 2-4 sentences, no markdown, no headings.",
+      system:"You are a warm, encouraging tutor. Keep replies SHORT and to the point, usually 1-3 sentences; only write more when the concept genuinely needs it. Plain text, no markdown, no headings, no preamble or filler, get straight to the point.",
       messages:[{ role:"user", content:[{type:"text",text:prompt}] }] }),
   });
   if (!res.ok) throw new Error("explain failed");
@@ -302,13 +308,25 @@ async function callClaudeText(prompt, max = 400) {
 }
 function explainAnswer({ question, correct, picked, subject }) {
   return callClaudeText(
-    `A student just answered a study question wrong.\nQuestion: ${question}\nCorrect answer: ${correct}\nStudent's answer: ${picked || "(left blank)"}${subject ? `\nSubject: ${subject}` : ""}\nIn 2-4 short sentences, explain clearly why the correct answer is right and gently point out the likely misunderstanding behind the student's answer. Be specific and concrete.`
+    `A student just answered a study question wrong.\nQuestion: ${question}\nCorrect answer: ${correct}\nStudent's answer: ${picked || "(left blank)"}${subject ? `\nSubject: ${subject}` : ""}\nIn 1-2 short sentences, say why the correct answer is right and gently name the likely misunderstanding. Be concise and concrete, no filler.`
   );
 }
 function followupAnswer({ question, correct, prior, ask }) {
   return callClaudeText(
-    `A student is reviewing a quiz question they got wrong.\nQuestion: ${question}\nCorrect answer: ${correct}\nYour earlier explanation: ${prior}\nThe student now asks: "${ask}"\nAnswer their follow-up clearly and concisely (2-4 sentences).`
+    `A student is reviewing a quiz question they got wrong.\nQuestion: ${question}\nCorrect answer: ${correct}\nYour earlier explanation: ${prior}\nThe student now asks: "${ask}"\nAnswer concisely in 1-2 sentences; expand only if the question truly needs it. If they go off-topic, answer in ONE short friendly line and steer back, do not lecture.`
   );
+}
+
+// Randomize which position holds the correct option, so the key isn't clustered
+// (models tend to over-use one letter, e.g. every answer "B"). No-op for
+// non-MCQ questions (empty options) and safe against duplicate option text.
+function shuffleMCQOptions(q) {
+  if (!q || !Array.isArray(q.options) || q.options.length < 2 || !Number.isInteger(q.correct) || q.correct < 0 || q.correct >= q.options.length) return q;
+  const correctVal = q.options[q.correct];
+  const opts = q.options.map((text, i) => ({ text, wasCorrect: i === q.correct }));
+  for (let i = opts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [opts[i], opts[j]] = [opts[j], opts[i]]; }
+  const correct = opts.findIndex((o) => o.wasCorrect);
+  return { ...q, options: opts.map((o) => o.text), correct: correct >= 0 ? correct : q.correct, answer: correctVal ?? q.answer };
 }
 
 // Shape a model-returned MCQ into the app's question object, or null if it is
@@ -806,11 +824,37 @@ function MatchQuiz({ questions, onDone, t }) {
   const [defUsed,setDefUsed] = useState({});
   const [checked,setChecked] = useState(false);
   const [results,setResults] = useState({});
-  const pickTerm = i => { if(checked||matches[i]!==undefined)return; setSel(s=>s===i?null:i); };
-  const pickDef  = i => {
-    if(checked||defUsed[i]||sel===null)return;
+  // Tapping a matched term unpairs it (frees its definition); tapping an
+  // unmatched term selects/deselects it. So a learner can always change a match.
+  const pickTerm = i => {
+    if (checked) return;
+    if (matches[i] !== undefined) {
+      const di = matches[i];
+      setMatches(m => { const c = { ...m }; delete c[i]; return c; });
+      setDefUsed(d => ({ ...d, [di]: false }));
+      setPairNo(p => { const c = { ...p }; delete c[i]; return c; });
+      setSel(null);
+      return;
+    }
+    setSel(s => s === i ? null : i);
+  };
+  const pickDef = i => {
+    if (checked) return;
+    // Tapping an already-used definition unpairs it so it can be re-matched.
+    if (defUsed[i]) {
+      const ti = termForDef(i);
+      if (ti !== null) {
+        setMatches(m => { const c = { ...m }; delete c[ti]; return c; });
+        setPairNo(p => { const c = { ...p }; delete c[ti]; return c; });
+      }
+      setDefUsed(d => ({ ...d, [i]: false }));
+      return;
+    }
+    if (sel === null) return;
     Haptics.buzz();
-    const n = Object.keys(matches).length + 1; // next free pair number
+    // Smallest free pair number, so colors never collide after an unpair.
+    const usedNums = new Set(Object.keys(matches).map(k => pairNo[k]).filter(Boolean));
+    let n = 1; while (usedNums.has(n)) n++;
     setPairNo(p=>({...p,[sel]:n}));
     setMatches(m=>({...m,[sel]:i})); setDefUsed(d=>({...d,[i]:true})); setSel(null);
   };
@@ -836,7 +880,7 @@ function MatchQuiz({ questions, onDone, t }) {
             const matched=matches[i]!==undefined,isSel=sel===i,isOk=checked&&results[i],isBad=checked&&!results[i]&&matched;
             const pc=pairColor(pairNo[i]);
             const bc=isOk?"#22c55e":isBad?"#ef4444":isSel?"#4338ca":matched?pc:"var(--color-border-tertiary)";
-            return <button key={i} onClick={()=>pickTerm(i)} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:bc,background:isSel?"var(--color-sel-tint)":matched?"var(--color-background-secondary)":"var(--color-background-primary)",fontSize:12,fontWeight:600,cursor:matched||checked?"default":"pointer",color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left",transition:"all 0.15s"}}>
+            return <button key={i} onClick={()=>pickTerm(i)} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:bc,background:isSel?"var(--color-sel-tint)":matched?"var(--color-background-secondary)":"var(--color-background-primary)",fontSize:12,fontWeight:600,cursor:checked?"default":"pointer",color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left",transition:"all 0.15s"}}>
               {matched && <PairBadge n={pairNo[i]} color={pc}/>}
               <span style={{flex:1,display:"inline-flex",alignItems:"center",gap:6}}>{isOk&&<Icon name="check" size={14} stroke={2.6} style={{color:"#16a34a",flexShrink:0}}/>}{isBad&&<Icon name="x" size={14} stroke={2.6} style={{color:"#dc2626",flexShrink:0}}/>}{term}</span>
             </button>;
@@ -846,7 +890,7 @@ function MatchQuiz({ questions, onDone, t }) {
           {defs.map((def,i)=>{
             const used=defUsed[i]; const ti=used?termForDef(i):null; const n=ti!==null?pairNo[ti]:null;
             const pc=n?pairColor(n):null;
-            return <button key={i} onClick={()=>pickDef(i)} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:used?pc:"var(--color-border-tertiary)",background:used?"var(--color-background-secondary)":"var(--color-background-primary)",fontSize:11,cursor:(used||checked||sel===null)?"default":"pointer",color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left",lineHeight:1.4,transition:"all 0.15s"}}>
+            return <button key={i} onClick={()=>pickDef(i)} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:used?pc:"var(--color-border-tertiary)",background:used?"var(--color-background-secondary)":"var(--color-background-primary)",fontSize:11,cursor:checked?"default":(used||sel!==null)?"pointer":"default",color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left",lineHeight:1.4,transition:"all 0.15s"}}>
               {used && n && <PairBadge n={n} color={pc}/>}
               <span style={{flex:1}}>{def}</span>
             </button>;
@@ -961,6 +1005,7 @@ function FlagFix({ q, subject, blocks, uiLangName, diff, onReplace, t }) {
     finally { setBusy(""); }
   };
   const act = async (reason) => {
+    SoundEngine.click(); // acknowledge the report (self-gates on the sound setting)
     if (reason !== "wrong") return doRegen(reason);
     setBusy("checking"); setErr("");
     try {
@@ -1806,6 +1851,7 @@ export default function StudyQuiz() {
   const [mockAns, setMockAns] = useState([]); // [secIdx] => [selected index per question]
   const [mockSecResults, setMockSecResults] = useState([]);
   const [mockSecTimeLeft, setMockSecTimeLeft] = useState(0);
+  const [mockPaused, setMockPaused] = useState(false); // pause + blur when tabbing out of a mock
   const [mockGenErr, setMockGenErr] = useState("");
   const [showMockSubmit, setShowMockSubmit] = useState(false);
   const submittedSecRef = useRef(-1);
@@ -1857,12 +1903,22 @@ export default function StudyQuiz() {
     }
   };
   useEffect(() => { submitSectionRef.current = submitSection; }); // keep latest closure
-  // Per-section countdown: one interval per section, auto-submits at 0.
+  // Per-section countdown: one interval per section, auto-submits at 0. Frozen
+  // while paused (tabbed out) so switching away can't run down the clock.
   useEffect(() => {
-    if (screen !== "mock_run") return;
+    if (screen !== "mock_run" || mockPaused) return;
     const id = setInterval(() => setMockSecTimeLeft((t) => { if (t <= 1) { clearInterval(id); return 0; } return t - 1; }), 1000);
     return () => clearInterval(id);
-  }, [screen, mockSecIdx]);
+  }, [screen, mockSecIdx, mockPaused]);
+  // Pause + blur a mock when the tab is hidden, so the question can't be read
+  // off-screen (same anti-peek behaviour as exam mode).
+  useEffect(() => {
+    if (screen !== "mock_run") return;
+    const onVis = () => { if (document.hidden) setMockPaused(true); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [screen]);
+  useEffect(() => { if (mockPaused) document.activeElement?.blur?.(); }, [mockPaused]);
   useEffect(() => {
     if (screen === "mock_run" && mockSecTimeLeft === 0 && mock && submittedSecRef.current !== mockSecIdx) submitSectionRef.current();
   }, [mockSecTimeLeft, screen, mockSecIdx, mock]);
@@ -1937,7 +1993,12 @@ export default function StudyQuiz() {
   // When a quiz or exam finishes, add the missed questions to the review deck
   // (once per result set, keyed on the object identity).
   useEffect(() => {
-    if (screen === "results" && quiz && srsAddedRef.current !== quiz) {
+    if (screen === "results" && quiz && srsAddedRef.current !== quiz && quiz.replay) {
+      // A scrambled retry of already-seen questions: mark it handled but record
+      // nothing, so stats, the review deck, the bank and the adaptive signal are
+      // not double-counted.
+      srsAddedRef.current = quiz; setSrsAdded(0);
+    } else if (screen === "results" && quiz && srsAddedRef.current !== quiz) {
       srsAddedRef.current = quiz;
       const missed = quiz.questions.filter((_, i) => answers[i] && answers[i].isCorrect === false).map(toCard);
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
@@ -1969,6 +2030,16 @@ export default function StudyQuiz() {
       if (exItems.length) srs.bankAdd(exItems);
     }
   }, [screen, quiz, answers, examEvals, examQs, srs, stats, diff]);
+  // Play a finish sound once when a quiz result appears (celebrate / pass / fail).
+  const resultSndRef = useRef(null);
+  useEffect(() => {
+    if (screen === "results" && quiz && resultSndRef.current !== quiz) {
+      resultSndRef.current = quiz;
+      const c = answers.filter(a => a && a.isCorrect).length;
+      const p = quiz.questions.length ? Math.round(c / quiz.questions.length * 100) : 0;
+      (p >= 90 ? SoundEngine.celebrate : p >= 60 ? SoundEngine.pass : SoundEngine.fail)();
+    }
+  }, [screen, quiz, answers]);
   // ── Exam timer ──
   const [examTimerOn,   setExamTimerOn]   = useState(false);
   const [examTimerMin,  setExamTimerMin]  = useState("60");
@@ -2037,6 +2108,7 @@ export default function StudyQuiz() {
 
   useEffect(()=>{ SoundEngine.setVolume(settings.volume); },[settings.volume]);
   useEffect(()=>{ setSoundOn(settings.sound); },[settings.sound]);
+  useEffect(()=>{ SoundEngine.setEnabled(soundOn); },[soundOn]);
   useEffect(()=>{ Haptics.on = settings.haptics; },[settings.haptics]);
   // Apply the saved "default difficulty / questions" to the quiz-setup controls
   // on load (and whenever the default changes) so they persist across reloads
@@ -2429,7 +2501,7 @@ export default function StudyQuiz() {
       const exTopics = [...new Set(parsed.questions.map(q=>q.topic).filter(Boolean))];
       const exDoc = makeLibraryDoc({ title: parsed.title, subject: "", topics: exTopics, summary: parsed.summary, n: parsed.questions.length });
       if (exDoc) srs.addLibraryDoc(exDoc);
-      const annotated = parsed.questions.map(q=>({
+      const annotated = parsed.questions.map(q=>shuffleMCQOptions({
         ...q,
         marksPerQ: examMode==="custom" ? (marksMap[q.section]||1) : 1,
       }));
@@ -2536,13 +2608,14 @@ export default function StudyQuiz() {
   useEffect(()=>{
     if(screen==="exam_run" && examTimerOn && examTimeLeft===0 && !examTimeUp) handleTimeUp();
   },[screen,examTimerOn,examTimeLeft,examTimeUp,handleTimeUp]);
-  // Auto-pause when the tab is hidden/switched.
+  // Auto-pause + blur when the tab is hidden/switched, so the question can't be
+  // seen off-screen. Applies even without a timer (it just hides the question).
   useEffect(()=>{
-    if(screen!=="exam_run" || !examTimerOn) return;
+    if(screen!=="exam_run") return;
     const onVis=()=>{ if(document.hidden) setExamPaused(true); };
     document.addEventListener("visibilitychange",onVis);
     return ()=>document.removeEventListener("visibilitychange",onVis);
-  },[screen,examTimerOn]);
+  },[screen]);
   // Drop focus from any input while paused so keystrokes can't reach it.
   useEffect(()=>{ if(examPaused) document.activeElement?.blur?.(); },[examPaused]);
   // Snapshot the live exam for refresh-recovery; persist on unload.
@@ -2744,21 +2817,40 @@ export default function StudyQuiz() {
       // the questions they have flagged as bad, so generation self-improves.
       // Both empty for newcomers, so their experience is unchanged at first.
       const learnerBrief = [buildLearnerBrief(studyModel), buildAvoidNote(srs.bank)].filter(Boolean).join("\n\n");
-      let res = null, lastErr = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      // Batched generation so a big count (e.g. 100) is actually reached: models
+      // reliably return only ~20-30 per call, so we ask in chunks and accumulate
+      // deduped questions, telling each chunk to avoid what's already written,
+      // until we hit the target (or run out of new material). Small counts are a
+      // single chunk, same as before. withSummary rides the first chunk only.
+      const CHUNK = 25;
+      const seen = new Set();
+      const collected = [];
+      let title = "", subject = "", summary = "", lastErr = null, emptyRounds = 0, calls = 0;
+      const maxCalls = finalNumQ <= CHUNK ? 3 : Math.ceil(finalNumQ / CHUNK) + 3;
+      while (collected.length < finalNumQ && calls < maxCalls && emptyRounds < 2) {
+        calls++;
+        const need = Math.min(CHUNK, finalNumQ - collected.length);
+        const avoidSeen = collected.length
+          ? `\nDo NOT repeat or lightly reword any of these questions already written:\n- ${collected.slice(-30).map((q) => String(q.question || "").slice(0, 120)).join("\n- ")}`
+          : "";
         let r = null;
         try {
-          // withSummary asks the same call to also return a compact digest of the
-          // material for the study library (Phase 3), so "memory" costs no extra call.
-          r = await callClaude({blocks, numQ:finalNumQ, diff, type:finalType, uiLangName:LANGS[lang]?.name, learnerBrief, withSummary:true});
+          r = await callClaude({ blocks, numQ: need, diff, type: finalType, uiLangName: LANGS[lang]?.name, learnerBrief: learnerBrief + avoidSeen, withSummary: calls === 1 });
         } catch (e1) { lastErr = e1; }
+        let added = 0;
         if (r?.questions?.length) {
-          // Keep the best-so-far (most questions).
-          if (!res || r.questions.length > res.questions.length) res = r;
-          if (res.questions.length >= finalNumQ) break; // got the full set
+          if (calls === 1) { title = r.title || ""; subject = r.subject || ""; summary = r.summary || ""; }
+          for (const q of r.questions) {
+            const key = String(q?.question || "").trim().toLowerCase();
+            if (!key || seen.has(key)) continue;
+            seen.add(key); collected.push(q); added++;
+            if (collected.length >= finalNumQ) break;
+          }
         }
+        emptyRounds = added === 0 ? emptyRounds + 1 : 0;
       }
-      if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
+      if (!collected.length) throw (lastErr || new Error("No questions returned"));
+      const res = { title, subject, summary, questions: collected.slice(0, finalNumQ) };
       genBlocksRef.current = blocks; // keep the source material for FlagFix regen
       // Phase 3: remember a summary of this upload (never the material itself) so
       // Revyy can quiz across everything studied. Skipped for the cumulative
@@ -2872,7 +2964,13 @@ export default function StudyQuiz() {
     }
   }, [requireLogin, srs.library, srs.bank, consumeQuestions, diff, lang, t, isPro, studyModel]);
 
-  const pick    = i => { if(selected===null){ setSelected(i); haptic(); } };
+  const pick    = i => {
+    if(selected!==null) return;
+    setSelected(i); haptic();
+    // Immediate feedback reveals right/wrong now, so play that; otherwise a soft click.
+    if (settings.feedback==="immediate") (i===quiz.questions[qIdx].correct ? SoundEngine.correct : SoundEngine.wrong)();
+    else SoundEngine.click();
+  };
   const nextQ   = (isCorrect, detail) => {
     // `detail` carries what the learner picked (e.g. {selected} for MCQ) so the
     // results screen can show "Your answer" next to the correct one.
@@ -2881,7 +2979,13 @@ export default function StudyQuiz() {
     else setQIdx(i=>i+1);
   };
   const nextMCQ = () => { if(selected===null)return; nextQ(selected===quiz.questions[qIdx].correct,{selected}); };
-  const retry   = () => { setQIdx(0);setAnswers([]);setSelected(null);setScreen("quiz"); };
+  // Retry re-shuffles the SAME questions into a new order (never regenerates),
+  // so a second attempt isn't a memorised run. Marked `replay` so the results
+  // handler doesn't double-count it into stats / the deck / the adaptive signal.
+  const retry   = () => {
+    setQuiz(prev => prev ? { ...prev, questions:[...prev.questions].sort(()=>Math.random()-0.5), fresh:false, replay:true } : prev);
+    setQIdx(0);setAnswers([]);setSelected(null);setScreen("quiz");
+  };
   // Swap the flagged question in place with a freshly-generated replacement and
   // clear any pick, so the learner answers the corrected question (FlagFix).
   const replaceCurrentQuestion = (nq, reason) => {
@@ -2898,7 +3002,20 @@ export default function StudyQuiz() {
     });
     setSelected(null);
   };
-  const newMat  = () => { setScreen("upload");setQuiz(null);setFile(null);setMediaFile(null);setExtraFiles([]);setMediaStatus("");setTextVal("");setError(""); };
+  // Open an uploaded file in a new tab so the learner can see what they sent.
+  const openFile = (f) => {
+    try {
+      const blob = f?.raw ? f.raw : (f?.content != null ? new Blob([f.content], { type: "text/plain" }) : null);
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch { /* ignore */ }
+  };
+  // "New material" returns to the setup screen but KEEPS whatever was uploaded,
+  // so a learner can tweak settings and regenerate without re-uploading. Use the
+  // file's own remove control (the red x) to actually clear it.
+  const newMat  = () => { setScreen("upload");setQuiz(null);setError(""); };
   // Feature D: re-drill ONLY the questions just missed, as a fresh mini-quiz
   // (active recall on exactly your weak spots, right now). Reuses the whole quiz
   // flow, no new generation, no quota spent, and no lockout: keep fixing until
@@ -3001,7 +3118,7 @@ export default function StudyQuiz() {
         sections: exam.sections.map((s, i) => ({ ...s, questions: i === 0 ? qs : [] })) });
       setMockSecIdx(0); setMockQIdx(0);
       setMockAns(exam.sections.map(() => []));
-      setMockSecResults([]); setMockSecTimeLeft(exam.sections[0].minutes * 60);
+      setMockSecResults([]); setMockSecTimeLeft(exam.sections[0].minutes * 60); setMockPaused(false);
       setScreen("mock_run");
     } catch (e) {
       setMockGenErr(e.message || "Generation failed. Please try again.");
@@ -3254,12 +3371,13 @@ export default function StudyQuiz() {
           {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]],["media",t.mediaTab]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,position:"relative",padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4338ca":"var(--color-border-secondary)",background:tab===id?"#4338ca":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name={TAB_ICONS[id]} size={15}/>{stripEmoji(lb)}{id==="media"&&!isPro&&<span style={{position:"absolute",top:-6,right:-4,background:"#f59e0b",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 5px",fontWeight:800,letterSpacing:0.3,lineHeight:1.4,pointerEvents:"none"}}>PRO</span>}</button>)}
         </div>
         {tab==="file" && (
-          <div style={{...Sb.dropzone,...(drag?{borderColor:"#4338ca",background:"var(--color-sel-tint)"}:{}),...(file?{borderStyle:"solid",borderColor:"#4338ca"}:{})}}
+          <div style={{...Sb.dropzone,position:"relative",...(drag?{borderColor:"#4338ca",background:"var(--color-sel-tint)"}:{}),...(file?{borderStyle:"solid",borderColor:"#4338ca"}:{})}}
             onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);loadFile(e.dataTransfer.files[0]);}}
-            onClick={()=>fileRef.current.click()}>
+            onClick={()=>file?openFile(file):fileRef.current.click()}>
             <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,image/*" style={{display:"none"}} onChange={e=>loadFile(e.target.files[0])}/>
-            {file?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name={file.type==="image"?"camera":"notes"} size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(file.sizeMB*1024*1024)} · {t.tapChange}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="folder" size={32} stroke={1.5}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.dropTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.dropSub}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{isPro?t.unlimited:t.maxFileFree.replace("{n}",fileLimitMB())}</div></>)}
+            {file&&<button onClick={e=>{e.stopPropagation();setFile(null);}} title={t.tapToRemove} aria-label={t.tapToRemove} style={{position:"absolute",top:8,right:8,width:24,height:24,borderRadius:"50%",background:"#ef4444",color:"#fff",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,fontFamily:"inherit",zIndex:2}}>✕</button>}
+            {file?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name={file.type==="image"?"camera":"notes"} size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(file.sizeMB*1024*1024)} · {t.tapOpen}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="folder" size={32} stroke={1.5}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.dropTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.dropSub}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{isPro?t.unlimited:t.maxFileFree.replace("{n}",fileLimitMB())}</div></>)}
           </div>
         )}
         {tab==="file" && !isPro && (
@@ -3270,17 +3388,19 @@ export default function StudyQuiz() {
               </button>
         )}
         {tab==="photo" && (
-          <div style={{...Sb.dropzone,...(file&&file.type==="image"?{borderStyle:"solid",borderColor:"#4338ca"}:{})}} onClick={()=>photoRef.current.click()}>
+          <div style={{...Sb.dropzone,position:"relative",...(file&&file.type==="image"?{borderStyle:"solid",borderColor:"#4338ca"}:{})}} onClick={()=>(file&&file.type==="image")?openFile(file):photoRef.current.click()}>
             <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>loadFile(e.target.files[0])}/>
-            {file&&file.type==="image"?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="camera" size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{t.tapChange}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:4}}><Icon name="camera" size={38} stroke={1.4}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.photoTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.photoHint}</div></>)}
+            {file&&file.type==="image"&&<button onClick={e=>{e.stopPropagation();setFile(null);}} title={t.tapToRemove} aria-label={t.tapToRemove} style={{position:"absolute",top:8,right:8,width:24,height:24,borderRadius:"50%",background:"#ef4444",color:"#fff",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,fontFamily:"inherit",zIndex:2}}>✕</button>}
+            {file&&file.type==="image"?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="camera" size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{t.tapOpen}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:4}}><Icon name="camera" size={38} stroke={1.4}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.photoTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.photoHint}</div></>)}
           </div>
         )}
         {tab==="text" && <><textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>
           <button onClick={()=>{setQuizletErr("");setShowQuizlet(true);}} style={{marginTop:8,background:"none",border:"none",color:"var(--color-accent)",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:0,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="upload" size={13}/>{t.qzImportLink}</button></>}
         {tab==="media" && (isPro ? (
-          <div style={{...Sb.dropzone,...(mediaFile?{borderStyle:"solid",borderColor:"#4338ca"}:{})}} onClick={()=>mediaRef.current.click()}>
+          <div style={{...Sb.dropzone,position:"relative",...(mediaFile?{borderStyle:"solid",borderColor:"#4338ca"}:{})}} onClick={()=>mediaFile?openFile(mediaFile):mediaRef.current.click()}>
             <input ref={mediaRef} type="file" accept="audio/*,video/*" style={{display:"none"}} onChange={e=>loadMedia(e.target.files[0])}/>
-            {mediaFile?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="play" size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)",wordBreak:"break-word"}}>{mediaFile.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(mediaFile.sizeMB*1024*1024)} · {t.tapChange}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:4}}><Icon name="play" size={36} stroke={1.4}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.mediaTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.mediaHint}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{t.mediaSizeHint.replace("{max}",MEDIA_MAX_MB)}</div></>)}
+            {mediaFile&&<button onClick={e=>{e.stopPropagation();setMediaFile(null);}} title={t.tapToRemove} aria-label={t.tapToRemove} style={{position:"absolute",top:8,right:8,width:24,height:24,borderRadius:"50%",background:"#ef4444",color:"#fff",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,fontFamily:"inherit",zIndex:2}}>✕</button>}
+            {mediaFile?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="play" size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)",wordBreak:"break-word"}}>{mediaFile.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(mediaFile.sizeMB*1024*1024)} · {t.tapOpen}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:4}}><Icon name="play" size={36} stroke={1.4}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.mediaTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.mediaHint}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{t.mediaSizeHint.replace("{max}",MEDIA_MAX_MB)}</div></>)}
           </div>
         ) : (
           <div style={{...Sb.dropzone,cursor:"pointer"}} onClick={()=>setShowProModal(true)}>
@@ -3489,8 +3609,10 @@ export default function StudyQuiz() {
         <div style={Sb.topbar} className="rv-topbar"><button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button><span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{quiz.title}</span><span/></div>
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}><MatchQuiz questions={quiz.questions} t={t} onDone={(s,total,detail)=>{setAnswers(detail||Array(total).fill(0).map((_,i)=>({isCorrect:i<s})));setScreen("results");}}/></div>
         <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);newMat();}}/>
+        <button onClick={openSettings} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{position:"fixed",left:12,bottom:58,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.18)"}}><Icon name="gear" size={17}/></button>
         <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.18)"}}><Icon name="chat" size={17}/></button>
         {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
+        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
       </div>
     );
     return (
@@ -3534,13 +3656,15 @@ export default function StudyQuiz() {
               {selected!==null&&instant&&<div style={{borderRadius:10,padding:"12px 14px",marginTop:14,...(selected===q.correct?{background:"#f0fdf4",border:"0.5px solid #86efac",color:"#15803d"}:{background:"#fef2f2",border:"0.5px solid #fca5a5",color:"#b91c1c"})}} className="slide-up"><strong style={{fontSize:14}}>{selected===q.correct?t.correct:t.incorrect}</strong><p style={{margin:"5px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p></div>}
               {settings.autoAdvance && instant && selected!==null && <AutoAdvanceBar sec={autoAdvanceSec} runId={qIdx} t={t}/>}
               {(!settings.autoAdvance || instant) && <button style={{...Sb.btnPrimary,width:"100%",marginTop:settings.autoAdvance?12:20,opacity:selected===null?0.35:1,cursor:selected===null?"not-allowed":"pointer"}} onClick={nextMCQ} disabled={selected===null}>{settings.autoAdvance?t.skip||t.next:(isLast?t.finish:t.next)}</button>}
-              <div style={{textAlign:"center",marginTop:12}}><FlagFix q={q} subject={quiz.subject} blocks={genBlocksRef.current} uiLangName={LANGS[lang]?.name} diff={diff} t={t} onReplace={replaceCurrentQuestion}/></div>
+              <div style={{textAlign:"center",marginTop:12}}><FlagFix key={qIdx} q={q} subject={quiz.subject} blocks={genBlocksRef.current} uiLangName={LANGS[lang]?.name} diff={diff} t={t} onReplace={replaceCurrentQuestion}/></div>
             </>
           )}
         </div>
         <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);newMat();}}/>
+        <button onClick={openSettings} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{position:"fixed",left:12,bottom:58,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.18)"}}><Icon name="gear" size={17}/></button>
         <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.18)"}}><Icon name="chat" size={17}/></button>
         {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
+        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
       </div>
     );
   }
@@ -4373,6 +4497,7 @@ export default function StudyQuiz() {
             </div>
           </div>
         )}
+        {mockPaused && <PauseOverlay onResume={()=>setMockPaused(false)}/>}
       </div>
     );
   }
