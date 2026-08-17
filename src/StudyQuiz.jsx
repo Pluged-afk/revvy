@@ -1878,6 +1878,7 @@ export default function StudyQuiz() {
   const [soundOn,      setSoundOn]      = useState(true);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showSettings,   setShowSettings]   = useState(false);
+  const [showBugReport,  setShowBugReport]  = useState(false); // quick "report a bug" from the quiz screen
   const [settingsDraft,  setSettingsDraft]  = useState(null);
   const [settings, setSettings] = useState({
     theme:'system',      
@@ -1978,10 +1979,12 @@ export default function StudyQuiz() {
 
   // ── Font size injection ──
   useEffect(()=>{
-    let el=document.getElementById("revyy-font");
-    if(!el){el=document.createElement("style");el.id="revyy-font";document.head.appendChild(el);}
-    const s=settings.fontSize==="small"?"13px":settings.fontSize==="large"?"17px":"15px";
-    el.textContent="body,input,textarea,select,button{font-size:"+s+" !important;}";
+    // Scale the WHOLE app, not just body text: most of the UI uses inline pixel
+    // sizes, so a plain font-size rule barely moved. `zoom` scales everything
+    // (inline px included) and, unlike transform:scale, keeps fixed overlays put.
+    const z = settings.fontSize==="small" ? "0.9" : settings.fontSize==="large" ? "1.12" : "1";
+    try { document.body.style.zoom = z; } catch { /* ignore */ }
+    return () => { try { document.body.style.zoom = "1"; } catch { /* ignore */ } };
   },[settings.fontSize]);
 
   useEffect(()=>{
@@ -2962,7 +2965,7 @@ export default function StudyQuiz() {
         )}
         <h2 style={Sb.h2}>{t.uploadTitle}</h2>
         <div style={{display:"flex",gap:5,marginBottom:16}}>
-          {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]],["media",t.mediaTab]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4338ca":"var(--color-border-secondary)",background:tab===id?"#4338ca":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name={TAB_ICONS[id]} size={15}/>{stripEmoji(lb)}</button>)}
+          {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]],["media",t.mediaTab]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,position:"relative",padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4338ca":"var(--color-border-secondary)",background:tab===id?"#4338ca":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name={TAB_ICONS[id]} size={15}/>{stripEmoji(lb)}{id==="media"&&!isPro&&<span style={{position:"absolute",top:-6,right:-4,background:"#f59e0b",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 5px",fontWeight:800,letterSpacing:0.3,lineHeight:1.4,pointerEvents:"none"}}>PRO</span>}</button>)}
         </div>
         {tab==="file" && (
           <div style={{...Sb.dropzone,...(drag?{borderColor:"#4338ca",background:"var(--color-sel-tint)"}:{}),...(file?{borderStyle:"solid",borderColor:"#4338ca"}:{})}}
@@ -3165,6 +3168,8 @@ export default function StudyQuiz() {
         <div style={Sb.topbar} className="rv-topbar"><button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button><span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{quiz.title}</span><span/></div>
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}><MatchQuiz questions={quiz.questions} t={t} onDone={(s,total,detail)=>{setAnswers(detail||Array(total).fill(0).map((_,i)=>({isCorrect:i<s})));setScreen("results");}}/></div>
         <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);newMat();}}/>
+        <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.18)"}}><Icon name="chat" size={17}/></button>
+        {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
       </div>
     );
     return (
@@ -3213,6 +3218,8 @@ export default function StudyQuiz() {
           )}
         </div>
         <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);newMat();}}/>
+        <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.18)"}}><Icon name="chat" size={17}/></button>
+        {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
       </div>
     );
   }

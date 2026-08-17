@@ -62,7 +62,7 @@ const T_EN = {
   photoHint:"Opens your camera or photo library.",
   photoTitle:"Take a photo of your notes",
   // Audio/video lecture upload (Pro): transcribe, then quiz from the transcript.
-  mediaTab:"Lecture", mediaTitle:"Upload a lecture", mediaHint:"Audio or video. We transcribe it and quiz you on it.",
+  mediaTab:"Video/Audio", mediaTitle:"Upload audio or video", mediaHint:"A lecture, recording, or any clip. We transcribe it and quiz you on it.",
   mediaSizeHint:"Up to {max}MB. For a long lecture, the audio file is much smaller.",
   mediaProOnly:"Lecture upload is a Pro feature.",
   mediaUploading:"Uploading your lecture…", mediaTranscribing:"Transcribing your lecture…",
@@ -338,6 +338,7 @@ const T_EN = {
 };
 
 const T_LANGS = {
+
   "zh":{
     "qzImportLink":"从 Quizlet 来的？导入一个学习集",
     "qzTitle":"从 Quizlet 导入",
@@ -354,8 +355,8 @@ const T_LANGS = {
     "srsWhyMissed":"曾答错",
     "srsGoodNext":"{n} 天后",
     "srsAgainNext":"约 10 分钟后",
-    "mediaTab":"讲座",
-    "mediaTitle":"上传讲座",
+    "mediaTab":"视频/音频",
+    "mediaTitle":"上传音频或视频",
     "mediaHint":"音频或视频。我们会转写并据此出题。",
     "mediaSizeHint":"最大 {max}MB。较长的讲座，音频文件会小得多。",
     "mediaProOnly":"讲座上传是 Pro 功能。",
@@ -928,6 +929,7 @@ const T_LANGS = {
       "applySave":"应用并保存"
     }
   },
+
   "hi":{
     "qzImportLink":"Quizlet से आ रहे हैं? एक सेट इम्पोर्ट करें",
     "qzTitle":"Quizlet से इम्पोर्ट करें",
@@ -944,8 +946,8 @@ const T_LANGS = {
     "srsWhyMissed":"पहले चूके",
     "srsGoodNext":"{n} दिन में",
     "srsAgainNext":"~10 मिनट में",
-    "mediaTab":"लेक्चर",
-    "mediaTitle":"लेक्चर अपलोड करें",
+    "mediaTab":"वीडियो/ऑडियो",
+    "mediaTitle":"ऑडियो या वीडियो अपलोड करें",
     "mediaHint":"ऑडियो या वीडियो। हम इसे ट्रांसक्राइब करके क्विज़ बनाते हैं।",
     "mediaSizeHint":"{max}MB तक। लंबे लेक्चर के लिए, ऑडियो फ़ाइल बहुत छोटी होती है।",
     "mediaProOnly":"लेक्चर अपलोड एक Pro सुविधा है।",
@@ -1518,6 +1520,7 @@ const T_LANGS = {
       "applySave":"लागू करें और सहेजें"
     }
   },
+
   "es":{
     "qzImportLink":"¿Vienes de Quizlet? Importa un set",
     "qzTitle":"Importar desde Quizlet",
@@ -1534,8 +1537,8 @@ const T_LANGS = {
     "srsWhyMissed":"Fallada antes",
     "srsGoodNext":"en {n} día{s}",
     "srsAgainNext":"en ~10 min",
-    "mediaTab":"Clase",
-    "mediaTitle":"Sube una clase",
+    "mediaTab":"Video/Audio",
+    "mediaTitle":"Sube audio o vídeo",
     "mediaHint":"Audio o vídeo. Lo transcribimos y te hacemos preguntas.",
     "mediaSizeHint":"Hasta {max}MB. Para una clase larga, el archivo de audio es mucho más pequeño.",
     "mediaProOnly":"Subir clases es una función Pro.",
@@ -2103,6 +2106,7 @@ const T_LANGS = {
       "applySave":"Aplicar y guardar"
     }
   },
+
   "fr":{
     "qzImportLink":"Vous venez de Quizlet ? Importez un set",
     "qzTitle":"Importer depuis Quizlet",
@@ -2119,8 +2123,8 @@ const T_LANGS = {
     "srsWhyMissed":"Ratée avant",
     "srsGoodNext":"dans {n} jour{s}",
     "srsAgainNext":"dans ~10 min",
-    "mediaTab":"Cours",
-    "mediaTitle":"Importer un cours",
+    "mediaTab":"Vidéo/Audio",
+    "mediaTitle":"Importer audio ou vidéo",
     "mediaHint":"Audio ou vidéo. On le transcrit et on vous interroge dessus.",
     "mediaSizeHint":"Jusqu'à {max} Mo. Pour un long cours, le fichier audio est bien plus léger.",
     "mediaProOnly":"L'import de cours est une fonction Pro.",
@@ -2669,6 +2673,7 @@ const T_LANGS = {
       "applySave":"Appliquer et enregistrer"
     }
   },
+
   "ar":{
     "qzImportLink":"قادم من Quizlet؟ استورد مجموعة",
     "qzTitle":"الاستيراد من Quizlet",
@@ -2685,8 +2690,8 @@ const T_LANGS = {
     "srsWhyMissed":"أخطأت بها سابقاً",
     "srsGoodNext":"خلال {n} يوم",
     "srsAgainNext":"خلال ~10 دقائق",
-    "mediaTab":"محاضرة",
-    "mediaTitle":"ارفع محاضرة",
+    "mediaTab":"فيديو/صوت",
+    "mediaTitle":"ارفع صوتاً أو فيديو",
     "mediaHint":"صوت أو فيديو. نُفرّغه ونعدّ منه اختباراً.",
     "mediaSizeHint":"حتى {max} ميغابايت. للمحاضرات الطويلة، ملف الصوت أصغر بكثير.",
     "mediaProOnly":"رفع المحاضرات ميزة Pro.",
@@ -3258,6 +3263,7 @@ const T_LANGS = {
       "applySave":"تطبيق وحفظ"
     }
   },
+
   "pt":{
     "qzImportLink":"Vindo do Quizlet? Importe um conjunto",
     "qzTitle":"Importar do Quizlet",
@@ -3274,8 +3280,8 @@ const T_LANGS = {
     "srsWhyMissed":"Errada antes",
     "srsGoodNext":"em {n} dia{s}",
     "srsAgainNext":"em ~10 min",
-    "mediaTab":"Aula",
-    "mediaTitle":"Envie uma aula",
+    "mediaTab":"Vídeo/Áudio",
+    "mediaTitle":"Envie áudio ou vídeo",
     "mediaHint":"Áudio ou vídeo. Transcrevemos e criamos perguntas.",
     "mediaSizeHint":"Até {max}MB. Para uma aula longa, o arquivo de áudio é bem menor.",
     "mediaProOnly":"Enviar aulas é um recurso Pro.",
@@ -3842,6 +3848,7 @@ const T_LANGS = {
       "applySave":"Aplicar e guardar"
     }
   },
+
   "ru":{
     "qzImportLink":"Пришли из Quizlet? Импортируйте набор",
     "qzTitle":"Импорт из Quizlet",
@@ -3858,8 +3865,8 @@ const T_LANGS = {
     "srsWhyMissed":"Была ошибка",
     "srsGoodNext":"через {n} дн.",
     "srsAgainNext":"через ~10 мин",
-    "mediaTab":"Лекция",
-    "mediaTitle":"Загрузите лекцию",
+    "mediaTab":"Видео/Аудио",
+    "mediaTitle":"Загрузите аудио или видео",
     "mediaHint":"Аудио или видео. Мы расшифруем и составим по ней тест.",
     "mediaSizeHint":"До {max} МБ. Для длинной лекции аудиофайл намного меньше.",
     "mediaProOnly":"Загрузка лекций доступна в Pro.",
@@ -4429,6 +4436,7 @@ const T_LANGS = {
       "applySave":"Применить и сохранить"
     }
   },
+
   "id":{
     "qzImportLink":"Dari Quizlet? Impor satu set",
     "qzTitle":"Impor dari Quizlet",
@@ -4445,8 +4453,8 @@ const T_LANGS = {
     "srsWhyMissed":"Pernah salah",
     "srsGoodNext":"dalam {n} hari",
     "srsAgainNext":"dalam ~10 mnt",
-    "mediaTab":"Kuliah",
-    "mediaTitle":"Unggah kuliah",
+    "mediaTab":"Video/Audio",
+    "mediaTitle":"Unggah audio atau video",
     "mediaHint":"Audio atau video. Kami transkripsikan dan buat kuisnya.",
     "mediaSizeHint":"Hingga {max}MB. Untuk kuliah panjang, file audio jauh lebih kecil.",
     "mediaProOnly":"Unggah kuliah adalah fitur Pro.",
@@ -5014,6 +5022,7 @@ const T_LANGS = {
       "applySave":"Terapkan & simpan"
     }
   },
+
   "de":{
     "qzImportLink":"Von Quizlet? Ein Set importieren",
     "qzTitle":"Aus Quizlet importieren",
@@ -5030,8 +5039,8 @@ const T_LANGS = {
     "srsWhyMissed":"Zuvor falsch",
     "srsGoodNext":"in {n} Tagen",
     "srsAgainNext":"in ~10 Min.",
-    "mediaTab":"Vorlesung",
-    "mediaTitle":"Vorlesung hochladen",
+    "mediaTab":"Video/Audio",
+    "mediaTitle":"Audio oder Video hochladen",
     "mediaHint":"Audio oder Video. Wir transkribieren es und fragen dich ab.",
     "mediaSizeHint":"Bis {max} MB. Bei einer langen Vorlesung ist die Audiodatei viel kleiner.",
     "mediaProOnly":"Vorlesungen hochzuladen ist eine Pro-Funktion.",
@@ -5599,6 +5608,7 @@ const T_LANGS = {
       "applySave":"Übernehmen & speichern"
     }
   },
+
   "ja":{
     "qzImportLink":"Quizlet から？セットをインポート",
     "qzTitle":"Quizlet からインポート",
@@ -5615,8 +5625,8 @@ const T_LANGS = {
     "srsWhyMissed":"前回間違えた",
     "srsGoodNext":"{n}日後",
     "srsAgainNext":"約10分後",
-    "mediaTab":"講義",
-    "mediaTitle":"講義をアップロード",
+    "mediaTab":"動画/音声",
+    "mediaTitle":"音声または動画をアップロード",
     "mediaHint":"音声または動画。文字起こしして出題します。",
     "mediaSizeHint":"最大 {max}MB。長い講義は音声ファイルの方がずっと小さくなります。",
     "mediaProOnly":"講義のアップロードは Pro 機能です。",
@@ -6186,6 +6196,7 @@ const T_LANGS = {
       "applySave":"適用して保存"
     }
   },
+
   "tr":{
     "qzImportLink":"Quizlet'ten mi geldin? Bir set içe aktar",
     "qzTitle":"Quizlet'ten içe aktar",
@@ -6202,8 +6213,8 @@ const T_LANGS = {
     "srsWhyMissed":"Önce yanlıştı",
     "srsGoodNext":"{n} gün sonra",
     "srsAgainNext":"~10 dk sonra",
-    "mediaTab":"Ders",
-    "mediaTitle":"Bir ders yükle",
+    "mediaTab":"Video/Ses",
+    "mediaTitle":"Ses veya video yükle",
     "mediaHint":"Ses veya video. Deşifre edip üzerinden sınav yaparız.",
     "mediaSizeHint":"En fazla {max}MB. Uzun dersler için ses dosyası çok daha küçüktür.",
     "mediaProOnly":"Ders yükleme bir Pro özelliğidir.",
@@ -6772,6 +6783,7 @@ const T_LANGS = {
       "applySave":"Uygula ve kaydet"
     }
   },
+
   "ko":{
     "qzImportLink":"Quizlet에서 오셨나요? 세트 가져오기",
     "qzTitle":"Quizlet에서 가져오기",
@@ -6788,8 +6800,8 @@ const T_LANGS = {
     "srsWhyMissed":"이전에 틀림",
     "srsGoodNext":"{n}일 후",
     "srsAgainNext":"~10분 후",
-    "mediaTab":"강의",
-    "mediaTitle":"강의 업로드",
+    "mediaTab":"동영상/오디오",
+    "mediaTitle":"오디오나 동영상 업로드",
     "mediaHint":"오디오나 영상. 받아쓰기 후 문제를 만들어 드려요.",
     "mediaSizeHint":"최대 {max}MB. 긴 강의는 오디오 파일이 훨씬 작아요.",
     "mediaProOnly":"강의 업로드는 Pro 기능이에요.",
@@ -7362,6 +7374,7 @@ const T_LANGS = {
       "applySave":"적용 및 저장"
     }
   },
+
   "vi":{
     "qzImportLink":"Đến từ Quizlet? Nhập một bộ thẻ",
     "qzTitle":"Nhập từ Quizlet",
@@ -7378,8 +7391,8 @@ const T_LANGS = {
     "srsWhyMissed":"Đã sai trước đó",
     "srsGoodNext":"sau {n} ngày",
     "srsAgainNext":"sau ~10 phút",
-    "mediaTab":"Bài giảng",
-    "mediaTitle":"Tải lên bài giảng",
+    "mediaTab":"Video/Âm thanh",
+    "mediaTitle":"Tải lên âm thanh hoặc video",
     "mediaHint":"Âm thanh hoặc video. Chúng tôi gỡ băng và tạo câu hỏi.",
     "mediaSizeHint":"Tối đa {max}MB. Với bài giảng dài, tệp âm thanh nhỏ hơn nhiều.",
     "mediaProOnly":"Tải lên bài giảng là tính năng Pro.",
@@ -7949,6 +7962,7 @@ const T_LANGS = {
       "applySave":"Áp dụng & lưu"
     }
   },
+
   "it":{
     "qzImportLink":"Arrivi da Quizlet? Importa un set",
     "qzTitle":"Importa da Quizlet",
@@ -7965,8 +7979,8 @@ const T_LANGS = {
     "srsWhyMissed":"Sbagliata prima",
     "srsGoodNext":"tra {n} giorni",
     "srsAgainNext":"tra ~10 min",
-    "mediaTab":"Lezione",
-    "mediaTitle":"Carica una lezione",
+    "mediaTab":"Video/Audio",
+    "mediaTitle":"Carica audio o video",
     "mediaHint":"Audio o video. La trascriviamo e ti interroghiamo.",
     "mediaSizeHint":"Fino a {max}MB. Per una lezione lunga, il file audio è molto più piccolo.",
     "mediaProOnly":"Caricare lezioni è una funzione Pro.",
@@ -8530,6 +8544,7 @@ const T_LANGS = {
       "applySave":"Applica e salva"
     }
   },
+
   "th":{
     "qzImportLink":"มาจาก Quizlet? นำเข้าชุดการ์ด",
     "qzTitle":"นำเข้าจาก Quizlet",
@@ -8546,8 +8561,8 @@ const T_LANGS = {
     "srsWhyMissed":"เคยตอบผิด",
     "srsGoodNext":"อีก {n} วัน",
     "srsAgainNext":"อีก ~10 นาที",
-    "mediaTab":"เลกเชอร์",
-    "mediaTitle":"อัปโหลดเลกเชอร์",
+    "mediaTab":"วิดีโอ/เสียง",
+    "mediaTitle":"อัปโหลดเสียงหรือวิดีโอ",
     "mediaHint":"เสียงหรือวิดีโอ เราจะถอดความและออกข้อสอบให้",
     "mediaSizeHint":"ไม่เกิน {max}MB สำหรับเลกเชอร์ยาว ไฟล์เสียงจะเล็กกว่ามาก",
     "mediaProOnly":"การอัปโหลดเลกเชอร์เป็นฟีเจอร์ Pro",
@@ -9117,6 +9132,7 @@ const T_LANGS = {
       "applySave":"ใช้และบันทึก"
     }
   },
+
   "pl":{
     "qzImportLink":"Przychodzisz z Quizlet? Zaimportuj zestaw",
     "qzTitle":"Importuj z Quizlet",
@@ -9133,8 +9149,8 @@ const T_LANGS = {
     "srsWhyMissed":"Wcześniej błąd",
     "srsGoodNext":"za {n} dni",
     "srsAgainNext":"za ~10 min",
-    "mediaTab":"Wykład",
-    "mediaTitle":"Prześlij wykład",
+    "mediaTab":"Wideo/Audio",
+    "mediaTitle":"Prześlij audio lub wideo",
     "mediaHint":"Audio lub wideo. Transkrybujemy i tworzymy quiz.",
     "mediaSizeHint":"Do {max}MB. Przy długim wykładzie plik audio jest dużo mniejszy.",
     "mediaProOnly":"Przesyłanie wykładów to funkcja Pro.",
@@ -9703,6 +9719,7 @@ const T_LANGS = {
       "applySave":"Zastosuj i zapisz"
     }
   },
+
   "nl":{
     "qzImportLink":"Kom je van Quizlet? Importeer een set",
     "qzTitle":"Importeren uit Quizlet",
@@ -9719,8 +9736,8 @@ const T_LANGS = {
     "srsWhyMissed":"Eerder fout",
     "srsGoodNext":"over {n} dagen",
     "srsAgainNext":"over ~10 min",
-    "mediaTab":"College",
-    "mediaTitle":"Upload een college",
+    "mediaTab":"Video/Audio",
+    "mediaTitle":"Upload audio of video",
     "mediaHint":"Audio of video. We transcriberen het en overhoren je.",
     "mediaSizeHint":"Tot {max}MB. Bij een lang college is het audiobestand veel kleiner.",
     "mediaProOnly":"College uploaden is een Pro-functie.",
@@ -10281,6 +10298,7 @@ const T_LANGS = {
       "applySave":"Toepassen & opslaan"
     }
   },
+
   "sv":{
     "qzImportLink":"Kommer du från Quizlet? Importera ett set",
     "qzTitle":"Importera från Quizlet",
@@ -10297,8 +10315,8 @@ const T_LANGS = {
     "srsWhyMissed":"Fel tidigare",
     "srsGoodNext":"om {n} dagar",
     "srsAgainNext":"om ~10 min",
-    "mediaTab":"Föreläsning",
-    "mediaTitle":"Ladda upp en föreläsning",
+    "mediaTab":"Video/Ljud",
+    "mediaTitle":"Ladda upp ljud eller video",
     "mediaHint":"Ljud eller video. Vi transkriberar och gör frågor på det.",
     "mediaSizeHint":"Upp till {max}MB. För en lång föreläsning är ljudfilen mycket mindre.",
     "mediaProOnly":"Att ladda upp föreläsningar är en Pro-funktion.",
@@ -10865,6 +10883,7 @@ const T_LANGS = {
       "applySave":"Tillämpa och spara"
     }
   },
+
   "he":{
     "qzImportLink":"מגיע מ-Quizlet? ייבא סט",
     "qzTitle":"ייבוא מ-Quizlet",
@@ -10881,8 +10900,8 @@ const T_LANGS = {
     "srsWhyMissed":"טעית בעבר",
     "srsGoodNext":"בעוד {n} ימים",
     "srsAgainNext":"בעוד ~10 דק'",
-    "mediaTab":"הרצאה",
-    "mediaTitle":"העלה הרצאה",
+    "mediaTab":"וידאו/אודיו",
+    "mediaTitle":"העלה אודיו או וידאו",
     "mediaHint":"אודיו או וידאו. נתמלל וניצור ממנו בוחן.",
     "mediaSizeHint":"עד {max}MB. להרצאה ארוכה, קובץ האודיו קטן בהרבה.",
     "mediaProOnly":"העלאת הרצאות היא תכונת Pro.",
