@@ -25,6 +25,28 @@ const FEAT_ICONS = ["notes", "camera", "pencil", "layers", "chat", "globe"];
 const stripEmoji = (s) => String(s ?? "").replace(/^[\u{1F000}-\u{1FAFF}☀-➿⬀-⯿←-⇿️‍\s]+/u, "").trim();
 // Icon per upload tab id (labels come from the translation data with emoji).
 const TAB_ICONS = { file: "folder", text: "pencil", photo: "camera", media: "play" };
+// Parse a pasted Quizlet export into flashcards. Quizlet separates term from
+// definition with a Tab (or comma) and cards with a newline (or semicolon); we
+// split on the FIRST separator per row so definitions keep their own commas.
+// Pure string work, no URL, no network, no fetch: none of the link-import risk.
+function parseQuizlet(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+  const rows = raw.includes("\n") ? raw.split(/\r?\n+/) : raw.split(/;+/);
+  const cards = [];
+  for (const row of rows) {
+    const line = row.trim();
+    if (!line) continue;
+    let m = line.match(/^([^\t]+)\t+(.+)$/);      // term<TAB>definition
+    if (!m) m = line.match(/^(.+?) {2,}(.+)$/);    // term<2+ spaces>definition
+    if (!m) m = line.match(/^([^,]+),\s*(.+)$/);   // term,definition
+    if (!m) continue;
+    const term = m[1].trim(), def = m[2].trim();
+    if (term && def) cards.push({ question: term, answer: def, topic: "" });
+    if (cards.length >= 300) break; // sane cap
+  }
+  return cards;
+}
 // Audio / video containers we accept for lecture transcription (Pro). Broad on
 // purpose; the transcriber pulls the audio out of whatever container it gets.
 const MEDIA_MAX_MB = 100;
@@ -1645,6 +1667,10 @@ export default function StudyQuiz() {
   const [file,         setFile]         = useState(null);
   const [mediaFile,    setMediaFile]    = useState(null); // audio/video for transcription (Pro)
   const [mediaStatus,  setMediaStatus]  = useState("");   // loading-screen sub-message while transcribing
+  const [showQuizlet,  setShowQuizlet]  = useState(false); // Quizlet-import modal
+  const [quizletText,  setQuizletText]  = useState("");
+  const [quizletBusy,  setQuizletBusy]  = useState(false);
+  const [quizletErr,   setQuizletErr]   = useState("");
   const [textVal,      setTextVal]      = useState("");
   const [numQ,         setNumQ]         = useState(10);
   const [customQ,      setCustomQ]      = useState("25");
@@ -2131,6 +2157,27 @@ export default function StudyQuiz() {
       if (d.status === "error" || Date.now() > deadline) { setMediaStatus(""); throw new Error(d.error || t.errTranscribe); }
     }
   }, [getToken, t]);
+
+  // Feature F (growth): import an existing Quizlet set. The learner exports it
+  // from Quizlet (their own Export button) and pastes it here; we parse it into
+  // flashcards directly, no AI generation and no quota spent. Still runs through
+  // the content gate so nothing explicit/off-topic slips in. No URL, no fetch.
+  const quizletCards = parseQuizlet(quizletText);
+  const importQuizlet = async () => {
+    if (requireLogin()) return;
+    const cards = parseQuizlet(quizletText);
+    if (!cards.length) { setQuizletErr(t.qzNoCards); return; }
+    setQuizletBusy(true); setQuizletErr("");
+    try {
+      const joined = cards.map((c) => `${c.question}: ${c.answer}`).join("\n").slice(0, 8000);
+      const gate = await gateContent({ blocks: [{ type: "text", text: joined }], uiLangName: LANGS[lang]?.name });
+      if (gate.decision === "block") { setQuizletErr(gateMessage(gate.category, t)); setQuizletBusy(false); return; }
+      setQuiz({ type: "cards", title: t.qzImportedTitle, subject: "", questions: cards });
+      setQIdx(0); setAnswers([]); setSelected(null);
+      setShowQuizlet(false); setQuizletText(""); setQuizletBusy(false);
+      setScreen("quiz");
+    } catch { setQuizletErr(t.qzImportErr); setQuizletBusy(false); }
+  };
 
   const generateExam=useCallback(async()=>{
     if (requireLogin()) return;   // logged-out visitors are sent to sign-up
@@ -2939,7 +2986,8 @@ export default function StudyQuiz() {
             {file&&file.type==="image"?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="camera" size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{t.tapChange}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:4}}><Icon name="camera" size={38} stroke={1.4}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.photoTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.photoHint}</div></>)}
           </div>
         )}
-        {tab==="text" && <textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>}
+        {tab==="text" && <><textarea value={textVal} onChange={e=>setTextVal(e.target.value)} placeholder={t.pasteHint} style={Sb.textarea}/>
+          <button onClick={()=>{setQuizletErr("");setShowQuizlet(true);}} style={{marginTop:8,background:"none",border:"none",color:"var(--color-accent)",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:0,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="upload" size={13}/>{t.qzImportLink}</button></>}
         {tab==="media" && (isPro ? (
           <div style={{...Sb.dropzone,...(mediaFile?{borderStyle:"solid",borderColor:"#4338ca"}:{})}} onClick={()=>mediaRef.current.click()}>
             <input ref={mediaRef} type="file" accept="audio/*,video/*" style={{display:"none"}} onChange={e=>loadMedia(e.target.files[0])}/>
@@ -3069,6 +3117,19 @@ export default function StudyQuiz() {
       <UnlockModal feature={unlockFeature} unlocks={unlocks} t={t}
         onClose={()=>setUnlockFeature(null)} onUpgrade={openUpgrade}/>
       {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
+      {showQuizlet && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>!quizletBusy&&setShowQuizlet(false)}>
+          <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"24px 20px 32px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box",maxHeight:"88vh",overflowY:"auto"}}>
+            <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:6}}><Icon name="upload" size={20} style={{color:"var(--color-accent)"}}/><h3 style={{margin:0,fontSize:18,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.qzTitle}</h3></div>
+            <p style={{margin:"0 0 12px",fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.qzHow}</p>
+            <textarea value={quizletText} onChange={e=>{setQuizletText(e.target.value);setQuizletErr("");}} placeholder={t.qzPaste} style={{...Sb.textarea,minHeight:120}}/>
+            <div style={{fontSize:12,color:"var(--color-text-tertiary)",marginTop:6}}>{t.qzFound.replace("{n}",quizletCards.length).replace("{s}",quizletCards.length===1?"":"s")}</div>
+            {quizletErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"9px 12px",fontSize:12.5,color:"#b91c1c",marginTop:10,display:"flex",alignItems:"flex-start",gap:7}}><Icon name="alert" size={14} style={{flexShrink:0,marginTop:1}}/><span>{quizletErr}</span></div>}
+            <button onClick={importQuizlet} disabled={quizletBusy||!quizletCards.length} style={{...Sb.btnPrimary,width:"100%",marginTop:14,opacity:(quizletBusy||!quizletCards.length)?0.5:1,cursor:(quizletBusy||!quizletCards.length)?"not-allowed":"pointer"}}>{quizletBusy?t.qzImporting:t.qzImportBtn.replace("{n}",quizletCards.length).replace("{s}",quizletCards.length===1?"":"s")}</button>
+            <button onClick={()=>!quizletBusy&&setShowQuizlet(false)} style={{width:"100%",marginTop:8,background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"6px"}}>{t.cancel}</button>
+          </div>
+        </div>
+      )}
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
       {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
     </div>
