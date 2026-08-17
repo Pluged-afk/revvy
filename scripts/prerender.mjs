@@ -22,7 +22,7 @@ const esc = (s) => String(s)
 // Marketing routes + metadata (mirrors each page's usePageMeta call).
 const routes = [
   { path: "/",         title: "Revyy: Practice Quizzes & Mock Exams From Your Own Notes", desc: "Free study tool for students. Upload a PDF or paste your notes and get practice quizzes and graded mock exams built from your own material, then review your weak spots until exam day." },
-  { path: "/features", title: "Revyy Features: Quiz Types, Exam Mode and Uploads", desc: "Four quiz types, mock exam simulation, PDF and photo upload, and 20+ languages. See how Revyy turns your own study material into practice." },
+  { path: "/features", title: "Revyy Features: Quiz Types, Exam Mode and Uploads", desc: "Four quiz types, mock exams, upload from PDF, photo, audio or video, Quizlet import, and 20+ languages. See how Revyy turns your own study material into practice." },
   { path: "/pricing",  title: "Revyy Pricing: Free Quiz Generator, or Pro at €4.99 a Month", desc: "Use Revyy free forever, or go Pro for €4.99 a month for exam mode, all four quiz types and no ads. Cancel anytime." },
   { path: "/about",    title: "About Revyy", desc: "Revyy started as one student's tool for getting ready for exams: a fast way to test yourself on your own notes before the real thing." },
   { path: "/contact",  title: "Contact Revyy", desc: "Questions, feedback, or an idea for a feature? Get in touch with Revyy." },

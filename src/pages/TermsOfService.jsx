@@ -17,9 +17,11 @@ export default function TermsOfService() {
         <h2>1. What Revyy does</h2>
         <p>
           Revyy generates quizzes, flashcards and mock exams from study material you provide, using
-          AI. The questions and any grading are produced automatically. While we aim for accuracy,
-          the output can contain mistakes and should not be treated as authoritative or as a
-          replacement for your official course material.
+          AI. You can upload PDFs, images and text, import a set from Quizlet, or upload an audio or
+          video recording that we transcribe to text first. The questions and any grading are
+          produced automatically. While we aim for accuracy, the output can contain mistakes and
+          should not be treated as authoritative or as a replacement for your official course
+          material.
         </p>
 
         <h2>2. Your account</h2>
@@ -45,7 +47,7 @@ export default function TermsOfService() {
 
         <h2>5. Your material and content</h2>
         <ul>
-          <li>You keep ownership of the material you upload. You give us permission to process it, including sending it to our AI provider (Anthropic), for the purpose of generating your quiz.</li>
+          <li>You keep ownership of the material you upload. You give us permission to process it for the purpose of generating your quiz, including sending it to our AI provider (Anthropic), transcribing audio or video with our transcription provider (AssemblyAI), and running an automated safety check on it.</li>
           <li>You confirm you have the right to use and upload the material, and that it is not unlawful or infringing.</li>
           <li>If you create a share link, you are making that quiz's content available to anyone who has the link. Do not share content you do not have the right to distribute.</li>
         </ul>
@@ -54,6 +56,7 @@ export default function TermsOfService() {
         <p>You agree not to:</p>
         <ul>
           <li>Upload material you do not have the right to use, or that is unlawful or infringing.</li>
+          <li>Upload sexual, explicit, hateful or other non-study content. An automated check rejects it, and repeated attempts may end your access.</li>
           <li>Use Revyy to generate harmful, deceptive or illegal content.</li>
           <li>Attempt to disrupt, reverse-engineer, scrape, or get around the service's usage limits.</li>
           <li>Resell or redistribute the service without our permission.</li>
@@ -62,8 +65,9 @@ export default function TermsOfService() {
         <h2>7. Third-party services</h2>
         <p>
           Revyy relies on other providers to work, including Clerk (sign-in), Stripe (payments),
-          Anthropic (AI generation), Neon (database), Vercel (hosting), Google (advertising) and
-          Resend (contact email). Your use of Revyy is also subject to their terms where relevant.
+          Anthropic (AI generation and content checks), AssemblyAI (audio and video transcription),
+          Neon (database), Vercel (hosting), Google (advertising) and Resend (contact email). Your
+          use of Revyy is also subject to their terms where relevant.
         </p>
 
         <h2>8. Account suspension</h2>

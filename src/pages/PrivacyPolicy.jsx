@@ -19,7 +19,7 @@ export default function PrivacyPolicy() {
         <h2>1. Information we collect</h2>
         <ul>
           <li><strong>Account details:</strong> when you sign up, our authentication provider (Clerk) collects your email address and either a password or your Google sign-in, plus a display name if you provide one.</li>
-          <li><strong>Study material you upload:</strong> the PDFs, images, pasted text and links you submit so we can generate a quiz or exam from them.</li>
+          <li><strong>Study material you upload:</strong> the PDFs, images, photos, pasted text (including sets you import from Quizlet) and audio or video recordings you submit so we can generate a quiz, flashcards or an exam from them.</li>
           <li><strong>Your study progress:</strong> if you are signed in, we save the data the app produces, your review deck, quiz and exam scores, study plans, per-topic progress and any exam date you set, to our database so it syncs across your devices.</li>
           <li><strong>Usage and plan data:</strong> counters such as how many questions and mock exams you have generated today, and whether you are on the Free or Pro plan, so we can apply plan limits.</li>
           <li><strong>Payment data:</strong> if you subscribe to Pro, your card details are collected and held by our payment provider (Stripe). We never see or store your card number, only your subscription status.</li>
@@ -38,16 +38,24 @@ export default function PrivacyPolicy() {
           <li>On the Free plan, to show advertising (see section 5).</li>
         </ul>
 
-        <h2>3. Your uploaded material and AI generation</h2>
+        <h2>3. Your uploaded material, transcription and AI generation</h2>
         <p>
-          To build your quiz, the material you upload is sent to Anthropic's Claude API, which
-          reads it and writes the questions. Large uploads on the Pro plan pass through a temporary
-          file store (Vercel Blob), which we delete as soon as the file has been forwarded. We do
-          not keep copies of your uploaded files on our own servers.
+          To build your quiz, the material you upload is sent to Anthropic's Claude API, which reads
+          it and writes the questions. Before that, we run a quick automated safety check on the
+          content so that clearly explicit or non-study material is not turned into a quiz.
         </p>
         <p>
-          Anthropic processes the content only to produce your quiz, under its own API terms, and
-          does not use API inputs to train its models.
+          If you upload an audio or video file, it is first transcribed to text by our transcription
+          provider (AssemblyAI), and only the resulting text is used to generate your quiz. Larger
+          uploads on the Pro plan, including audio and video, pass through a temporary file store
+          (Vercel Blob), which we delete as soon as the file has been forwarded for processing. Sets
+          you import from Quizlet are read in your own browser and never leave your device except as
+          the same study text described above. We do not keep copies of your uploaded files on our
+          own servers.
+        </p>
+        <p>
+          Anthropic and AssemblyAI process your content only to provide these features, under their
+          own terms, and do not use it to train their models.
         </p>
 
         <h2>4. Shared quizzes</h2>
@@ -72,7 +80,8 @@ export default function PrivacyPolicy() {
         <ul>
           <li><strong>Clerk</strong>, accounts and sign-in.</li>
           <li><strong>Neon</strong>, our database (your study data, plan and usage counters, shared quizzes).</li>
-          <li><strong>Anthropic</strong>, the AI that generates your quizzes from your material.</li>
+          <li><strong>Anthropic</strong>, the AI that generates your quizzes from your material and runs the content safety check.</li>
+          <li><strong>AssemblyAI</strong>, transcribing the audio and video you upload.</li>
           <li><strong>Stripe</strong>, payment processing for Pro.</li>
           <li><strong>Vercel</strong>, hosting and the temporary file transfer described above.</li>
           <li><strong>Google AdSense</strong>, advertising on the Free plan.</li>

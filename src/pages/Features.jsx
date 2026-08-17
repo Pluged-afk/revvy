@@ -10,7 +10,9 @@ const FEATURES = [
   { icon: "link", title: "Match terms", desc: "Pair terms with their definitions on a quick matching grid." },
   { icon: "exam", title: "Exam mode", desc: "Full mock exams with multiple choice and written questions, graded for you. One free exam a day, or unlimited custom papers on Pro." },
   { icon: "chat", title: "Explanations for every answer", desc: "A short reason the correct answer is correct, so even a wrong guess teaches you something." },
-  { icon: "upload", title: "PDF and photo upload", desc: "Lecture slides, textbook pages, handwritten notes, or a photo of a whiteboard. Revyy reads them all." },
+  { icon: "upload", title: "PDF, photo and text upload", desc: "Lecture slides, textbook pages, handwritten notes, or a photo of a whiteboard. Revyy reads them all." },
+  { icon: "play", title: "Lectures, audio and video", desc: "Upload a recording and Revyy transcribes it, then builds a quiz from what was said. A Pro feature." },
+  { icon: "layers", title: "Import from Quizlet", desc: "Bring an existing Quizlet set across without retyping: export it, paste it, and study it as flashcards." },
   { icon: "globe", title: "Works in 20+ languages", desc: "Generate and take quizzes in your own language, from Spanish to Japanese to Arabic." },
 ];
 
@@ -21,6 +23,8 @@ const ROWS = [
   ["Questions per quiz", "20 (50 with an ad)", "Up to 100"],
   ["Mock exams, graded", "1 a day (ad)", "Unlimited and custom"],
   ["File uploads", "5 MB (10 MB with an ad)", "Unlimited"],
+  ["Lecture audio and video", false, true],
+  ["Import from Quizlet", true, true],
   ["Ad-free", false, true],
   ["Quizzes in 20+ languages", true, true],
 ];
@@ -34,7 +38,7 @@ function Cell({ v, pro }) {
 export default function Features() {
   usePageMeta(
     "Revyy Features: Quiz Types, Exam Mode and Uploads",
-    "Four quiz types, mock exam simulation, PDF and photo upload, and 20+ languages. See how Revyy turns your own study material into practice."
+    "Four quiz types, mock exams, upload from PDF, photo, audio or video, Quizlet import, and 20+ languages. See how Revyy turns your own study material into practice."
   );
   return (
     <>

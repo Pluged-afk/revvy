@@ -149,7 +149,7 @@ const STEPS = [
   {
     n: 1,
     title: "Add your material",
-    desc: "Drop in a PDF, paste your notes, or photograph a textbook page. A few hundred pages is fine.",
+    desc: "Drop in a PDF, paste your notes, snap a page, import a Quizlet set, or upload a lecture recording. Text, images, audio and video all work.",
   },
   {
     n: 2,
@@ -176,12 +176,13 @@ const PRO_PERKS = [
   "Unlimited and custom exam papers",
   "Up to 100 questions per quiz",
   "Unlimited file uploads",
+  "Lecture audio and video, transcribed",
   "No ads, anywhere",
 ];
 
 const TRUST = [
   { icon: "tag", label: "Free to start, no card" },
-  { icon: "camera", label: "PDFs, photos or pasted text" },
+  { icon: "camera", label: "PDFs, notes, lectures, Quizlet" },
   { icon: "globe", label: "Works in 20+ languages" },
   { icon: "lock", label: "Your notes stay private" },
 ];
@@ -206,10 +207,10 @@ export default function Home() {
                 <span className="mark">sticks</span>.
               </h1>
               <p className="hero-sub">
-                Upload a PDF, paste your notes, or photograph a page. Revyy
-                writes practice questions and full mock exams from your own
-                material, then brings back whatever you get wrong until you
-                know it.
+                Upload a PDF, paste your notes, photograph a page, import a
+                Quizlet set, or drop in a lecture recording. Revyy writes
+                practice questions and full mock exams from your own material,
+                then brings back whatever you get wrong until you know it.
               </p>
               <div className="hero-btns">
                 <Link to="/app" className="btn btn-primary btn-lg">
