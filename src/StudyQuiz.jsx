@@ -978,10 +978,16 @@ function SourceMark({ source, label, quoteLabel, t }) {
         <span style={{position:"absolute",bottom:"calc(100% + 6px)",right:0,whiteSpace:"nowrap",background:"var(--color-text-primary)",color:"var(--color-background-primary)",fontSize:10.5,fontWeight:600,padding:"4px 8px",borderRadius:6,pointerEvents:"none",zIndex:60,boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}}>{label}</span>
       )}
       {open && (
-        <span className="fade-in" style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:55,width:"max-content",maxWidth:"min(280px,74vw)",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${has?"var(--color-accent)":"var(--color-border-secondary)"}`,borderRadius:8,padding:"9px 12px",textAlign:"left",boxShadow:"0 8px 24px rgba(0,0,0,0.16)"}}>
-          <span style={{display:"block",fontSize:9.5,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase",color:"var(--color-text-tertiary)",marginBottom:4}}>{has?ql:t.srcVerify}</span>
-          <span style={{display:"block",fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55,fontStyle:has?"italic":"normal"}}>{has?`“${source}”`:t.srcUngroundedNote}</span>
-        </span>
+        // Fixed, bottom-centered card (not an absolute popover) so it is never
+        // clipped by a scroll container and never overlaps the explanation text
+        // it sits next to. Tap the dim backdrop to close.
+        <>
+          <span onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,display:"block",zIndex:70,background:"rgba(0,0,0,0.12)"}}/>
+          <span className="fade-in" style={{position:"fixed",left:"50%",bottom:"20px",transform:"translateX(-50%)",display:"block",zIndex:71,width:"max-content",maxWidth:"min(360px,90vw)",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${has?"var(--color-accent)":"var(--color-border-secondary)"}`,borderRadius:10,padding:"12px 14px",textAlign:"left",boxShadow:"0 12px 34px rgba(0,0,0,0.24)"}}>
+            <span style={{display:"block",fontSize:9.5,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase",color:"var(--color-text-tertiary)",marginBottom:4}}>{has?ql:t.srcVerify}</span>
+            <span style={{display:"block",fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.55,fontStyle:has?"italic":"normal"}}>{has?`“${source}”`:t.srcUngroundedNote}</span>
+          </span>
+        </>
       )}
     </span>
   );
@@ -1327,9 +1333,9 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           padding:"16px 18px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",flexShrink:0}}>
           {signedIn && user ? (
             <div style={{display:"flex",alignItems:"center",gap:11,minWidth:0}}>
-              <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#4338ca,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0}}>{(user.email||"?").charAt(0).toUpperCase()}</div>
+              <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#4338ca,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0}}>{(((draft.nickname||"").trim())||user.email||"?").charAt(0).toUpperCase()}</div>
               <div style={{minWidth:0}}>
-                <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{user.email||"Your account"}</div>
+                <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{((draft.nickname||"").trim())||user.email||"Your account"}</div>
                 <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,padding:"2px 8px",borderRadius:999,color:isPro?"#422006":"var(--color-text-secondary)",background:isPro?"linear-gradient(135deg,#fde68a,#f59e0b)":"var(--color-background-tertiary)",border:isPro?"none":"0.5px solid var(--color-border-secondary)",display:"inline-block",marginTop:3}}>{isPro?"✦ PRO":t.freePlanBadge}</span>
               </div>
             </div>
@@ -1358,6 +1364,15 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             </div>
             {acctSrs.dueCount > 0 && <div style={{fontSize:11.5,color:"var(--color-accent)",fontWeight:600,marginTop:9,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><Icon name="repeat" size={13}/>{acctSrs.dueCount} card{acctSrs.dueCount>1?"s":""} due for review today</div>}
           </div>
+
+          {signedIn && user && (
+            <div style={{padding:"14px 18px 6px"}}>
+              <div style={{fontSize:13,fontWeight:600,color:"var(--color-text-primary)",marginBottom:6}}>{t.nickLabel}</div>
+              <input value={draft.nickname||""} maxLength={24} onChange={e=>update("nickname",e.target.value)} placeholder={(user.email||"").split("@")[0]||t.nickLabel}
+                style={{width:"100%",borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:5,lineHeight:1.4}}>{t.nickHint}</div>
+            </div>
+          )}
 
           <SectionLabel label={s.secAppearance}/>
           <SettingRow label={s.theme} desc={draft.theme==="light"?s.themeLight:draft.theme==="dark"?s.themeDark:s.themeFollows}>
@@ -2073,6 +2088,7 @@ export default function StudyQuiz() {
     autoAdvanceSec:5,
     defaultDiff:1,
     defaultQCount:10,
+    nickname:'',
   });
   const [examSections, setExamSections] = useState([
     {id:0, type:'mcq',     count:'10', marksPerQ:'2'},
@@ -3077,7 +3093,7 @@ export default function StudyQuiz() {
     setShareBusy(true);
     try {
       const token = await getToken?.();
-      const ownerName = (user?.email || "").split("@")[0] || "";
+      const ownerName = (settings.nickname||"").trim() || (user?.email || "").split("@")[0] || "";
       const res = await fetch("/api/study", {
         method:"POST",
         headers:{ "Content-Type":"application/json", ...(token ? { Authorization:`Bearer ${token}` } : {}) },
@@ -4604,6 +4620,9 @@ const Sb = {
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600&display=swap');
   *{box-sizing:border-box} body{margin:0}
+  /* Small-font zoom (body{zoom:0.9}) leaves a gap below the app; painting html
+     with the theme colour stops a white rectangle showing through there. */
+  html,body{background:var(--color-background-tertiary)}
   .fade-in {animation:fadeIn 0.3s ease both}
   .slide-up{animation:slideUp 0.25s ease both}
   @keyframes fadeIn {from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
