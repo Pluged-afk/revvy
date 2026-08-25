@@ -609,6 +609,17 @@ async function mockFlagGlobal(exam, section, question) {
   } catch { /* best effort */ }
 }
 
+// The sender's challenge activity: quizzes they shared that others have taken.
+async function fetchMyChallenges() {
+  try {
+    const res = await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
+      body: JSON.stringify({ action:"myChallenges" }) });
+    if (!res.ok) return [];
+    const j = await res.json().catch(() => ({}));
+    return Array.isArray(j.challenges) ? j.challenges : [];
+  } catch { return []; }
+}
+
 function readText(f)   { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error("Read failed")); r.readAsText(f); }); }
 
 function Logo({ size=28 }) {
@@ -1876,6 +1887,13 @@ export default function StudyQuiz() {
   };
   // Keep usage fresh when landing on the home / quiz-setup screens.
   useEffect(()=>{ if(screen==="home"||screen==="upload") refreshUsage?.(); },[screen,refreshUsage]);
+  // Refresh the sender's challenge activity whenever the home screen opens.
+  useEffect(()=>{
+    if(!user || screen!=="home") return;
+    let cancelled=false;
+    (async()=>{ const c=await fetchMyChallenges(); if(!cancelled) setChallenges(c); })();
+    return ()=>{ cancelled=true; };
+  },[user,screen]);
   // Email/password accounts must re-enter their password to delete; OAuth-only
   // (e.g. Google) accounts have no password to verify.
   const requiresPassword = !!user?.identities?.some(i => i.provider === "email");
@@ -2159,6 +2177,7 @@ export default function StudyQuiz() {
   const [showSettings,   setShowSettings]   = useState(false);
   const [showBugReport,  setShowBugReport]  = useState(false); // quick "report a bug" from the quiz screen
   const [settingsDraft,  setSettingsDraft]  = useState(null);
+  const [challenges,     setChallenges]     = useState([]); // sender's shared-quiz activity
   const [settings, setSettings] = useState({
     theme:'system',      
     fontSize:'medium',   
@@ -3349,6 +3368,37 @@ export default function StudyQuiz() {
               {librarySize(srs.library)>5 && <div style={{fontSize:11,color:"var(--color-text-tertiary)",paddingTop:7,borderTop:"0.5px solid var(--color-border-tertiary)"}}>{t.libraryMore.replace("{n}",librarySize(srs.library)-5)}</div>}
             </div>
             <button onClick={reviewLibrary} style={{...Sb.btnPrimary,width:"100%",marginTop:2,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="layers" size={15}/>{t.libraryReview}</button>
+          </div>
+        )}
+        {/* #8: challenge activity, who took the quizzes this user shared, and
+            whether they beat the sender's score, to keep the rivalry going. */}
+        {challenges.length>0 && (
+          <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+              <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="trophy" size={21}/></span>
+              <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.challengeActivity}</div>
+            </div>
+            {challenges.slice(0,4).map((c)=>{
+              const oPct = (c.ownerTotal>0) ? c.ownerScore/c.ownerTotal : null;
+              return (
+                <div key={c.id} style={{padding:"8px 0",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:4}}>
+                    <span style={{fontSize:12.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.title}</span>
+                    <span style={{flexShrink:0,fontSize:11,color:"var(--color-text-tertiary)"}}>{c.takerCount}{c.ownerTotal>0?` · ${t.challengeYou} ${c.ownerScore}/${c.ownerTotal}`:""}</span>
+                  </div>
+                  {c.takers.slice(0,3).map((tk,j)=>{
+                    const tPct = (tk.total>0) ? tk.score/tk.total : 0;
+                    const beat = oPct!=null ? tPct>oPct : null;
+                    return (
+                      <div key={j} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"2px 0"}}>
+                        <span style={{fontSize:12,color:"var(--color-text-secondary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tk.name} · {tk.score}/{tk.total}</span>
+                        {beat!=null && <span style={{flexShrink:0,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,color:beat?"#b91c1c":"#15803d",background:beat?"#fef2f2":"#f0fdf4",border:`0.5px solid ${beat?"#fca5a5":"#86efac"}`}}>{beat?t.challengeBeat:t.challengeAhead}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
         )}
         {/* AI Study Coach, day-by-day exam plan */}

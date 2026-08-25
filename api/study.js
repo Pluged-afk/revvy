@@ -153,6 +153,30 @@ async function createShare(req, res, body, userId) {
   return res.status(200).json({ id });
 }
 
+// ── Authed: the sender's challenge activity ──
+// Returns the quizzes this user shared that someone has since taken, with the
+// most recent takers and whether they beat the sender's score, so the app can
+// show "Bombo scored 8/10 on your quiz" and keep the rivalry going.
+async function myChallenges(req, res, userId) {
+  const rows = await sql`
+    SELECT id, data, created_at FROM shared_quizzes
+    WHERE data->>'ownerId' = ${userId}
+    ORDER BY created_at DESC LIMIT 30`;
+  const challenges = rows.map((r) => {
+    const d = r.data || {};
+    const takers = [...(d.results || [])].sort((a, b) => (b.at || 0) - (a.at || 0));
+    return {
+      id: r.id,
+      title: d.title || "Shared quiz",
+      ownerScore: d.ownerScore ?? null,
+      ownerTotal: d.ownerTotal ?? null,
+      takerCount: takers.length,
+      takers: takers.slice(0, 12).map((x) => ({ name: x.name, score: x.score, total: x.total, at: x.at })),
+    };
+  }).filter((c) => c.takerCount > 0);
+  return res.status(200).json({ challenges });
+}
+
 // ── Global mock-exam learning bank ──
 // Standardized-test questions the crowd generates, pooled to make everyone's
 // mocks more authentic. Keyed by exam + section. Privacy-safe (general test
@@ -233,6 +257,7 @@ export default async function handler(req, res) {
       if (!userId) return res.status(401).json({ error: "Invalid session." });
 
       if (body?.action === "createShare") return createShare(req, res, body, userId);
+      if (body?.action === "myChallenges") return myChallenges(req, res, userId);
       if (body?.action === "mockContribute") return mockContribute(req, res, body);
       if (body?.action === "mockFlag") return mockFlag(req, res, body);
       if (body?.action === "mockDraw") return mockDraw(req, res, body);

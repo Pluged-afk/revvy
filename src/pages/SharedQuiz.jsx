@@ -44,6 +44,12 @@ export default function SharedQuiz() {
   const [revealed, setRevealed] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const [posted, setPosted] = useState(false);
+  const [copied, setCopied] = useState(false);
+  // Part of the viral loop: a challenged player (even logged out) can forward the
+  // SAME link on to grow the challenge circle.
+  const copyLink = useCallback(() => {
+    try { navigator.clipboard.writeText(window.location.href); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -146,8 +152,8 @@ export default function SharedQuiz() {
           style={{ width: "100%", borderRadius: 10, border: `1.5px solid ${C.border}`, background: "#fff", color: C.ink, fontSize: 14, padding: "11px 13px", fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 12, textAlign: "center" }} />
         <button style={primary} onClick={() => setState("quiz")}>{hasChallenge ? "Accept challenge →" : "Start quiz →"}</button>
       </div>
-      {results.length > 0 && <Leaderboard results={results} />}
-      <CTA navigate={navigate} />
+      <Leaderboard results={results} owner={owner} ownerScore={ownerScore} ownerTotal={ownerTotal} />
+      <CTA navigate={navigate} copyLink={copyLink} copied={copied} />
     </div>
   );
 
@@ -280,25 +286,55 @@ export default function SharedQuiz() {
         </div>
       )}
 
-      <Leaderboard results={results} highlight={name.trim() || "Anonymous"} />
-      <CTA navigate={navigate} big />
+      <Leaderboard results={results} highlight={name.trim() || "Anonymous"} owner={owner} ownerScore={ownerScore} ownerTotal={ownerTotal} />
+      <CTA navigate={navigate} big copyLink={copyLink} copied={copied} />
     </div>
   );
 }
 
-function Leaderboard({ results, highlight }) {
-  if (!results || !results.length) return null;
+// Everyone who took the quiz PLUS the sender, ranked. Top 3 get a podium when
+// there are enough players; the rest are listed below.
+function Leaderboard({ results, highlight, owner, ownerScore, ownerTotal }) {
+  const board = (results || []).map((r) => ({ name: r.name, score: r.score, total: r.total }));
+  if (owner && ownerScore != null && ownerTotal != null && ownerTotal > 0) {
+    board.push({ name: owner, score: ownerScore, total: ownerTotal, sender: true });
+  }
+  if (!board.length) return null;
+  const pct = (r) => Math.round((r.score / Math.max(1, r.total)) * 100);
+  board.sort((a, b) => pct(b) - pct(a) || b.score - a.score);
+  const isMe = (r) => highlight && r.name === highlight && !r.sender;
+  const podium = board.length >= 3;
+  const rest = podium ? board.slice(3) : board;
+  const medal = (rank) => rank === 1 ? "#d97706" : rank === 2 ? "#94a3b8" : "#b45309";
   return (
-    <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginTop: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: C.faint, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>🏅 Leaderboard</div>
-      {results.slice(0, 8).map((r, i) => {
-        const p = Math.round((r.score / Math.max(1, r.total)) * 100);
-        const me = highlight && r.name === highlight;
+    <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 14, padding: "16px", marginTop: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.faint, letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>Leaderboard · {board.length}</div>
+      {podium && (
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 8, marginBottom: rest.length ? 14 : 2 }}>
+          {[1, 0, 2].map((bi, col) => {
+            const r = board[bi]; if (!r) return null;
+            const rank = bi + 1, me = isMe(r);
+            const h = rank === 1 ? 82 : rank === 2 ? 62 : 48;
+            return (
+              <div key={col} style={{ flex: 1, maxWidth: 108, textAlign: "center", minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: me ? C.indigo : C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 3 }}>{r.name}{me ? " (you)" : ""}</div>
+                {r.sender && <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: C.indigo, marginBottom: 3 }}>SENT THIS</div>}
+                <div style={{ background: medal(rank), color: "#fff", borderRadius: "10px 10px 0 0", height: h, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", padding: "8px 4px 6px" }}>
+                  <div style={{ fontSize: 18, fontWeight: 800 }}>{rank}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{pct(r)}%</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {rest.slice(0, 15).map((r, i) => {
+        const rank = (podium ? 4 : 1) + i, me = isMe(r);
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: i ? `0.5px solid ${C.border}` : "none" }}>
-            <span style={{ width: 20, fontSize: 12, fontWeight: 700, color: i === 0 ? "#d97706" : C.faint }}>{i + 1}</span>
-            <span style={{ flex: 1, fontSize: 13, fontWeight: me ? 700 : 500, color: me ? C.indigo : C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}{me ? " (you)" : ""}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{p}%</span>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: (i || podium) ? `0.5px solid ${C.border}` : "none" }}>
+            <span style={{ width: 22, fontSize: 12, fontWeight: 700, color: C.faint, textAlign: "center" }}>{rank}</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: me ? 700 : 500, color: me ? C.indigo : C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{r.name}{me ? " (you)" : ""}{r.sender ? " · sent this" : ""}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{pct(r)}%</span>
           </div>
         );
       })}
@@ -306,11 +342,16 @@ function Leaderboard({ results, highlight }) {
   );
 }
 
-function CTA({ navigate, big }) {
+function CTA({ navigate, big, copyLink, copied }) {
   return (
     <div style={{ marginTop: 18, textAlign: "center", ...(big ? { background: "#ece8f6", border: "1px solid #d6cff0", borderRadius: 14, padding: "18px 16px" } : {}) }}>
       {big && <div style={{ fontSize: 14, fontWeight: 700, color: C.indigoDark, marginBottom: 4 }}>Now challenge them back</div>}
       {big && <div style={{ fontSize: 12.5, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>Upload a PDF, paste notes, or snap a photo. Revyy makes the quiz, you send the challenge. Free.</div>}
+      {copyLink && (
+        <button style={{ ...primary, background: "#fff", color: C.indigo, border: `1.5px solid ${C.indigo}`, marginBottom: 10 }} onClick={copyLink}>
+          {copied ? "Link copied ✓" : "Challenge a friend →"}
+        </button>
+      )}
       <button style={primary} onClick={() => navigate("/app")}>Make your own quiz free →</button>
     </div>
   );
