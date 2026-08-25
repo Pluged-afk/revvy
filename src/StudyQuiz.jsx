@@ -452,40 +452,83 @@ const gateMessage = (category, t) =>
   category === "harmful"  ? t.gateHarmful  :
   t.gateNonstudy;
 
-// Generate one section of a standardized mock exam from its spec (no upload),
-// authentic style, self-contained MCQs. Lenient on count: returns whatever
-// well-formed questions the model produces.
-async function callMockSection(exam, section, tilt, exemplars = [], avoid = []) {
+// Keep a figure only if it is a clean, self-contained <svg> (rendered inside an
+// <img> data-URI, which can't run scripts; this strips anything scriptable too).
+function safeSvg(s) {
+  s = typeof s === "string" ? s.trim() : "";
+  return (/^<svg[\s>]/i.test(s) && s.length < 12000 && !/<script|<foreignobject|\son\w+\s*=|javascript:/i.test(s)) ? s : "";
+}
+// Keep only well-formed MCQs (a ballooning explanation signals the model could
+// not solve it cleanly, drop those rather than ship a mis-keyed question).
+function sanitizeMockQs(qs) {
+  return (Array.isArray(qs) ? qs : []).filter((q) =>
+    q && typeof q.question === "string" && q.question.length > 2 &&
+    Array.isArray(q.options) && q.options.length >= 2 &&
+    q.options.every((o) => typeof o === "string" && o.trim().length) &&
+    Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length &&
+    String(q.explanation || "").length <= 400
+  ).map((q) => {
+    const svg = safeSvg(q.svg);
+    const base = { question: q.question, options: q.options, correct: q.correct, explanation: q.explanation };
+    return svg ? { ...base, svg } : base;
+  });
+}
+
+// Generate one chunk of a standardized mock section (no upload), authentic
+// style. Standalone sections return { format:"standalone", questions }.
+// Passage / English sections return { format, passage, svg, questions } where
+// the questions all belong to that ONE passage; English passages carry the
+// revised portions wrapped in <u>…</u> in reading order (one per question),
+// which the runner renders as real underlines. `n` = how many questions to write.
+async function callMockSection(exam, section, tilt, exemplars = [], avoid = [], n) {
+  const fmt = section.format || "standalone";
   const nOpt = section.options || 4;
+  const count = n || section.count;
   const optTemplate = Array(nOpt).fill('"..."').join(",");
-  // Universal mock learning: a few good questions the crowd generated, as STYLE
-  // exemplars (never to copy), plus recent flagged-bad stems to avoid. Both come
-  // from the global mock bank and are empty until it has data, so early forms are
-  // unchanged. `correct` is withheld from exemplars, they steer style, not keys.
+  // Universal mock learning: a few good crowd-generated questions as STYLE
+  // exemplars (never to copy) + recent flagged-bad stems to avoid.
   const exBlock = (exemplars && exemplars.length)
     ? `\nSTYLE EXAMPLES from our question bank of authentic ${exam.name} ${section.name} questions. Study their phrasing, difficulty, structure and format, then write BRAND NEW questions of the same quality. Do NOT copy, translate, or lightly reword them, they are references only:\n${exemplars.slice(0,3).map((q,i)=>`Example ${i+1}: ${JSON.stringify({question:String(q.question||"").slice(0,700),options:(Array.isArray(q.options)?q.options:[]).map(o=>String(o).slice(0,200))})}`).join("\n")}`
     : "";
   const avoidBlock = (avoid && avoid.length)
     ? `\nAVOID: learners flagged questions like these as flawed, mis-keyed or ambiguous. Do NOT produce anything similar:\n- ${avoid.slice(0,4).map(s=>String(s).slice(0,160)).join("\n- ")}`
     : "";
-  // Pure test environment: the learner can't set difficulty. Each generated
-  // form gets one randomly-chosen overall difficulty (luck of the draw), and
-  // within it the questions span the authentic range, like a real exam.
-  const diff = tilt === "easier"
-    ? "OVERALL DIFFICULTY: an easier form of this exam, lean toward more approachable questions, but still include a few genuinely hard ones."
+  const tiltLine = tilt === "easier"
+    ? "OVERALL DIFFICULTY: an easier form, lean toward approachable questions but still include a few genuinely hard ones."
     : tilt === "harder"
-    ? "OVERALL DIFFICULTY: a harder form of this exam, lean toward more challenging questions with subtle, close distractors, as tough test forms are."
-    : "OVERALL DIFFICULTY: an authentic exam form, span the full real range, from a few easy questions to several genuinely hard ones.";
-  const prompt = `You are assembling a realistic ${exam.name} practice exam section that should feel indistinguishable from a genuine ${exam.name} form. Draw on your knowledge of actual ${exam.name} exams, real past papers and official practice tests, and produce a MIX of questions closely modeled on real ${exam.name} questions you know and new ones you write in the exact same style. Match the authentic topics, difficulty spread, phrasing, and question formats faithfully, don't invent an artificial style.
-SECTION: ${section.name}. Provide EXACTLY ${section.count} multiple-choice questions.
-${section.instr}
-${diff} Do NOT make every question the same difficulty, this is a real, un-adjustable test, so vary it like the actual exam.
-Each question needs: "question" (the full stem, with any passage/data/context written into it as text), "options" (an array of exactly ${nOpt} answer choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary the skills/topics across the section and make every distractor plausible.
-DIAGRAMS: when a question genuinely needs a figure to be answerable, a geometry diagram, a coordinate graph, a bar/line chart, a number line, or a labelled scientific figure, add an "svg" field containing a SELF-CONTAINED inline SVG that draws it accurately to the numbers in the question and is consistent with your correct answer. Use a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text> with clear labels and units, and SINGLE quotes for attributes (e.g. <circle cx='50' cy='50' r='40'/>) so the JSON stays valid. Never include <script>, event handlers, external images, links or fonts. Most questions need NO figure, omit "svg" entirely for those; never add a decorative one.
-CRITICAL, accuracy: for any question involving a calculation or data, work the answer out fully yourself FIRST, then set "correct" to the index of the option that exactly matches your computed result; double-check every calculation and unit. Every question must have exactly ONE clearly correct option, and its "explanation" must agree with that option. Discard any question you are not certain is correct.${exBlock}${avoidBlock}
-Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"...","svg":"OPTIONAL, an inline <svg>…</svg>, only when a figure is required"}]}
-The "questions" array MUST contain ${section.count} items.`;
-  const maxTokens = Math.min(section.count * 500 + 4000, 64000); // roomy, data/diagram questions run long
+    ? "OVERALL DIFFICULTY: a harder form, lean toward challenging questions with subtle, close distractors."
+    : "OVERALL DIFFICULTY: an authentic form spanning the full real range, including several genuinely hard questions.";
+  const instr = String(section.instr || "").replace(/\{N\}/g, count);
+
+  let prompt, maxTokens;
+  if (fmt === "english" || fmt === "passage") {
+    const rule = fmt === "english"
+      ? `The "passage" MUST contain EXACTLY ${count} portions wrapped in <u>...</u> (use the <u> tag ONLY for these revised portions), and there MUST be EXACTLY ${count} questions in the SAME order: question i revises the i-th underlined portion, and its first option is usually "NO CHANGE".`
+      : `Write EXACTLY ${count} questions, all about this ONE passage.`;
+    const figRule = (fmt === "passage" && section.id === "science")
+      ? "You MUST include a top-level inline <svg> figure (a graph, chart, data table, or labelled diagram) that the questions genuinely depend on."
+      : "Add a top-level inline <svg> only if a figure is truly needed.";
+    prompt = `You are writing a realistic ${exam.name} ${section.name} passage set that should be indistinguishable from a genuine ${exam.name}. Draw on real ${exam.name} passages, past papers and official practice tests.
+${instr}
+${rule}
+${tiltLine}
+Each question has "options" (EXACTLY ${nOpt} choices), "correct" (the 0-based index of the ONE correct option, which you work out carefully first), and "explanation" (one short sentence). Make distractors close and genuinely ${exam.name}-hard, not trivial.
+FIGURE: ${figRule} Draw any <svg> self-contained with a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text>, clear labels, and SINGLE-quoted attributes (e.g. <circle cx='50' cy='50' r='40'/>); never include <script>, event handlers, external images or fonts.${exBlock}${avoidBlock}
+Return ONLY raw JSON, no markdown: {"passage":"the full passage text${fmt==="english"?", with the revised portions wrapped in <u>...</u> in reading order":""}","svg":"OPTIONAL inline <svg>…</svg>","questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."}]}`;
+    maxTokens = Math.min(count * 450 + 7000, 40000);
+  } else {
+    prompt = `You are assembling a realistic ${exam.name} ${section.name} section that should feel indistinguishable from a genuine ${exam.name} form. Draw on your knowledge of actual ${exam.name} exams, real past papers and official practice tests, and produce a MIX of questions closely modeled on real ${exam.name} questions and new ones in the exact same style. Match the authentic topics, difficulty spread, phrasing and formats faithfully.
+${instr}
+Provide EXACTLY ${count} multiple-choice questions.
+${tiltLine} Do NOT make every question the same difficulty; vary it like the actual exam.
+Each question needs "question" (the full stem, with any context written into it), "options" (EXACTLY ${nOpt} choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary skills across the section; every distractor plausible.
+DIAGRAMS: when a question genuinely needs a figure to be answerable (geometry diagram, coordinate graph, bar/line chart, number line, labelled figure), add an "svg" field with a SELF-CONTAINED inline SVG drawn accurately to the numbers, consistent with the correct answer. Use a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text>, and SINGLE-quoted attributes. Never include <script>, handlers, external images, links or fonts. Most questions need NO figure.
+CRITICAL: for any calculation, work the answer out fully FIRST, then set "correct" to the option that matches; double-check every calculation and unit. Exactly ONE clearly correct option per question; discard any you are not certain of.${exBlock}${avoidBlock}
+Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"...","svg":"OPTIONAL, only when a figure is required"}]}
+The "questions" array MUST contain ${count} items.`;
+    maxTokens = Math.min(count * 500 + 4000, 64000);
+  }
+
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
     body: JSON.stringify({ model:AI_MODEL, max_tokens:maxTokens,
@@ -497,30 +540,45 @@ The "questions" array MUST contain ${section.count} items.`;
   let parsed;
   try { parsed = JSON.parse(raw); }
   catch {
-    // Salvage a truncated response: close the array after the last complete object.
     const cut = raw.lastIndexOf("}");
     try { parsed = JSON.parse(raw.slice(0, cut + 1) + "]}"); } catch { parsed = {}; }
   }
-  const qs = Array.isArray(parsed.questions) ? parsed.questions : [];
-  // Keep only well-formed MCQs. A ballooning "explanation" is the tell-tale sign
-  // the model couldn't solve the question cleanly, drop those rather than ship
-  // a mis-keyed or incoherent question.
-  return qs.filter((q) =>
-    q && typeof q.question === "string" && q.question.length > 8 &&
-    Array.isArray(q.options) && q.options.length >= 2 &&
-    q.options.every((o) => typeof o === "string" && o.trim().length) &&
-    Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length &&
-    String(q.explanation || "").length <= 400
-  ).map((q) => {
-    // Keep an optional figure only if it's a clean, self-contained <svg>. It is
-    // rendered inside an <img> data-URI (which can't run scripts) as defence in
-    // depth, and this strips anything scriptable before it ever gets there.
-    const s = typeof q.svg === "string" ? q.svg.trim() : "";
-    const safe = /^<svg[\s>]/i.test(s) && s.length < 8000 &&
-      !/<script|<foreignobject|\son\w+\s*=|javascript:/i.test(s);
-    const base = { question: q.question, options: q.options, correct: q.correct, explanation: q.explanation };
-    return safe ? { ...base, svg: s } : base;
-  });
+  const questions = sanitizeMockQs(parsed.questions);
+  if (fmt === "english" || fmt === "passage") {
+    return { format: fmt, passage: String(parsed.passage || "").slice(0, 9000), svg: safeSvg(parsed.svg), questions };
+  }
+  return { format: "standalone", passage: "", svg: "", questions };
+}
+
+// Build a whole mock section, ready for the runner. Standalone sections generate
+// their questions in one call (and feed the global learning bank). Passage /
+// English sections generate all their passages UPFRONT (during the load screen,
+// before the timer starts) so the timed run never stalls mid-section; each
+// question is tagged with its passage so the runner can keep it on screen.
+async function buildMockSection(exam, section, tilt) {
+  const fmt = section.format || "standalone";
+  if (fmt === "standalone") {
+    const { exemplars, avoid } = await mockDrawGlobal(exam.name, section.name);
+    const r = await callMockSection(exam, section, tilt, exemplars, avoid);
+    mockContributeGlobal(exam.name, section.name, r.questions);
+    return r.questions;
+  }
+  const size = section.passageSize || section.count;
+  const groups = Math.max(1, Math.ceil(section.count / size));
+  const out = [];
+  for (let g = 0; g < groups && out.length < section.count; g++) {
+    const need = Math.min(size, section.count - out.length);
+    let r = null;
+    try { r = await callMockSection(exam, section, tilt, [], [], need); } catch { r = null; }
+    if (!r || !r.questions.length) continue;
+    let qs = r.questions;
+    // English: keep at most as many questions as there are <u> underlines so the
+    // question<->underline mapping stays 1:1.
+    const uCount = fmt === "english" ? (r.passage.match(/<u>/gi) || []).length : 0;
+    if (fmt === "english" && uCount) qs = qs.slice(0, uCount);
+    qs.forEach((q, i) => out.push({ ...q, _passage: r.passage, _psvg: r.svg, _pIdx: g, _uIdx: fmt === "english" ? i : null }));
+  }
+  return out;
 }
 
 // ── Global mock-learning bank (client) ──
@@ -1750,6 +1808,35 @@ function ActivatingOverlay({ show }) {
   );
 }
 
+// Left-hand passage panel for a mock reading/English/science section. English
+// passages carry <u>…</u> portions, rendered as numbered underlines with the
+// current question's underline highlighted (like a real ACT English page). The
+// passage stays on screen across all of its questions.
+function MockPassagePanel({ passage, svg, activeU, label }) {
+  const nodes = [];
+  if (typeof passage === "string" && passage) {
+    const re = /<u>([\s\S]*?)<\/u>/gi;
+    let m, last = 0, uN = 0;
+    while ((m = re.exec(passage)) !== null) {
+      if (m.index > last) nodes.push({ t: passage.slice(last, m.index) });
+      nodes.push({ u: ++uN, text: m[1] });
+      last = re.lastIndex;
+    }
+    if (last < passage.length) nodes.push({ t: passage.slice(last) });
+  }
+  return (
+    <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"16px 18px"}}>
+      {label && <div style={{fontSize:10,fontWeight:800,letterSpacing:0.8,textTransform:"uppercase",color:"var(--color-text-tertiary)",marginBottom:10}}>{label}</div>}
+      {svg && <div style={{margin:"0 0 14px",display:"flex",justifyContent:"center"}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg)} style={{maxWidth:"100%",maxHeight:320,background:"#fff",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)",padding:10,boxSizing:"border-box"}}/></div>}
+      <div style={{fontSize:14.5,lineHeight:1.75,color:"var(--color-text-primary)",whiteSpace:"pre-wrap"}}>
+        {nodes.map((n,i)=> n.u!=null
+          ? <span key={i} style={{borderBottom:n.u===activeU?"2px solid #4338ca":"1.5px solid var(--color-text-tertiary)",background:n.u===activeU?"var(--color-sel-tint)":"transparent",fontWeight:n.u===activeU?700:400,padding:"0 1px",borderRadius:2}}>{n.text}<sup style={{fontSize:9,fontWeight:800,color:n.u===activeU?"#4338ca":"var(--color-text-tertiary)",marginLeft:1}}>{n.u}</sup></span>
+          : <span key={i}>{n.t}</span>)}
+      </div>
+    </div>
+  );
+}
+
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const { t, lang, setLang } = useLang(); // language control now lives inside the account panel
@@ -1904,12 +1991,8 @@ export default function StudyQuiz() {
     try {
       const exam = getMock(mock.presetId) || MOCK_EXAMS[0];
       const spec = exam.sections[ni];
-      // Universal learning: steer this section with the crowd's good/flagged
-      // questions, then contribute this form back so everyone's mocks improve.
-      const { exemplars, avoid } = await mockDrawGlobal(exam.name, spec.name);
-      const qs = await callMockSection(exam, spec, mockTilt, exemplars, avoid);
+      const qs = await buildMockSection(exam, spec, mockTilt);
       if (!qs.length) throw new Error("section");
-      mockContributeGlobal(exam.name, spec.name, qs);
       setMock(m => ({ ...m, sections: m.sections.map((s, i) => i === ni ? { ...s, questions: qs } : s) }));
       setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(spec.minutes * 60);
       setScreen("mock_run");
@@ -3125,10 +3208,8 @@ export default function StudyQuiz() {
       // Build ONLY the first section now; the rest are built on demand as the
       // user proceeds, faster start, and no cost for sections never reached.
       const sec0 = exam.sections[0];
-      const { exemplars, avoid } = await mockDrawGlobal(exam.name, sec0.name);
-      const qs = await callMockSection(exam, sec0, tilt, exemplars, avoid);
+      const qs = await buildMockSection(exam, sec0, tilt);
       if (!qs.length) throw new Error("Couldn't generate the exam, please try again.");
-      mockContributeGlobal(exam.name, sec0.name, qs); // feed this form back to the shared bank
       submittedSecRef.current = -1;
       setMock({ presetId: exam.id, name: exam.name, scaleMin: exam.scaleMin, scaleMax: exam.scaleMax,
         sections: exam.sections.map((s, i) => ({ ...s, questions: i === 0 ? qs : [] })) });
@@ -4472,6 +4553,31 @@ export default function StudyQuiz() {
     const low = mockSecTimeLeft <= 60;
     const answered = ans.filter(a=>a!=null).length;
     const pick = (i) => setMockAns(prev => { const n = prev.map(a=>[...a]); n[mockSecIdx][mockQIdx] = i; return n; });
+    const hasPassage = !!(q && q._passage);
+    const activeU = q && q._uIdx != null ? q._uIdx + 1 : null;
+    const questionCol = (
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:10}}>{t.question} {mockQIdx+1} {t.outOf} {sec.questions.length}</div>
+        <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:16.5,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.5,margin:0,whiteSpace:"pre-wrap"}}>{q.question}</h3>
+        {q.svg && <div style={{margin:"14px 0 2px",display:"flex",justifyContent:"center"}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.svg)} style={{maxWidth:"100%",maxHeight:300,background:"#fff",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)",padding:10,boxSizing:"border-box"}}/></div>}
+        <div style={{display:"flex",flexDirection:"column",gap:9,marginTop:16}}>
+          {q.options.map((opt,i)=>{
+            const chosen = sel===i;
+            return <button key={i} onClick={()=>pick(i)} style={{display:"flex",alignItems:"center",gap:12,background:chosen?"var(--color-sel-tint)":"var(--color-background-primary)",border:`1.5px solid ${chosen?"#4338ca":"var(--color-border-tertiary)"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left"}}>
+              <span style={{width:26,height:26,borderRadius:"50%",background:chosen?"#4338ca":"var(--color-background-secondary)",color:chosen?"#fff":"var(--color-text-primary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{LETTERS[i]}</span>
+              <span style={{flex:1,lineHeight:1.4}}>{opt}</span>
+            </button>;
+          })}
+        </div>
+        <div style={{display:"flex",gap:10,marginTop:18}}>
+          <button disabled={mockQIdx===0} onClick={()=>setMockQIdx(i=>Math.max(0,i-1))} style={{...Sb.btnOutline,flex:1,opacity:mockQIdx===0?0.4:1}}>← {t.prev}</button>
+          {mockQIdx+1 < sec.questions.length
+            ? <button onClick={()=>setMockQIdx(i=>i+1)} style={{...Sb.btnPrimary,flex:1,margin:0}}>{t.next}</button>
+            : <button onClick={()=>setShowMockSubmit(true)} style={{...Sb.btnPrimary,flex:1,margin:0,background:"#16a34a"}}>{t.mockSubmitSection}</button>}
+        </div>
+        <button onClick={()=>setShowMockSubmit(true)} style={{...Sb.btnGhost,width:"100%",marginTop:12,fontSize:12}}>{t.mockEndSection} · {answered}/{sec.questions.length}</button>
+      </div>
+    );
     return (
       <div style={Sb.root}><style>{CSS}</style>
         <div style={Sb.topbar} className="rv-topbar">
@@ -4480,26 +4586,10 @@ export default function StudyQuiz() {
           <span className={low?"rv-timer-flash":""} style={{fontSize:15,fontWeight:800,color:low?"#dc2626":"#4338ca",fontVariantNumeric:"tabular-nums"}}>{mm}:{String(ss).padStart(2,"0")}</span>
         </div>
         <PBar v={mockQIdx} max={sec.questions.length}/>
-        <div className="rv-center-narrow" style={{padding:"16px 16px 32px"}}>
-          <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:10}}>{t.question} {mockQIdx+1} {t.outOf} {sec.questions.length}</div>
-          <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:16.5,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.5,margin:0,whiteSpace:"pre-wrap"}}>{q.question}</h3>
-          {q.svg && <div style={{margin:"14px 0 2px",display:"flex",justifyContent:"center"}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.svg)} style={{maxWidth:"100%",maxHeight:300,background:"#fff",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)",padding:10,boxSizing:"border-box"}}/></div>}
-          <div style={{display:"flex",flexDirection:"column",gap:9,marginTop:16}}>
-            {q.options.map((opt,i)=>{
-              const chosen = sel===i;
-              return <button key={i} onClick={()=>pick(i)} style={{display:"flex",alignItems:"center",gap:12,background:chosen?"var(--color-sel-tint)":"var(--color-background-primary)",border:`1.5px solid ${chosen?"#4338ca":"var(--color-border-tertiary)"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontSize:14,color:"var(--color-text-primary)",fontFamily:"inherit",textAlign:"left"}}>
-                <span style={{width:26,height:26,borderRadius:"50%",background:chosen?"#4338ca":"var(--color-background-secondary)",color:chosen?"#fff":"var(--color-text-primary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{LETTERS[i]}</span>
-                <span style={{flex:1,lineHeight:1.4}}>{opt}</span>
-              </button>;
-            })}
-          </div>
-          <div style={{display:"flex",gap:10,marginTop:18}}>
-            <button disabled={mockQIdx===0} onClick={()=>setMockQIdx(i=>Math.max(0,i-1))} style={{...Sb.btnOutline,flex:1,opacity:mockQIdx===0?0.4:1}}>← {t.prev}</button>
-            {mockQIdx+1 < sec.questions.length
-              ? <button onClick={()=>setMockQIdx(i=>i+1)} style={{...Sb.btnPrimary,flex:1,margin:0}}>{t.next}</button>
-              : <button onClick={()=>setShowMockSubmit(true)} style={{...Sb.btnPrimary,flex:1,margin:0,background:"#16a34a"}}>{t.mockSubmitSection}</button>}
-          </div>
-          <button onClick={()=>setShowMockSubmit(true)} style={{...Sb.btnGhost,width:"100%",marginTop:12,fontSize:12}}>{t.mockEndSection} · {answered}/{sec.questions.length}</button>
+        <div className={hasPassage?"rv-center":"rv-center-narrow"} style={{padding:"16px 16px 32px"}}>
+          {hasPassage
+            ? <div className="rv-mock-split"><div className="rv-mock-passage"><MockPassagePanel passage={q._passage} svg={q._psvg} activeU={activeU} label={sec.name}/></div>{questionCol}</div>
+            : questionCol}
         </div>
         {showMockSubmit && (
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowMockSubmit(false)}>
@@ -4573,13 +4663,18 @@ export default function StudyQuiz() {
               {sec.questions.map((q,i)=>{
                 const chosen=(mockAns[si]||[])[i];
                 const ok=chosen===q.correct;
-                return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 13px 12px 11px",marginBottom:9,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${ok?"#22c55e":"#ef4444"}`}} className="fade-in">
-                  <div style={{display:"flex",gap:8,alignItems:"flex-start"}}><span style={{flexShrink:0,display:"inline-flex",marginTop:1}}>{ok?<Icon name="check" size={15} stroke={2.6} style={{color:"#16a34a"}}/>:<Icon name="x" size={15} stroke={2.6} style={{color:"#dc2626"}}/>}</span><span style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{q.question}</span></div>
-                  {!ok&&<div style={{fontSize:12,color:"#dc2626",marginTop:5,paddingLeft:22}}>{t.yourAns} {chosen!=null?q.options[chosen]:", "}</div>}
-                  <div style={{fontSize:12,color:"#16a34a",marginTop:3,paddingLeft:22,fontWeight:500}}>{t.correctAns} {q.options[q.correct]}</div>
-                  {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingTop:6,marginTop:6,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:22}}>{q.explanation}</div>}
-                  {!ok&&<ExplainBox t={t} ctx={{question:q.question,correct:q.options[q.correct],picked:chosen!=null?q.options[chosen]:"",subject:sec.name}}/>}
-                  <MockReport exam={mock.name} section={sec.name} question={q.question} t={t}/>
+                const newPassage = q._passage && (i===0 || q._pIdx !== sec.questions[i-1]?._pIdx);
+                return <div key={i}>
+                  {newPassage && <div style={{marginBottom:9}}><MockPassagePanel passage={q._passage} svg={q._psvg} label={sec.name}/></div>}
+                  <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 13px 12px 11px",marginBottom:9,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${ok?"#22c55e":"#ef4444"}`}} className="fade-in">
+                    <div style={{display:"flex",gap:8,alignItems:"flex-start"}}><span style={{flexShrink:0,display:"inline-flex",marginTop:1}}>{ok?<Icon name="check" size={15} stroke={2.6} style={{color:"#16a34a"}}/>:<Icon name="x" size={15} stroke={2.6} style={{color:"#dc2626"}}/>}</span><span style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{q.question}</span></div>
+                    {q.svg && <div style={{margin:"10px 0 2px",paddingLeft:22,display:"flex"}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.svg)} style={{maxWidth:"100%",maxHeight:240,background:"#fff",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)",padding:8,boxSizing:"border-box"}}/></div>}
+                    {!ok&&<div style={{fontSize:12,color:"#dc2626",marginTop:5,paddingLeft:22}}>{t.yourAns} {chosen!=null?q.options[chosen]:", "}</div>}
+                    <div style={{fontSize:12,color:"#16a34a",marginTop:3,paddingLeft:22,fontWeight:500}}>{t.correctAns} {q.options[q.correct]}</div>
+                    {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingTop:6,marginTop:6,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:22}}>{q.explanation}</div>}
+                    {!ok&&<ExplainBox t={t} ctx={{question:q.question,correct:q.options[q.correct],picked:chosen!=null?q.options[chosen]:"",subject:sec.name}}/>}
+                    <MockReport exam={mock.name} section={sec.name} question={q.question} t={t}/>
+                  </div>
                 </div>;
               })}
             </div>
@@ -4623,6 +4718,14 @@ const CSS = `
   /* Small-font zoom (body{zoom:0.9}) leaves a gap below the app; painting html
      with the theme colour stops a white rectangle showing through there. */
   html,body{background:var(--color-background-tertiary)}
+  /* Mock passage layout: passage stacks above the question on narrow screens,
+     sits beside it (sticky) on wide ones, so it stays put across its questions. */
+  .rv-mock-split{display:flex;flex-direction:column;gap:16px;align-items:stretch}
+  .rv-mock-passage{width:100%}
+  @media(min-width:900px){
+    .rv-mock-split{flex-direction:row;align-items:flex-start;gap:24px}
+    .rv-mock-passage{flex:1.15;position:sticky;top:64px;max-height:calc(100vh - 96px);overflow-y:auto}
+  }
   .fade-in {animation:fadeIn 0.3s ease both}
   .slide-up{animation:slideUp 0.25s ease both}
   @keyframes fadeIn {from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}

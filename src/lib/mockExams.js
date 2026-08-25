@@ -12,17 +12,21 @@
 export const MOCK_EXAMS = [
   {
     id: "act", name: "ACT", blurb: "English · Math · Reading · Science",
-    note: "4 sections · ~2h 55m · scored 1–36",
+    note: "4 sections · ~70 questions · scored 1–36",
     scoreMode: "average", scaleMin: 1, scaleMax: 36,
     sections: [
-      { id: "english", name: "English", count: 75, minutes: 45, options: 4,
-        instr: "ACT English section. Test grammar, usage, punctuation, sentence structure, and rhetorical/organisation skills. Each question shows a short sentence or two with ONE clearly marked portion in [brackets]; the choices either fix or keep that portion. Include \"NO CHANGE\" as one option where appropriate. Embed the needed context in the stem." },
-      { id: "math", name: "Math", count: 60, minutes: 60, options: 5,
-        instr: "ACT Math section. Cover pre-algebra, elementary and intermediate algebra, coordinate geometry, plane geometry, and basic trigonometry. Each question has FIVE answer choices. Keep problems self-contained and solvable without a calculator's advanced functions." },
-      { id: "reading", name: "Reading", count: 40, minutes: 35, options: 4,
-        instr: "ACT Reading section. Reading comprehension. Put a SHORT passage (4–8 sentences) inside each question stem, then ask about main idea, a specific detail, an inference, or the meaning of a word in context. Four choices." },
-      { id: "science", name: "Science", count: 40, minutes: 35, options: 4,
-        instr: "ACT Science section. Scientific reasoning. In the stem, present a brief experiment description, a small data table, or two conflicting hypotheses, then ask the student to interpret data, draw a conclusion, or compare viewpoints. Four choices. Describe any figure/table in words since images aren't shown." },
+      // English: authentic underlined-passage revision (format "english").
+      { id: "english", name: "English", count: 20, minutes: 13, options: 4, format: "english", passageSize: 10,
+        instr: "ACT English. Provide ONE authentic passage (a short essay or narrative, 4-6 paragraphs) with specific portions marked for revision by wrapping them in <u>...</u> tags, in natural reading order. Write EXACTLY {N} underlined portions and EXACTLY {N} questions IN THE SAME ORDER (question i is about the i-th underlined portion). Each question's first option is 'NO CHANGE' and the other options are revisions testing grammar, usage, punctuation, sentence structure, word choice, transitions, or rhetoric/organisation. Make them genuinely ACT-level hard: subtle errors, close distractors, and some questions where 'NO CHANGE' is correct." },
+      // Math: standalone, five choices, real difficulty, figures where needed.
+      { id: "math", name: "Math", count: 20, minutes: 26, options: 5, format: "standalone",
+        instr: "ACT Math. Standalone multiple-choice questions with FIVE choices, spanning pre-algebra, elementary/intermediate algebra, coordinate geometry, plane geometry, and trigonometry. Make them genuinely challenging ACT-level problems (multi-step reasoning, not trivial recall). When a question needs a figure to be answerable (geometry diagrams, coordinate graphs, number lines), include an accurate inline <svg> figure drawn to the numbers in the question." },
+      // Reading: one full passage + several questions (format "passage").
+      { id: "reading", name: "Reading", count: 16, minutes: 16, options: 4, format: "passage", passageSize: 8,
+        instr: "ACT Reading. Provide ONE authentic passage (~450-650 words: prose fiction, social science, humanities, or natural science) and {N} questions about it covering main idea, specific detail, inference, vocabulary-in-context, author's purpose/tone, and comparison. Genuinely hard: close distractors that require careful reading of the passage, not outside knowledge." },
+      // Science: a data/figure passage with an SVG the questions depend on.
+      { id: "science", name: "Science", count: 14, minutes: 14, options: 4, format: "passage", passageSize: 7,
+        instr: "ACT Science. Provide ONE authentic science scenario (an experiment description, a data study, or two conflicting viewpoints) AND an inline <svg> figure (a graph, chart, table, or diagram) that the questions genuinely depend on. Then {N} questions on interpreting the figure/data, reasoning about the experiment, and drawing conclusions. Genuinely hard, ACT-level." },
     ],
   },
   {
