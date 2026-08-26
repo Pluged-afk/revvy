@@ -15,7 +15,7 @@ import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
 import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/studentModel.js";
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize } from "./lib/studyLibrary.js";
-import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scaledScore, compositeScore, compositeMax } from "./lib/mockExams.js";
+import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
 import Icon from "./components/Icon.jsx";
 
 // Clean line icons for the home "what you can upload" grid, matched to the
@@ -550,35 +550,44 @@ The "questions" array MUST contain ${count} items.`;
   return { format: "standalone", passage: "", svg: "", questions };
 }
 
-// Build a whole mock section, ready for the runner. Standalone sections generate
-// their questions in one call (and feed the global learning bank). Passage /
-// English sections generate all their passages UPFRONT (during the load screen,
-// before the timer starts) so the timed run never stalls mid-section; each
-// question is tagged with its passage so the runner can keep it on screen.
+// Build a WHOLE mock section to the real question count, ready for the runner.
+// Everything is generated UPFRONT (during the load screen, before the section
+// timer starts) so the timed run never stalls mid-section. Calls run in PARALLEL
+// so a full 50-question, 5-passage section loads in roughly one call's time.
+// Standalone sections batch into chunks (a single call under-delivers a big
+// count); passage/English sections split into passages (capped) and each
+// question is tagged with its passage so the runner keeps it on screen.
+const MOCK_CHUNK = 25;      // standalone questions per parallel call
+const MOCK_MAX_PASSAGES = 6; // cap passages per section so the load stays bounded
 async function buildMockSection(exam, section, tilt) {
   const fmt = section.format || "standalone";
   if (fmt === "standalone") {
+    const nChunks = Math.max(1, Math.ceil(section.count / MOCK_CHUNK));
+    const sizes = [];
+    for (let i = 0, rem = section.count; i < nChunks; i++) { const n = Math.min(MOCK_CHUNK, rem); if (n <= 0) break; sizes.push(n); rem -= n; }
     const { exemplars, avoid } = await mockDrawGlobal(exam.name, section.name);
-    const r = await callMockSection(exam, section, tilt, exemplars, avoid);
-    mockContributeGlobal(exam.name, section.name, r.questions);
-    return r.questions;
+    const results = await Promise.all(sizes.map((n) => callMockSection(exam, section, tilt, exemplars, avoid, n).catch(() => ({ questions: [] }))));
+    const seen = new Set(); const out = [];
+    for (const r of results) for (const q of (r.questions || [])) { const k = String(q.question || "").toLowerCase().trim(); if (k && !seen.has(k)) { seen.add(k); out.push(q); } }
+    mockContributeGlobal(exam.name, section.name, out);
+    return out.slice(0, section.count);
   }
   const size = section.passageSize || section.count;
-  const groups = Math.max(1, Math.ceil(section.count / size));
+  const groups = Math.min(MOCK_MAX_PASSAGES, Math.max(1, Math.ceil(section.count / size)));
+  const needs = [];
+  for (let g = 0, rem = section.count; g < groups; g++) { const n = Math.min(size, rem); if (n <= 0) break; needs.push(n); rem -= n; }
+  const results = await Promise.all(needs.map((n) => callMockSection(exam, section, tilt, [], [], n).catch(() => null)));
   const out = [];
-  for (let g = 0; g < groups && out.length < section.count; g++) {
-    const need = Math.min(size, section.count - out.length);
-    let r = null;
-    try { r = await callMockSection(exam, section, tilt, [], [], need); } catch { r = null; }
-    if (!r || !r.questions.length) continue;
+  results.forEach((r, g) => {
+    if (!r || !r.questions.length) return;
     let qs = r.questions;
     // English: keep at most as many questions as there are <u> underlines so the
     // question<->underline mapping stays 1:1.
     const uCount = fmt === "english" ? (r.passage.match(/<u>/gi) || []).length : 0;
     if (fmt === "english" && uCount) qs = qs.slice(0, uCount);
     qs.forEach((q, i) => out.push({ ...q, _passage: r.passage, _psvg: r.svg, _pIdx: g, _uIdx: fmt === "english" ? i : null }));
-  }
-  return out;
+  });
+  return out.slice(0, section.count);
 }
 
 // ── Global mock-learning bank (client) ──
@@ -1983,8 +1992,10 @@ export default function StudyQuiz() {
     const sec = mock.sections[mockSecIdx];
     const ans = mockAns[mockSecIdx] || [];
     const raw = sec.questions.reduce((s, q, i) => s + (ans[i] === q.correct ? 1 : 0), 0);
-    const scaled = scaledScore(raw, sec.questions.length, mock.scaleMin, mock.scaleMax);
-    setMockSecResults((prev) => { const n = [...prev]; n[mockSecIdx] = { sectionId: sec.id, name: sec.name, raw, count: sec.questions.length, scaled }; return n; });
+    // Store the raw result per section; the grouped/scaled scoring is computed at
+    // the end by scoreMock, which handles measures, ACT Science (STEM, excluded
+    // from the composite) and the UCAT SJT band.
+    setMockSecResults((prev) => { const n = [...prev]; n[mockSecIdx] = { sectionId: sec.id, name: sec.name, raw, count: sec.questions.length }; return n; });
     setShowMockSubmit(false);
     if (mockSecIdx + 1 < mock.sections.length) {
       setScreen("mock_break");   // pause between sections; the next timer only starts from the break screen
@@ -4684,21 +4695,28 @@ export default function StudyQuiz() {
 
   // ── MOCK EXAM: results ────────────────────────────────────────────
   if (screen==="mock_results" && mock) {
-    const comp = compositeScore(mockSecResults.map(r=>r.scaled), mock);
+    const sc = scoreMock(mock, mockSecResults);
     return (
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
         <div style={{background:"#2c2870",padding:"34px 20px 26px",textAlign:"center"}}>
           <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"rgba(255,255,255,0.7)",textTransform:"uppercase"}}>{mock.name} {t.mockComposite}</div>
-          <div style={{fontSize:58,fontWeight:800,color:"#fff",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1.1}}>{comp}</div>
-          <div style={{fontSize:13,color:"rgba(255,255,255,0.7)"}}>{t.mockOutOf} {compositeMax(mock)}</div>
+          <div style={{fontSize:58,fontWeight:800,color:"#fff",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1.1}}>{sc.composite}</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.7)"}}>{t.mockOutOf} {sc.compositeMax}</div>
+          {sc.goodScore!=null && <div style={{fontSize:11.5,color:"rgba(255,255,255,0.55)",marginTop:6}}>{(t.mockGoodScore||"A strong score is around {n}+").replace("{n}",sc.goodScore)}</div>}
         </div>
         <div className="rv-center" style={{padding:"20px 16px 40px"}}>
           <div style={Sb.settingsBox}>
-            {mockSecResults.map((r,i)=>(
-              <div key={i} style={{...Sb.settingRow,borderBottom:i<mockSecResults.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
+            {sc.rows.map((r,i)=>(
+              <div key={i} style={{...Sb.settingRow,borderBottom:(i<sc.rows.length-1||sc.extras.length)?"0.5px solid var(--color-border-tertiary)":"none"}}>
                 <span style={Sb.settingLabel}>{r.name}</span>
                 <span style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{r.raw}/{r.count} · <strong style={{color:"var(--color-text-primary)",fontSize:15}}>{r.scaled}</strong></span>
+              </div>
+            ))}
+            {sc.extras.map((e,i)=>(
+              <div key={"x"+i} style={{...Sb.settingRow,borderBottom:i<sc.extras.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
+                <span style={Sb.settingLabel}>{e.name}{e.band!=null?` · ${t.mockNotScored||"not in composite"}`:e.scaled!=null&&mock.id==="act"?` · ${t.mockNotScored||"not in composite"}`:""}</span>
+                <span style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{e.raw}/{e.count} · <strong style={{color:"var(--color-text-primary)",fontSize:15}}>{e.band!=null?`${t.mockBand||"Band"} ${e.band}`:e.scaled}</strong></span>
               </div>
             ))}
           </div>
