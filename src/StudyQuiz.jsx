@@ -500,36 +500,40 @@ async function callMockSection(exam, section, tilt, exemplars = [], avoid = [], 
     : "OVERALL DIFFICULTY: an authentic form spanning the full real range, including several genuinely hard questions.";
   const instr = String(section.instr || "").replace(/\{N\}/g, count);
   // Sections where the REAL test regularly shows figures (math / quant / data /
-  // science): push the model to actually DRAW them, not just "when needed".
+  // science): push the model to actually DRAW them, not just "when needed". A
+  // hard minimum count is what actually moves the model (tested: ~9% -> ~40%).
   const wantsFigures = /math|quant|qr|di|science|cp|bb|ps|dm/i.test(section.id);
+  const kFig = wantsFigures ? Math.max(2, Math.round(count * 0.3)) : 0;
+  const svgRules = "SVG RULES: each \"svg\" is a SELF-CONTAINED <svg viewBox='...'>...</svg> using ONLY <line>/<rect>/<circle>/<polygon>/<path>/<text>, with clear labels and SINGLE quotes for every attribute (e.g. <circle cx='50' cy='50' r='40'/>) so the JSON stays valid, NEVER use double quotes inside the svg. No <script>, event handlers, external images, links, or fonts.";
 
   let prompt, maxTokens;
   if (fmt === "english" || fmt === "passage") {
     const rule = fmt === "english"
       ? `The "passage" MUST contain EXACTLY ${count} portions wrapped in <u>...</u> (use the <u> tag ONLY for these revised portions), and there MUST be EXACTLY ${count} questions in the SAME order: question i revises the i-th underlined portion, and its first option is usually "NO CHANGE".`
       : `Write EXACTLY ${count} questions, all about this ONE passage.`;
-    const figRule = (fmt === "passage" && section.id === "science")
-      ? "You MUST include a top-level inline <svg> figure (a graph, chart, data table, or labelled diagram) that the questions genuinely depend on."
-      : "Add a top-level inline <svg> only if a figure is truly needed.";
+    const figRule = wantsFigures
+      ? `FIGURE IS MANDATORY: real ${exam.name} ${section.name} is built around data. You MUST include a top-level inline "svg" figure, an accurate graph, chart, data table, or labelled scientific diagram, drawn to real numbers, that the questions genuinely read from. A ${section.name} set with no figure is unacceptable.\n${svgRules}`
+      : `Add a top-level inline "svg" only if a figure is truly needed; ${svgRules}`;
     prompt = `You are writing a realistic ${exam.name} ${section.name} passage set that should be indistinguishable from a genuine ${exam.name}. Draw on real ${exam.name} passages, past papers and official practice tests.
 ${instr}
 ${rule}
 ${tiltLine}
 Each question has "options" (EXACTLY ${nOpt} choices), "correct" (the 0-based index of the ONE correct option, which you work out carefully first), and "explanation" (one short sentence). Make distractors close and genuinely ${exam.name}-hard, not trivial.
-FIGURE: ${figRule} Draw any <svg> self-contained with a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text>, clear labels, and SINGLE-quoted attributes (e.g. <circle cx='50' cy='50' r='40'/>); never include <script>, event handlers, external images or fonts.${exBlock}${avoidBlock}
+${figRule}${exBlock}${avoidBlock}
 Return ONLY raw JSON, no markdown: {"passage":"the full passage text${fmt==="english"?", with the revised portions wrapped in <u>...</u> in reading order":""}","svg":"OPTIONAL inline <svg>…</svg>","questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."}]}`;
     maxTokens = Math.min(count * 450 + 7000, 40000);
   } else {
-    prompt = `You are assembling a realistic ${exam.name} ${section.name} section that should feel indistinguishable from a genuine ${exam.name} form. Draw on your knowledge of actual ${exam.name} exams, real past papers and official practice tests, and produce a MIX of questions closely modeled on real ${exam.name} questions and new ones in the exact same style. Match the authentic topics, difficulty spread, phrasing and formats faithfully.
+    prompt = `You are assembling a realistic ${exam.name} ${section.name} section that should feel indistinguishable from a genuine ${exam.name} form. Draw on your knowledge of actual ${exam.name} exams, real past papers and official practice tests. Match the authentic topics, difficulty spread, phrasing and formats faithfully.
 ${instr}
 Provide EXACTLY ${count} multiple-choice questions.
-${tiltLine} Do NOT make every question the same difficulty; vary it like the actual exam.
-Each question needs "question" (the full stem, with any context written into it), "options" (EXACTLY ${nOpt} choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary skills across the section; every distractor plausible.
-DIAGRAMS: add an "svg" field with a SELF-CONTAINED inline SVG (geometry diagram, coordinate graph, bar/line chart, number line, labelled figure, or data table) drawn accurately to the numbers and consistent with the correct answer. Use a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text>, and SINGLE-quoted attributes. Never include <script>, handlers, external images, links or fonts. ${wantsFigures ? `A real ${exam.name} ${section.name} form relies on figures often, so INCLUDE an accurate <svg> on the questions that need one, roughly a quarter to a third of this section, exactly as the actual test does.` : "Most questions need NO figure; add one only when truly required."}
-CRITICAL: for any calculation, work the answer out fully FIRST, then set "correct" to the option that matches; double-check every calculation and unit. Exactly ONE clearly correct option per question; discard any you are not certain of.${exBlock}${avoidBlock}
-Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"...","svg":"OPTIONAL, only when a figure is required"}]}
-The "questions" array MUST contain ${count} items.`;
-    maxTokens = Math.min(count * 500 + 4000, 64000);
+${wantsFigures ? `\nFIGURES ARE MANDATORY: a real ${exam.name} ${section.name} form is full of diagrams. AT LEAST ${kFig} of the ${count} questions MUST be geometry, coordinate-geometry, trigonometry, or data-interpretation questions, and EACH of those MUST carry an accurate inline "svg" figure the question genuinely depends on (a triangle/circle/polygon with labelled sides or angles, a coordinate plane with plotted points/lines/parabolas, a number line, or a bar/line/scatter chart). Draw each figure to the EXACT numbers in the question and consistent with the correct answer. Fewer than ${kFig} figures does NOT look like a real ${exam.name} and is unacceptable. Purely algebraic or arithmetic questions need no figure.\n${svgRules}\n` : ""}
+${tiltLine} Vary difficulty like the real exam.
+Each question object: "question" (the full stem, with any context written into it), "options" (EXACTLY ${nOpt} choices), "correct" (0-based index of the ONE correct option), "explanation" (one short sentence)${wantsFigures ? `, and "svg" (the figure, or omit it for a figure-free question)` : ""}. CRITICAL: work every calculation out FIRST, then key the matching option; double-check numbers and units. Exactly ONE correct option each; discard any you are not certain of.${exBlock}${avoidBlock}
+Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."${wantsFigures ? `,"svg":"<svg viewBox='0 0 200 200'>…</svg> only when the question needs a figure"` : ""}}]}
+The "questions" array MUST contain ${count} items${wantsFigures ? `, at least ${kFig} of them with an "svg"` : ""}.`;
+    // Figure-heavy sections run longer (each SVG is ~500-1000 tokens), so give
+    // them more headroom to avoid truncating a chunk mid-figure.
+    maxTokens = Math.min(count * (wantsFigures ? 750 : 500) + 4000, 64000);
   }
 
   const res = await fetch("/api/anthropic", {
