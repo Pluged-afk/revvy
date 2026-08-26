@@ -18,6 +18,17 @@
 //   "rawTotal"     total raw across all scored sections mapped to [scaleMin,scaleMax] (LSAT)
 // None of these tests has a pass/fail line; `goodScore` is a context target only.
 
+// The digital SAT/PSAT and the GRE are ADAPTIVE: each measure is two modules and
+// the second module's difficulty is chosen from how the taker did on the first.
+// Both modules of a measure share one instruction (the wording is identical; only
+// the routed difficulty differs), so they are defined once here and reused.
+const SAT_RW_INSTR = "Digital SAT Reading and Writing. Each question is self-contained: a SHORT passage (1-3 sentences, or a brief poem/notes excerpt) then ONE question testing central ideas and details, command of evidence (textual or quantitative), words in context, text structure and purpose, cross-text connections, or Standard English conventions (grammar, punctuation, sentence boundaries, agreement). FOUR choices.";
+const SAT_MATH_INSTR = "Digital SAT Math. FOUR-choice questions covering Algebra, Advanced Math (quadratics, exponentials, functions), Problem-Solving and Data Analysis (ratios, rates, percentages, probability, statistics), and Geometry and Trigonometry. Self-contained and solvable by hand; include an inline <svg> when a figure is needed.";
+const PSAT_RW_INSTR = "Digital PSAT/NMSQT Reading and Writing (same style as the digital SAT). Each question is self-contained: a SHORT passage (1-3 sentences) then ONE question on central ideas and details, command of evidence, words in context, text structure and purpose, or Standard English conventions. FOUR choices.";
+const PSAT_MATH_INSTR = "Digital PSAT/NMSQT Math (same style as the digital SAT). Algebra, functions and quadratics, ratios/percentages/statistics, and geometry/trigonometry. FOUR choices, self-contained, solvable by hand; inline <svg> when a figure is needed.";
+const GRE_VERBAL_INSTR = "GRE Verbal Reasoning. Mix reading comprehension (a short passage in the stem + a question on meaning, inference, or the author's purpose), single-blank text completion (a sentence with one blank, pick the best word), and questions on graduate-level vocabulary in context. FIVE choices with challenging, close distractors.";
+const GRE_QUANT_INSTR = "GRE Quantitative Reasoning. Problem-solving and data interpretation across arithmetic, algebra, geometry, and statistics at an advanced level, plus some quantitative-comparison questions (compare Quantity A and Quantity B; options are 'A is greater / B is greater / equal / cannot be determined'). Include data-interpretation questions with an inline <svg> chart. FIVE choices.";
+
 export const MOCK_EXAMS = [
   {
     id: "act", name: "ACT", blurb: "English · Math · Reading · Science",
@@ -35,32 +46,39 @@ export const MOCK_EXAMS = [
   },
   {
     id: "sat", name: "SAT", blurb: "Reading & Writing · Math",
-    note: "Digital SAT · 2 sections · scored 400-1600", scoreMode: "sum", scaleMin: 200, scaleMax: 800, goodScore: 1200,
+    note: "Digital SAT · adaptive · scored 400-1600", scoreMode: "sum", scaleMin: 200, scaleMax: 800, goodScore: 1200,
+    // Adaptive: pass ~60% of a module-1 to route into the harder module 2, which
+    // unlocks the top of the 200-800 scale; otherwise the easier module 2 caps it.
+    adaptive: true, routing: { levels: ["easy", "hard"], cut: [0.6], bands: { easy: [0, 0.65], hard: [0.4, 1] } },
     sections: [
-      { id: "rw", name: "Reading & Writing", count: 54, minutes: 64, options: 4, format: "standalone",
-        instr: "Digital SAT Reading and Writing. Each question is self-contained: a SHORT passage (1-3 sentences, or a brief poem/notes excerpt) then ONE question testing central ideas and details, command of evidence (textual or quantitative), words in context, text structure and purpose, cross-text connections, or Standard English conventions (grammar, punctuation, sentence boundaries, agreement). FOUR choices. Span the full digital-SAT difficulty range." },
-      { id: "math", name: "Math", count: 44, minutes: 70, options: 4, format: "standalone",
-        instr: "Digital SAT Math. FOUR-choice questions covering Algebra, Advanced Math (quadratics, exponentials, functions), Problem-Solving and Data Analysis (ratios, rates, percentages, probability, statistics), and Geometry and Trigonometry. Self-contained and solvable by hand; include an inline <svg> when a figure is needed. Span the full difficulty range." },
+      { id: "rw1", group: "rw", groupName: "Reading & Writing", name: "Reading & Writing (Module 1)", stage: 1, count: 27, minutes: 32, options: 4, format: "standalone", instr: SAT_RW_INSTR },
+      { id: "rw2", group: "rw", groupName: "Reading & Writing", name: "Reading & Writing (Module 2)", stage: 2, count: 27, minutes: 32, options: 4, format: "standalone", instr: SAT_RW_INSTR },
+      { id: "math1", group: "math", groupName: "Math", name: "Math (Module 1)", stage: 1, count: 22, minutes: 35, options: 4, format: "standalone", instr: SAT_MATH_INSTR },
+      { id: "math2", group: "math", groupName: "Math", name: "Math (Module 2)", stage: 2, count: 22, minutes: 35, options: 4, format: "standalone", instr: SAT_MATH_INSTR },
     ],
   },
   {
     id: "psat", name: "PSAT/NMSQT", blurb: "Reading & Writing · Math",
-    note: "Digital PSAT · 2 sections · scored 320-1520", scoreMode: "sum", scaleMin: 160, scaleMax: 760, goodScore: 1100,
+    note: "Digital PSAT · adaptive · scored 320-1520", scoreMode: "sum", scaleMin: 160, scaleMax: 760, goodScore: 1100,
+    adaptive: true, routing: { levels: ["easy", "hard"], cut: [0.6], bands: { easy: [0, 0.65], hard: [0.4, 1] } },
     sections: [
-      { id: "rw", name: "Reading & Writing", count: 54, minutes: 64, options: 4, format: "standalone",
-        instr: "Digital PSAT/NMSQT Reading and Writing (same style as the digital SAT). Each question is self-contained: a SHORT passage (1-3 sentences) then ONE question on central ideas and details, command of evidence, words in context, text structure and purpose, or Standard English conventions. FOUR choices." },
-      { id: "math", name: "Math", count: 44, minutes: 70, options: 4, format: "standalone",
-        instr: "Digital PSAT/NMSQT Math (same style as the digital SAT). Algebra, functions and quadratics, ratios/percentages/statistics, and geometry/trigonometry. FOUR choices, self-contained, solvable by hand; inline <svg> when a figure is needed." },
+      { id: "rw1", group: "rw", groupName: "Reading & Writing", name: "Reading & Writing (Module 1)", stage: 1, count: 27, minutes: 32, options: 4, format: "standalone", instr: PSAT_RW_INSTR },
+      { id: "rw2", group: "rw", groupName: "Reading & Writing", name: "Reading & Writing (Module 2)", stage: 2, count: 27, minutes: 32, options: 4, format: "standalone", instr: PSAT_RW_INSTR },
+      { id: "math1", group: "math", groupName: "Math", name: "Math (Module 1)", stage: 1, count: 22, minutes: 35, options: 4, format: "standalone", instr: PSAT_MATH_INSTR },
+      { id: "math2", group: "math", groupName: "Math", name: "Math (Module 2)", stage: 2, count: 22, minutes: 35, options: 4, format: "standalone", instr: PSAT_MATH_INSTR },
     ],
   },
   {
     id: "gre", name: "GRE", blurb: "Verbal · Quantitative",
-    note: "GRE General · 2 measures · scored 260-340", scoreMode: "sum", scaleMin: 130, scaleMax: 170, goodScore: 320,
+    note: "GRE General · adaptive · scored 260-340", scoreMode: "sum", scaleMin: 130, scaleMax: 170, goodScore: 320,
+    // Section-adaptive: each measure's second section is easier / medium / harder
+    // based on the first section's score, the way the real GRE routes.
+    adaptive: true, routing: { levels: ["easy", "medium", "hard"], cut: [0.7, 0.4], bands: { easy: [0, 0.6], medium: [0.2, 0.85], hard: [0.45, 1] } },
     sections: [
-      { id: "verbal", name: "Verbal Reasoning", count: 27, minutes: 41, options: 5, format: "standalone",
-        instr: "GRE Verbal Reasoning. Mix reading comprehension (a short passage in the stem + a question on meaning, inference, or the author's purpose), single-blank text completion (a sentence with one blank, pick the best word), and questions on graduate-level vocabulary in context. FIVE choices with challenging, close distractors." },
-      { id: "quant", name: "Quantitative Reasoning", count: 27, minutes: 47, options: 5, format: "standalone",
-        instr: "GRE Quantitative Reasoning. Problem-solving and data interpretation across arithmetic, algebra, geometry, and statistics at an advanced level, plus some quantitative-comparison questions (compare Quantity A and Quantity B; options are 'A is greater / B is greater / equal / cannot be determined'). Include data-interpretation questions with an inline <svg> chart. FIVE choices." },
+      { id: "verbal1", group: "verbal", groupName: "Verbal Reasoning", name: "Verbal Reasoning (Section 1)", stage: 1, count: 12, minutes: 18, options: 5, format: "standalone", instr: GRE_VERBAL_INSTR },
+      { id: "verbal2", group: "verbal", groupName: "Verbal Reasoning", name: "Verbal Reasoning (Section 2)", stage: 2, count: 15, minutes: 23, options: 5, format: "standalone", instr: GRE_VERBAL_INSTR },
+      { id: "quant1", group: "quant", groupName: "Quantitative Reasoning", name: "Quantitative Reasoning (Section 1)", stage: 1, count: 12, minutes: 21, options: 5, format: "standalone", instr: GRE_QUANT_INSTR },
+      { id: "quant2", group: "quant", groupName: "Quantitative Reasoning", name: "Quantitative Reasoning (Section 2)", stage: 2, count: 15, minutes: 26, options: 5, format: "standalone", instr: GRE_QUANT_INSTR },
     ],
   },
   {
@@ -135,6 +153,36 @@ export function sjtBand(raw, count) {
   return p >= 0.76 ? 1 : p >= 0.55 ? 2 : p >= 0.4 ? 3 : 4;
 }
 
+// ── Adaptive routing (digital SAT/PSAT, GRE) ──
+export function isAdaptive(mock) { return !!(mock && mock.adaptive); }
+// Which difficulty the stage-2 module should be, from the stage-1 fraction correct.
+// levels run easy..hard; cut holds the fraction thresholds high..low.
+export function routeFor(mock, frac) {
+  const r = mock && mock.routing;
+  if (!r) return "standard";
+  for (let i = 0; i < r.cut.length; i++) if (frac >= r.cut[i]) return r.levels[r.levels.length - 1 - i];
+  return r.levels[0];
+}
+// The generation tilt for a routed module.
+export function routeTilt(route) { return route === "hard" ? "harder" : route === "easy" ? "easier" : "standard"; }
+// Index of the stage-1 module paired with the stage-2 module at secIdx (same group).
+export function stage1IndexFor(sections, secIdx) {
+  const spec = sections[secIdx]; const key = spec.group || spec.id;
+  for (let i = secIdx - 1; i >= 0; i--) if ((sections[i].group || sections[i].id) === key && sections[i].stage === 1) return i;
+  return -1;
+}
+// Adaptive per-measure scaled score: the module you routed into fixes the band,
+// then your combined raw across both modules places you inside it. Routing to the
+// hard module unlocks the top of the scale; the easy module caps you lower, the
+// way the real digital SAT / GRE work.
+export function adaptiveScaled(mock, route, raw, count) {
+  const band = (mock && mock.routing && mock.routing.bands && mock.routing.bands[route]) || [0, 1];
+  const min = mock.scaleMin, max = mock.scaleMax;
+  const lo = min + band[0] * (max - min), hi = min + band[1] * (max - min);
+  const f = count ? raw / count : 0;
+  return Math.max(min, Math.min(max, Math.round(lo + f * (hi - lo))));
+}
+
 function compositeFrom(rows, mock) {
   if (!rows.length) return 0;
   const mode = mock.scoreMode || "average";
@@ -175,14 +223,17 @@ export function scoreMock(mock, results) {
     const r = results?.[i];
     if (!r || !r.count) return;
     const key = sec.group || sec.id;
-    const g = byGroup.get(key) || { name: sec.groupName || sec.name, raw: 0, count: 0, noComposite: !!sec.noComposite, band: !!sec.band };
+    const g = byGroup.get(key) || { name: sec.groupName || sec.name, raw: 0, count: 0, noComposite: !!sec.noComposite, band: !!sec.band, route: null };
     g.raw += r.raw; g.count += r.count;
+    if (sec._route) g.route = sec._route; // adaptive: the stage-2 module carries the routed difficulty
     byGroup.set(key, g);
   });
   const rows = [], extras = [];
   for (const g of byGroup.values()) {
     if (g.band) { extras.push({ name: g.name, raw: g.raw, count: g.count, band: sjtBand(g.raw, g.count) }); continue; }
-    const scaled = scaledScore(g.raw, g.count, mock.scaleMin, mock.scaleMax);
+    const scaled = (mock.adaptive && g.route)
+      ? adaptiveScaled(mock, g.route, g.raw, g.count)
+      : scaledScore(g.raw, g.count, mock.scaleMin, mock.scaleMax);
     if (g.noComposite) extras.push({ name: g.name, raw: g.raw, count: g.count, scaled });
     else rows.push({ name: g.name, raw: g.raw, count: g.count, scaled });
   }

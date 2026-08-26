@@ -15,7 +15,7 @@ import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
 import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/studentModel.js";
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize } from "./lib/studyLibrary.js";
-import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
+import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock, routeFor, routeTilt, stage1IndexFor } from "./lib/mockExams.js";
 import Icon from "./components/Icon.jsx";
 
 // Clean line icons for the home "what you can upload" grid, matched to the
@@ -486,11 +486,11 @@ function readMockProgress() {
 // Full record (question set + progress), for actually continuing.
 function readMockResume() {
   try {
-    const q = JSON.parse(localStorage.getItem(MOCK_LS_Q) || "null");
+    const e = JSON.parse(localStorage.getItem(MOCK_LS_Q) || "null");
     const p = JSON.parse(localStorage.getItem(MOCK_LS_P) || "null");
-    if (!q || !Array.isArray(q.sections) || !q.sections.length || !p) return null;
+    if (!e || !e.mock || !Array.isArray(e.mock.sections) || !e.mock.sections.length || !p) return null;
     if (p.savedAt && Date.now() - p.savedAt > MOCK_RESUME_TTL) { clearMockResume(); return null; }
-    return { q, p };
+    return { mock: e.mock, tilt: e.tilt, p };
   } catch { return null; }
 }
 // Keep only well-formed MCQs (a ballooning explanation signals the model could
@@ -2075,9 +2075,24 @@ export default function StudyQuiz() {
     try {
       const exam = getMock(mock.presetId) || MOCK_EXAMS[0];
       const spec = exam.sections[ni];
-      const qs = await buildMockSection(exam, spec, mockTilt);
+      // Adaptive routing: a stage-2 module's difficulty comes from how the taker
+      // did on the paired stage-1 module; stage-1 and non-adaptive sections use
+      // the form tilt. The chosen route is stored on the section so the final
+      // scoring knows which band this measure landed in.
+      let tilt = mockTilt, route = null;
+      if (mock.adaptive) {
+        if (spec.stage === 2) {
+          const s1 = stage1IndexFor(mock.sections, ni);
+          const r = mockSecResults[s1];
+          route = routeFor(mock, r && r.count ? r.raw / r.count : 0);
+          tilt = routeTilt(route);
+        } else {
+          tilt = "standard";
+        }
+      }
+      const qs = await buildMockSection(exam, spec, tilt);
       if (!qs.length) throw new Error("section");
-      setMock(m => ({ ...m, sections: m.sections.map((s, i) => i === ni ? { ...s, questions: qs } : s) }));
+      setMock(m => ({ ...m, sections: m.sections.map((s, i) => i === ni ? { ...s, questions: qs, _route: route || s._route } : s) }));
       setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(spec.minutes * 60);
       setScreen("mock_run");
     } catch {
@@ -2121,10 +2136,9 @@ export default function StudyQuiz() {
   useEffect(() => {
     if (!mock || !(screen === "mock_run" || screen === "mock_break")) return;
     try {
-      localStorage.setItem(MOCK_LS_Q, JSON.stringify({
-        v: 1, tilt: mockTilt, presetId: mock.presetId, name: mock.name,
-        scaleMin: mock.scaleMin, scaleMax: mock.scaleMax, sections: mock.sections,
-      }));
+      // Store the WHOLE mock (incl scoreMode, adaptive, routing, per-module _route)
+      // so a resumed exam scores identically to one taken in one sitting.
+      localStorage.setItem(MOCK_LS_Q, JSON.stringify({ v: 1, tilt: mockTilt, mock }));
     } catch { /* quota / private mode: skip, resume just won't be offered */ }
   }, [mock, mockTilt, screen]);
   // Light part (position, answers, clock) is small and rewritten as they go.
@@ -3315,17 +3329,17 @@ export default function StudyQuiz() {
   const resumeMock = () => {
     const r = readMockResume();
     if (!r) { setMockResume(null); return; }
-    const { q, p } = r;
-    const secIdx = Math.min(Math.max(0, p.secIdx || 0), q.sections.length - 1);
-    const nQ = q.sections[secIdx]?.questions?.length || 1;
-    setMock({ presetId: q.presetId, name: q.name, scaleMin: q.scaleMin, scaleMax: q.scaleMax, sections: q.sections });
-    setMockTilt(q.tilt || "standard");
-    setMockPresetId(q.presetId);
+    const { mock: m, tilt, p } = r;
+    const secIdx = Math.min(Math.max(0, p.secIdx || 0), m.sections.length - 1);
+    const nQ = m.sections[secIdx]?.questions?.length || 1;
+    setMock(m); // the full mock, incl scoreMode/adaptive/routing/_route
+    setMockTilt(tilt || "standard");
+    setMockPresetId(m.presetId);
     setMockSecIdx(secIdx);
     setMockQIdx(Math.min(Math.max(0, p.qIdx || 0), nQ - 1));
-    setMockAns(Array.isArray(p.ans) && p.ans.length ? p.ans : q.sections.map(() => []));
+    setMockAns(Array.isArray(p.ans) && p.ans.length ? p.ans : m.sections.map(() => []));
     setMockSecResults(Array.isArray(p.secResults) ? p.secResults : []);
-    setMockSecTimeLeft(typeof p.secTimeLeft === "number" ? p.secTimeLeft : (q.sections[secIdx].minutes * 60));
+    setMockSecTimeLeft(typeof p.secTimeLeft === "number" ? p.secTimeLeft : (m.sections[secIdx].minutes * 60));
     setMockPaused(false);
     submittedSecRef.current = -1;
     mockScoredRef.current = null;
@@ -3345,9 +3359,11 @@ export default function StudyQuiz() {
     const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
     setScreen("mock_gen");
     try {
-      // One difficulty tilt for the whole form (luck of the draw), reused per
-      // section. Weighted: ~25% easier, ~50% standard, ~25% harder.
-      const tilt = ["easier", "standard", "standard", "harder"][Math.floor(Math.random() * 4)];
+      // Non-adaptive forms get one difficulty tilt for the whole exam (luck of the
+      // draw; ~25% easier / 50% standard / 25% harder). Adaptive forms (digital
+      // SAT/PSAT, GRE) instead run a mixed first module, then route each later
+      // module off the taker's performance, so their opening module is "standard".
+      const tilt = exam.adaptive ? "standard" : ["easier", "standard", "standard", "harder"][Math.floor(Math.random() * 4)];
       setMockTilt(tilt);
       // Build ONLY the first section now; the rest are built on demand as the
       // user proceeds, faster start, and no cost for sections never reached.
@@ -3355,8 +3371,9 @@ export default function StudyQuiz() {
       const qs = await buildMockSection(exam, sec0, tilt);
       if (!qs.length) throw new Error("Couldn't generate the exam, please try again.");
       submittedSecRef.current = -1;
-      setMock({ presetId: exam.id, name: exam.name, scaleMin: exam.scaleMin, scaleMax: exam.scaleMax,
-        sections: exam.sections.map((s, i) => ({ ...s, questions: i === 0 ? qs : [] })) });
+      // Carry the WHOLE exam spec into state (scoreMode, goodScore, adaptive,
+      // routing, totals) so scoreMock has everything it needs at the end.
+      setMock({ ...exam, presetId: exam.id, sections: exam.sections.map((s, i) => ({ ...s, questions: i === 0 ? qs : [] })) });
       setMockSecIdx(0); setMockQIdx(0);
       setMockAns(exam.sections.map(() => []));
       setMockSecResults([]); setMockSecTimeLeft(exam.sections[0].minutes * 60); setMockPaused(false);
@@ -4706,6 +4723,7 @@ export default function StudyQuiz() {
               <span style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)"}}>{totalQ} Qs · {Math.floor(totalMin/60)}h {totalMin%60}m</span>
             </div>
           </div>
+          {exam.adaptive && <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"var(--color-sel-tint)",border:"0.5px solid #c7d2fe",borderRadius:10,padding:"11px 14px",fontSize:12,color:"var(--color-accent)",lineHeight:1.5,marginBottom:14}}><Icon name="spark" size={15} style={{flexShrink:0,marginTop:1}}/><span>{t.mockAdaptiveNote}</span></div>}
           <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"#fffbeb",border:"0.5px solid #f59e0b44",borderRadius:10,padding:"11px 14px",fontSize:12,color:"#92400e",lineHeight:1.5,marginBottom:14}}><Icon name="clock" size={15} style={{flexShrink:0,marginTop:1}}/><span>{t.mockWarn}</span></div>
           {mockGenErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,display:"flex",alignItems:"flex-start",gap:7}}><Icon name="alert" size={15} style={{flexShrink:0,marginTop:1}}/><span>{mockGenErr}</span></div>}
           {isPro
