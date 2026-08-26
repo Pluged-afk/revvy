@@ -15,7 +15,7 @@ import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
 import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/studentModel.js";
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize } from "./lib/studyLibrary.js";
-import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock, routeFor, routeTilt, stage1IndexFor } from "./lib/mockExams.js";
+import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
 import Icon from "./components/Icon.jsx";
 
 // Clean line icons for the home "what you can upload" grid, matched to the
@@ -528,11 +528,14 @@ async function callMockSection(exam, section, tilt, exemplars = [], avoid = [], 
   const avoidBlock = (avoid && avoid.length)
     ? `\nAVOID: learners flagged questions like these as flawed, mis-keyed or ambiguous. Do NOT produce anything similar:\n- ${avoid.slice(0,4).map(s=>String(s).slice(0,160)).join("\n- ")}`
     : "";
-  const tiltLine = tilt === "easier"
-    ? "OVERALL DIFFICULTY: an easier form, lean toward approachable questions but still include a few genuinely hard ones."
-    : tilt === "harder"
-    ? "OVERALL DIFFICULTY: a harder form, lean toward challenging questions with subtle, close distractors."
-    : "OVERALL DIFFICULTY: an authentic form spanning the full real range, including several genuinely hard questions.";
+  // Real standardized tests are demanding; the app never generates a soft form.
+  // "harder" leans into the top of the authentic range, "standard" is a genuine
+  // full-difficulty paper. Neither is easy.
+  const tiltLine = tilt === "harder"
+    ? "OVERALL DIFFICULTY: a hard authentic form, lean toward the most challenging real question types with subtle, close distractors and multi-step reasoning."
+    : "OVERALL DIFFICULTY: a genuine full-difficulty form, matching the real exam's hardest sittings, with a strong share of demanding questions.";
+  // Realism/difficulty mandate on EVERY mock, so a form never comes out soft.
+  const realismLine = `REALISM: this must be indistinguishable from a real ${exam.name} in difficulty and style. Real ${exam.name} questions are demanding, multi-step, and full of close distractors. Do NOT write easy, obvious, filler, or pure-recall questions, and no throwaway options; every question and every distractor must be one that could genuinely appear on the actual exam.`;
   const instr = String(section.instr || "").replace(/\{N\}/g, count);
   // Sections where the REAL test regularly shows figures (math / quant / data /
   // science): push the model to actually DRAW them, not just "when needed". A
@@ -553,6 +556,7 @@ async function callMockSection(exam, section, tilt, exemplars = [], avoid = [], 
 ${instr}
 ${rule}
 ${tiltLine}
+${realismLine}
 Each question has "options" (EXACTLY ${nOpt} choices), "correct" (the 0-based index of the ONE correct option, which you work out carefully first), and "explanation" (one short sentence). Make distractors close and genuinely ${exam.name}-hard, not trivial.
 ${figRule}${exBlock}${avoidBlock}
 Return ONLY raw JSON, no markdown: {"passage":"the full passage text${fmt==="english"?", with the revised portions wrapped in <u>...</u> in reading order":""}","svg":"OPTIONAL inline <svg>…</svg>","questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."}]}`;
@@ -562,7 +566,8 @@ Return ONLY raw JSON, no markdown: {"passage":"the full passage text${fmt==="eng
 ${instr}
 Provide EXACTLY ${count} multiple-choice questions.
 ${wantsFigures ? `\nFIGURES ARE MANDATORY: a real ${exam.name} ${section.name} form is full of diagrams. AT LEAST ${kFig} of the ${count} questions MUST be geometry, coordinate-geometry, trigonometry, or data-interpretation questions, and EACH of those MUST carry an accurate inline "svg" figure the question genuinely depends on (a triangle/circle/polygon with labelled sides or angles, a coordinate plane with plotted points/lines/parabolas, a number line, or a bar/line/scatter chart). Draw each figure to the EXACT numbers in the question and consistent with the correct answer. Fewer than ${kFig} figures does NOT look like a real ${exam.name} and is unacceptable. Purely algebraic or arithmetic questions need no figure.\n${svgRules}\n` : ""}
-${tiltLine} Vary difficulty like the real exam.
+${tiltLine} Vary difficulty across the real exam's hard range, but never make a question easy.
+${realismLine}
 Each question object: "question" (the full stem, with any context written into it), "options" (EXACTLY ${nOpt} choices), "correct" (0-based index of the ONE correct option), "explanation" (one short sentence)${wantsFigures ? `, and "svg" (the figure, or omit it for a figure-free question)` : ""}. CRITICAL: work every calculation out FIRST, then key the matching option; double-check numbers and units. Exactly ONE correct option each; discard any you are not certain of.${exBlock}${avoidBlock}
 Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."${wantsFigures ? `,"svg":"<svg viewBox='0 0 200 200'>…</svg> only when the question needs a figure"` : ""}}]}
 The "questions" array MUST contain ${count} items${wantsFigures ? `, at least ${kFig} of them with an "svg"` : ""}.`;
@@ -2075,24 +2080,9 @@ export default function StudyQuiz() {
     try {
       const exam = getMock(mock.presetId) || MOCK_EXAMS[0];
       const spec = exam.sections[ni];
-      // Adaptive routing: a stage-2 module's difficulty comes from how the taker
-      // did on the paired stage-1 module; stage-1 and non-adaptive sections use
-      // the form tilt. The chosen route is stored on the section so the final
-      // scoring knows which band this measure landed in.
-      let tilt = mockTilt, route = null;
-      if (mock.adaptive) {
-        if (spec.stage === 2) {
-          const s1 = stage1IndexFor(mock.sections, ni);
-          const r = mockSecResults[s1];
-          route = routeFor(mock, r && r.count ? r.raw / r.count : 0);
-          tilt = routeTilt(route);
-        } else {
-          tilt = "standard";
-        }
-      }
-      const qs = await buildMockSection(exam, spec, tilt);
+      const qs = await buildMockSection(exam, spec, mockTilt);
       if (!qs.length) throw new Error("section");
-      setMock(m => ({ ...m, sections: m.sections.map((s, i) => i === ni ? { ...s, questions: qs, _route: route || s._route } : s) }));
+      setMock(m => ({ ...m, sections: m.sections.map((s, i) => i === ni ? { ...s, questions: qs } : s) }));
       setMockSecIdx(ni); setMockQIdx(0); setMockSecTimeLeft(spec.minutes * 60);
       setScreen("mock_run");
     } catch {
@@ -2136,8 +2126,8 @@ export default function StudyQuiz() {
   useEffect(() => {
     if (!mock || !(screen === "mock_run" || screen === "mock_break")) return;
     try {
-      // Store the WHOLE mock (incl scoreMode, adaptive, routing, per-module _route)
-      // so a resumed exam scores identically to one taken in one sitting.
+      // Store the WHOLE mock (incl scoreMode, goodScore, totals) so a resumed exam
+      // scores identically to one taken in one sitting.
       localStorage.setItem(MOCK_LS_Q, JSON.stringify({ v: 1, tilt: mockTilt, mock }));
     } catch { /* quota / private mode: skip, resume just won't be offered */ }
   }, [mock, mockTilt, screen]);
@@ -3332,7 +3322,7 @@ export default function StudyQuiz() {
     const { mock: m, tilt, p } = r;
     const secIdx = Math.min(Math.max(0, p.secIdx || 0), m.sections.length - 1);
     const nQ = m.sections[secIdx]?.questions?.length || 1;
-    setMock(m); // the full mock, incl scoreMode/adaptive/routing/_route
+    setMock(m); // the full mock, incl scoreMode/goodScore/totals for correct scoring
     setMockTilt(tilt || "standard");
     setMockPresetId(m.presetId);
     setMockSecIdx(secIdx);
@@ -3359,11 +3349,10 @@ export default function StudyQuiz() {
     const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
     setScreen("mock_gen");
     try {
-      // Non-adaptive forms get one difficulty tilt for the whole exam (luck of the
-      // draw; ~25% easier / 50% standard / 25% harder). Adaptive forms (digital
-      // SAT/PSAT, GRE) instead run a mixed first module, then route each later
-      // module off the taker's performance, so their opening module is "standard".
-      const tilt = exam.adaptive ? "standard" : ["easier", "standard", "standard", "harder"][Math.floor(Math.random() * 4)];
+      // Every mock runs at authentic, demanding exam difficulty, NEVER softened.
+      // The form leans between a genuine full-difficulty paper and an extra-hard
+      // one so retakes stay fresh, but a mock never feels unrealistically easy.
+      const tilt = ["standard", "harder", "harder"][Math.floor(Math.random() * 3)];
       setMockTilt(tilt);
       // Build ONLY the first section now; the rest are built on demand as the
       // user proceeds, faster start, and no cost for sections never reached.
@@ -4723,7 +4712,6 @@ export default function StudyQuiz() {
               <span style={{fontSize:12,fontWeight:700,color:"var(--color-text-primary)"}}>{totalQ} Qs · {Math.floor(totalMin/60)}h {totalMin%60}m</span>
             </div>
           </div>
-          {exam.adaptive && <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"var(--color-sel-tint)",border:"0.5px solid #c7d2fe",borderRadius:10,padding:"11px 14px",fontSize:12,color:"var(--color-accent)",lineHeight:1.5,marginBottom:14}}><Icon name="spark" size={15} style={{flexShrink:0,marginTop:1}}/><span>{t.mockAdaptiveNote}</span></div>}
           <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"#fffbeb",border:"0.5px solid #f59e0b44",borderRadius:10,padding:"11px 14px",fontSize:12,color:"#92400e",lineHeight:1.5,marginBottom:14}}><Icon name="clock" size={15} style={{flexShrink:0,marginTop:1}}/><span>{t.mockWarn}</span></div>
           {mockGenErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14,display:"flex",alignItems:"flex-start",gap:7}}><Icon name="alert" size={15} style={{flexShrink:0,marginTop:1}}/><span>{mockGenErr}</span></div>}
           {isPro
