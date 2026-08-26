@@ -651,7 +651,13 @@ async function mockDrawGlobal(exam, section) {
 }
 async function mockContributeGlobal(exam, section, questions) {
   try {
-    const items = (questions || []).map((q) => ({ qhash: qhashOf(q.question), data: q })).slice(0, 60);
+    // Send LEAN, FLAT items (the shape the server validates). We deliberately
+    // drop passage text and per-question layout fields: the bank only needs the
+    // question, so this keeps the payload small and stores no passage material.
+    const items = (questions || [])
+      .filter((q) => q && q.question && Array.isArray(q.options) && q.options.length >= 2)
+      .map((q) => ({ qhash: qhashOf(q.question), question: q.question, options: q.options, correct: q.correct, explanation: q.explanation, svg: q.svg }))
+      .slice(0, 60);
     if (!items.length) return;
     await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
       body: JSON.stringify({ action:"mockContribute", exam, section, items }) });

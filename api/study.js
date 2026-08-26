@@ -42,9 +42,28 @@ function ensureTables() {
         qhash      TEXT        NOT NULL,
         data       JSONB       NOT NULL,
         uses       INT         NOT NULL DEFAULT 1,
-        flags      INT         NOT NULL DEFAULT 0,
+        flags      INT         NOT NULL DEFAULT 0,  -- count of DISTINCT users who flagged it
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (exam, section, qhash)
+      )`,
+      // Per-user, per-day action counters, so a single account cannot flood the
+      // shared bank with contributions or grief it with mass flags.
+      sql`CREATE TABLE IF NOT EXISTS mock_actor (
+        clerk_user_id TEXT NOT NULL,
+        day           DATE NOT NULL DEFAULT CURRENT_DATE,
+        contribs      INT  NOT NULL DEFAULT 0,
+        flags         INT  NOT NULL DEFAULT 0,
+        PRIMARY KEY (clerk_user_id, day)
+      )`,
+      // One row per (user, question) flagged, so flags are deduped and the
+      // bank's flag count reflects DISTINCT users, not one person spamming.
+      sql`CREATE TABLE IF NOT EXISTS mock_flag (
+        clerk_user_id TEXT        NOT NULL,
+        exam          TEXT        NOT NULL,
+        section       TEXT        NOT NULL,
+        qhash         TEXT        NOT NULL,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (clerk_user_id, exam, section, qhash)
       )`,
     ]).then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
       .then(() => true).catch(() => { ensured = null; return false; });
@@ -181,11 +200,36 @@ async function myChallenges(req, res, userId) {
 // Standardized-test questions the crowd generates, pooled to make everyone's
 // mocks more authentic. Keyed by exam + section. Privacy-safe (general test
 // knowledge, never user material). All endpoints require a signed-in user.
-const MOCK_BANK_CAP = 300;    // questions kept per (exam, section) bucket
+const MOCK_BANK_CAP = 300;        // questions kept per (exam, section) bucket
+const MOCK_CONTRIB_DAILY = 600;   // items one account may add to the bank per day
+const MOCK_FLAG_DAILY = 60;       // flags one account may cast per day
+const MOCK_FLAG_AVOID = 2;        // distinct-user flags before a question is avoided
+const MOCK_ITEMS_PER_CALL = 60;   // items accepted from a single contribute call
 const examKey = (s) => clean(s, 40);
 const sectionKey = (s) => clean(s, 60);
 
-// Keep only a clean, well-formed MCQ, size-capped, with an optional safe SVG.
+// Contributed questions are fed back into the generation PROMPT as style
+// exemplars for OTHER users, so a poisoned contribution is really an attempt to
+// hijack generation for everyone. Reject anything that reads like a prompt
+// injection / role hijack, carries a link, code fence, or special model tokens,
+// or is non-question junk, before it can ever enter the shared pool. Deterministic
+// and cheap (runs on every contributed item, incl. direct-API calls that skip the UI).
+const INJECT_RE = /\b(ignore|disregard|forget|override)\b[^.\n]{0,40}\b(previous|prior|above|earlier|instruction|instructions|prompt|context|rules?|system)\b/i;
+const ROLE_RE = /<\/?(system|assistant|user|instruction|instructions)\b|(^|\n)\s*(system|assistant|user)\s*:|you are (now )?(a |an )?(ai|assistant|model|chatbot|language model|dan)\b|\bjailbreak\b|\bdo anything now\b/i;
+const TOKEN_RE = /<\|[^|]*\|>|```|\[\/?INST\]|<<SYS>>|\bBEGIN SYSTEM\b/i;
+const LINK_RE = /https?:\/\/|\bwww\.\S/i;
+function looksAbusive(text) {
+  const s = String(text || "");
+  if (!s) return false;
+  if (INJECT_RE.test(s) || ROLE_RE.test(s) || TOKEN_RE.test(s) || LINK_RE.test(s)) return true;
+  // Mostly non-letters (encoded blob / junk) or an absurdly long unbroken token.
+  const letters = (s.match(/[a-zA-Z]/g) || []).length;
+  if (s.length >= 20 && letters / s.length < 0.3) return true;
+  if (/\S{80,}/.test(s)) return true;
+  return false;
+}
+
+// Keep only a clean, well-formed, non-abusive MCQ, size-capped, with an optional safe SVG.
 function sanitizeMockItem(x) {
   if (!x || typeof x !== "object") return null;
   const q = clean(x.question, 1200);
@@ -194,45 +238,76 @@ function sanitizeMockItem(x) {
   if (options.length < 2) return null;
   const correct = Number.isInteger(x.correct) && x.correct >= 0 && x.correct < options.length ? x.correct : null;
   if (correct == null) return null;
+  const explanation = clean(x.explanation, 400);
+  // Safety gate: drop anything that could steer other users' generations.
+  if (looksAbusive(q) || options.some(looksAbusive) || looksAbusive(explanation)) return null;
   const qhash = clean(x.qhash, 24) || String(Math.abs([...q.toLowerCase()].reduce((h, c) => (h * 33 + c.charCodeAt(0)) | 0, 5381)));
-  const data = { question: q, options, correct, explanation: clean(x.explanation, 400) };
+  const data = { question: q, options, correct, explanation };
   const svg = typeof x.svg === "string" ? x.svg.trim() : "";
   if (/^<svg[\s>]/i.test(svg) && svg.length < 8000 && !/<script|<foreignobject|\son\w+\s*=|javascript:/i.test(svg)) data.svg = svg;
   return { qhash, data };
 }
 
 // Contribute freshly generated (filter-passed) questions to the global bank.
-async function mockContribute(req, res, body) {
+// Guards: a per-account daily budget (a normal user is already capped at a
+// couple of mocks/day, so this only bites a direct-API flood) and the abuse
+// screen inside sanitizeMockItem.
+async function mockContribute(req, res, body, userId) {
   const exam = examKey(body.exam), section = sectionKey(body.section);
   if (!exam || !section) return res.status(400).json({ error: "Missing exam/section." });
-  const items = (Array.isArray(body.items) ? body.items : []).map(sanitizeMockItem).filter(Boolean).slice(0, 60);
+  const used = (await sql`SELECT contribs FROM mock_actor WHERE clerk_user_id = ${userId} AND day = CURRENT_DATE`)[0]?.contribs || 0;
+  if (used >= MOCK_CONTRIB_DAILY) return res.status(200).json({ ok: true, stored: 0, capped: true });
+  const room = MOCK_CONTRIB_DAILY - used;
+  const items = (Array.isArray(body.items) ? body.items : [])
+    .slice(0, MOCK_ITEMS_PER_CALL).map(sanitizeMockItem).filter(Boolean).slice(0, room);
   for (const it of items) {
     await sql`INSERT INTO mock_bank (exam, section, qhash, data) VALUES (${exam}, ${section}, ${it.qhash}, ${JSON.stringify(it.data)}::jsonb)
               ON CONFLICT (exam, section, qhash) DO UPDATE SET uses = mock_bank.uses + 1`;
+  }
+  if (items.length) {
+    await sql`INSERT INTO mock_actor (clerk_user_id, day, contribs) VALUES (${userId}, CURRENT_DATE, ${items.length})
+              ON CONFLICT (clerk_user_id, day) DO UPDATE SET contribs = mock_actor.contribs + ${items.length}`;
   }
   // Prune the bucket: keep the best (fewest flags, most uses, newest), drop the rest.
   await sql`DELETE FROM mock_bank WHERE id IN (
     SELECT id FROM mock_bank WHERE exam = ${exam} AND section = ${section}
     ORDER BY flags ASC, uses DESC, created_at DESC OFFSET ${MOCK_BANK_CAP})`;
+  // Occasional housekeeping of the tiny rate-limit + flag ledgers.
+  if (Math.random() < 0.05) {
+    await sql`DELETE FROM mock_actor WHERE day < CURRENT_DATE - 3`;
+    await sql`DELETE FROM mock_flag WHERE created_at < NOW() - INTERVAL '120 days'`;
+  }
   return res.status(200).json({ ok: true, stored: items.length });
 }
 
 // Flag a mock question as bad (learner reported a problem). Feeds the avoid-list.
-async function mockFlag(req, res, body) {
+// Guards: one flag per user per question (deduped), and a per-account daily flag
+// budget, so no single account can grief the bank by mass-flagging.
+async function mockFlag(req, res, body, userId) {
   const exam = examKey(body.exam), section = sectionKey(body.section), qhash = clean(body.qhash, 24);
   if (!exam || !section || !qhash) return res.status(400).json({ error: "Missing fields." });
+  const used = (await sql`SELECT flags FROM mock_actor WHERE clerk_user_id = ${userId} AND day = CURRENT_DATE`)[0]?.flags || 0;
+  if (used >= MOCK_FLAG_DAILY) return res.status(200).json({ ok: true, capped: true });
+  // First flag from this user on this question counts; repeats are no-ops.
+  const ins = await sql`INSERT INTO mock_flag (clerk_user_id, exam, section, qhash) VALUES (${userId}, ${exam}, ${section}, ${qhash})
+                        ON CONFLICT DO NOTHING RETURNING 1`;
+  if (!ins.length) return res.status(200).json({ ok: true, duplicate: true });
   await sql`UPDATE mock_bank SET flags = flags + 1 WHERE exam = ${exam} AND section = ${section} AND qhash = ${qhash}`;
+  await sql`INSERT INTO mock_actor (clerk_user_id, day, flags) VALUES (${userId}, CURRENT_DATE, 1)
+            ON CONFLICT (clerk_user_id, day) DO UPDATE SET flags = mock_actor.flags + 1`;
   return res.status(200).json({ ok: true });
 }
 
-// Draw a few good questions as STYLE exemplars + recent flagged stems to avoid,
-// for the next generation of this exam section. Never returns exact copies to
-// reuse; these only steer fresh generation.
+// Draw a few good questions as STYLE exemplars + flagged stems to avoid, for the
+// next generation of this exam section. Exemplars are pristine (never flagged);
+// a stem only reaches the avoid-list once MOCK_FLAG_AVOID DISTINCT users flag it,
+// so one person cannot suppress a good question or poison the pool. Never returns
+// exact copies to reuse; these only steer fresh generation.
 async function mockDraw(req, res, body) {
   const exam = examKey(body.exam), section = sectionKey(body.section);
   if (!exam || !section) return res.status(400).json({ error: "Missing exam/section." });
   const good = await sql`SELECT data FROM mock_bank WHERE exam = ${exam} AND section = ${section} AND flags = 0 ORDER BY random() LIMIT 3`;
-  const bad = await sql`SELECT data->>'question' AS q FROM mock_bank WHERE exam = ${exam} AND section = ${section} AND flags > 0 ORDER BY flags DESC, created_at DESC LIMIT 4`;
+  const bad = await sql`SELECT data->>'question' AS q FROM mock_bank WHERE exam = ${exam} AND section = ${section} AND flags >= ${MOCK_FLAG_AVOID} ORDER BY flags DESC, created_at DESC LIMIT 4`;
   return res.status(200).json({
     exemplars: good.map((r) => r.data).filter(Boolean),
     avoid: bad.map((r) => r.q).filter(Boolean),
@@ -258,8 +333,8 @@ export default async function handler(req, res) {
 
       if (body?.action === "createShare") return createShare(req, res, body, userId);
       if (body?.action === "myChallenges") return myChallenges(req, res, userId);
-      if (body?.action === "mockContribute") return mockContribute(req, res, body);
-      if (body?.action === "mockFlag") return mockFlag(req, res, body);
+      if (body?.action === "mockContribute") return mockContribute(req, res, body, userId);
+      if (body?.action === "mockFlag") return mockFlag(req, res, body, userId);
       if (body?.action === "mockDraw") return mockDraw(req, res, body);
 
       // Default: save the user's study blob.
