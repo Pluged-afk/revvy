@@ -31,7 +31,7 @@ function normStats(s) {
   };
 }
 function emptyData() {
-  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), updatedAt: 0 };
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, updatedAt: 0 };
 }
 const asTopicStats = (t) => (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
 
@@ -70,6 +70,7 @@ function loadLocal() {
       perf: normPerf(blob.perf),
       bank: normBank(blob.bank),
       library: normLibrary(blob.library),
+      mockScores: (blob.mockScores && typeof blob.mockScores === "object" && !Array.isArray(blob.mockScores)) ? blob.mockScores : {},
       updatedAt: blob.updatedAt || 0,
     };
   }
@@ -83,6 +84,7 @@ function loadLocal() {
     perf: normPerf({}),
     bank: normBank({}),
     library: normLibrary({}),
+    mockScores: {},
     updatedAt: 0,
   };
 }
@@ -139,8 +141,24 @@ function mergeStudy(server, local) {
     perf: { recent: mergedPerf },
     bank: bankMerge(server.bank, local.bank),
     library: libraryMerge(server.library, local.library),
+    mockScores: mergeMockScores(server.mockScores, local.mockScores),
     updatedAt: Date.now(),
   };
+}
+
+// Merge per-exam mock scores across devices: keep the higher best, the newer
+// last, and the larger attempt count.
+function mergeMockScores(a, b) {
+  a = (a && typeof a === "object") ? a : {}; b = (b && typeof b === "object") ? b : {};
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    const ex = out[k];
+    if (!ex) { out[k] = v; continue; }
+    const bestOf = (x, y) => (!x ? y : !y ? x : (y.composite > x.composite ? y : x));
+    const lastOf = (x, y) => (!x ? y : !y ? x : ((y.at || 0) > (x.at || 0) ? y : x));
+    out[k] = { best: bestOf(ex.best, v.best), last: lastOf(ex.last, v.last), count: Math.max(ex.count || 0, v.count || 0) };
+  }
+  return out;
 }
 
 // SM-2-flavoured scheduling for a graded card.
@@ -330,6 +348,19 @@ export function StudyProvider({ children }) {
     commit((p) => ({ ...p, library: libraryRemove(p.library, id) }));
   }, [commit]);
 
+  // Record a finished mock's composite for an exam, so a re-test can be cheered
+  // (or softened) against the previous attempt. Keeps last + best + count.
+  const recordMockScore = useCallback((examId, composite, max) => {
+    if (!examId || typeof composite !== "number") return;
+    commit((p) => {
+      const ms = { ...(p.mockScores || {}) };
+      const prev = ms[examId] || { count: 0, best: null, last: null };
+      const entry = { composite, max: max ?? null, at: Date.now() };
+      ms[examId] = { last: entry, best: (prev.best && prev.best.composite >= composite) ? prev.best : entry, count: (prev.count || 0) + 1 };
+      return { ...p, mockScores: ms };
+    });
+  }, [commit]);
+
   // ── Study plans ──
   const savePlan = useCallback((plan) => {
     commit((p) => ({ ...p, plans: [...(p.plans || []).filter((x) => x.id !== plan.id), plan] }));
@@ -349,9 +380,9 @@ export function StudyProvider({ children }) {
   }, [commit]);
 
   const value = {
-    cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans, topicStats: data.topicStats, perf: data.perf, bank: data.bank, library: data.library,
+    cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans, topicStats: data.topicStats, perf: data.perf, bank: data.bank, library: data.library, mockScores: data.mockScores,
     addMissed, grade, removeCard, clearAll, setExamDate, recordSession, recordTopics, recordPerf,
-    bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc,
+    bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc, recordMockScore,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };
   return <StudyContext.Provider value={value}>{children}</StudyContext.Provider>;

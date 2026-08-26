@@ -52,5 +52,6 @@ export function useSRS() {
     bankAdd: study?.bankAdd || (() => {}), bankReject: study?.bankReject || (() => {}), bankUsed: study?.bankUsed || (() => {}),
     library: study?.library || { docs: [] },
     addLibraryDoc: study?.addLibraryDoc || (() => {}), removeLibraryDoc: study?.removeLibraryDoc || (() => {}),
+    mockScores: study?.mockScores || {}, recordMockScore: study?.recordMockScore || (() => {}),
   };
 }

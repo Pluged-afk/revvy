@@ -499,6 +499,9 @@ async function callMockSection(exam, section, tilt, exemplars = [], avoid = [], 
     ? "OVERALL DIFFICULTY: a harder form, lean toward challenging questions with subtle, close distractors."
     : "OVERALL DIFFICULTY: an authentic form spanning the full real range, including several genuinely hard questions.";
   const instr = String(section.instr || "").replace(/\{N\}/g, count);
+  // Sections where the REAL test regularly shows figures (math / quant / data /
+  // science): push the model to actually DRAW them, not just "when needed".
+  const wantsFigures = /math|quant|qr|di|science|cp|bb|ps|dm/i.test(section.id);
 
   let prompt, maxTokens;
   if (fmt === "english" || fmt === "passage") {
@@ -522,7 +525,7 @@ ${instr}
 Provide EXACTLY ${count} multiple-choice questions.
 ${tiltLine} Do NOT make every question the same difficulty; vary it like the actual exam.
 Each question needs "question" (the full stem, with any context written into it), "options" (EXACTLY ${nOpt} choices), "correct" (0-based index of the correct option), and "explanation" (one short sentence). Vary skills across the section; every distractor plausible.
-DIAGRAMS: when a question genuinely needs a figure to be answerable (geometry diagram, coordinate graph, bar/line chart, number line, labelled figure), add an "svg" field with a SELF-CONTAINED inline SVG drawn accurately to the numbers, consistent with the correct answer. Use a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text>, and SINGLE-quoted attributes. Never include <script>, handlers, external images, links or fonts. Most questions need NO figure.
+DIAGRAMS: add an "svg" field with a SELF-CONTAINED inline SVG (geometry diagram, coordinate graph, bar/line chart, number line, labelled figure, or data table) drawn accurately to the numbers and consistent with the correct answer. Use a viewBox, plain <line>/<rect>/<circle>/<polygon>/<path>/<text>, and SINGLE-quoted attributes. Never include <script>, handlers, external images, links or fonts. ${wantsFigures ? `A real ${exam.name} ${section.name} form relies on figures often, so INCLUDE an accurate <svg> on the questions that need one, roughly a quarter to a third of this section, exactly as the actual test does.` : "Most questions need NO figure; add one only when truly required."}
 CRITICAL: for any calculation, work the answer out fully FIRST, then set "correct" to the option that matches; double-check every calculation and unit. Exactly ONE clearly correct option per question; discard any you are not certain of.${exBlock}${avoidBlock}
 Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"...","svg":"OPTIONAL, only when a figure is required"}]}
 The "questions" array MUST contain ${count} items.`;
@@ -576,7 +579,10 @@ async function buildMockSection(exam, section, tilt) {
   const groups = Math.min(MOCK_MAX_PASSAGES, Math.max(1, Math.ceil(section.count / size)));
   const needs = [];
   for (let g = 0, rem = section.count; g < groups; g++) { const n = Math.min(size, rem); if (n <= 0) break; needs.push(n); rem -= n; }
-  const results = await Promise.all(needs.map((n) => callMockSection(exam, section, tilt, [], [], n).catch(() => null)));
+  // Passage sections also learn globally: steer with the crowd's avoid-list (and
+  // style exemplars), and contribute the questions back for everyone.
+  const { exemplars, avoid } = await mockDrawGlobal(exam.name, section.name);
+  const results = await Promise.all(needs.map((n) => callMockSection(exam, section, tilt, exemplars, avoid, n).catch(() => null)));
   const out = [];
   results.forEach((r, g) => {
     if (!r || !r.questions.length) return;
@@ -587,6 +593,7 @@ async function buildMockSection(exam, section, tilt) {
     if (fmt === "english" && uCount) qs = qs.slice(0, uCount);
     qs.forEach((q, i) => out.push({ ...q, _passage: r.passage, _psvg: r.svg, _pIdx: g, _uIdx: fmt === "english" ? i : null }));
   });
+  mockContributeGlobal(exam.name, section.name, out);
   return out.slice(0, section.count);
 }
 
@@ -1981,6 +1988,8 @@ export default function StudyQuiz() {
   const [mockSecResults, setMockSecResults] = useState([]);
   const [mockSecTimeLeft, setMockSecTimeLeft] = useState(0);
   const [mockPaused, setMockPaused] = useState(false); // pause + blur when tabbing out of a mock
+  const [mockPrev, setMockPrev] = useState(null);       // previous attempt's composite, for retake motivation
+  const mockScoredRef = useRef(null);
   const [mockGenErr, setMockGenErr] = useState("");
   const [showMockSubmit, setShowMockSubmit] = useState(false);
   const submittedSecRef = useRef(-1);
@@ -2046,6 +2055,15 @@ export default function StudyQuiz() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [screen]);
   useEffect(() => { if (mockPaused) document.activeElement?.blur?.(); }, [mockPaused]);
+  // On a finished mock: capture the PREVIOUS attempt for this exam (for the
+  // retake cheer/encouragement), then record the new score. Runs once per result.
+  useEffect(() => {
+    if (screen !== "mock_results" || !mock || mockScoredRef.current === mockSecResults) return;
+    mockScoredRef.current = mockSecResults;
+    const sc = scoreMock(mock, mockSecResults);
+    setMockPrev(srs.mockScores?.[mock.presetId]?.last || null);
+    srs.recordMockScore(mock.presetId, sc.composite, sc.compositeMax);
+  }, [screen, mock, mockSecResults, srs]);
   useEffect(() => {
     if (screen === "mock_run" && mockSecTimeLeft === 0 && mock && submittedSecRef.current !== mockSecIdx) submitSectionRef.current();
   }, [mockSecTimeLeft, screen, mockSecIdx, mock]);
@@ -4706,6 +4724,21 @@ export default function StudyQuiz() {
           {sc.goodScore!=null && <div style={{fontSize:11.5,color:"rgba(255,255,255,0.55)",marginTop:6}}>{(t.mockGoodScore||"A strong score is around {n}+").replace("{n}",sc.goodScore)}</div>}
         </div>
         <div className="rv-center" style={{padding:"20px 16px 40px"}}>
+          {/* Retake motivation: cheer an improvement, soften a dip. */}
+          {mockPrev && (() => {
+            const cur = sc.composite, prev = mockPrev.composite;
+            const up = cur > prev, down = cur < prev;
+            const bg = up?"#f0fdf4":down?"#fffbeb":"var(--color-sel-tint)";
+            const bd = up?"#86efac":down?"#fcd34d":"#c7d2fe";
+            const col = up?"#15803d":down?"#92400e":"var(--color-accent)";
+            const msg = (up?t.mockImproved:down?t.mockWorse:t.mockSame).replace("{prev}",prev).replace("{cur}",cur);
+            return (
+              <div style={{display:"flex",alignItems:"center",gap:11,background:bg,border:`1px solid ${bd}`,borderRadius:12,padding:"13px 15px",marginBottom:16}}>
+                <Icon name={up?"trophy":down?"flame":"target"} size={20} style={{color:col,flexShrink:0}}/>
+                <span style={{flex:1,fontSize:13,fontWeight:600,color:col,lineHeight:1.45}}>{msg}</span>
+              </div>
+            );
+          })()}
           <div style={Sb.settingsBox}>
             {sc.rows.map((r,i)=>(
               <div key={i} style={{...Sb.settingRow,borderBottom:(i<sc.rows.length-1||sc.extras.length)?"0.5px solid var(--color-border-tertiary)":"none"}}>
