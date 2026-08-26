@@ -454,9 +454,13 @@ const gateMessage = (category, t) =>
 
 // Keep a figure only if it is a clean, self-contained <svg> (rendered inside an
 // <img> data-URI, which can't run scripts; this strips anything scriptable too).
+// An SVG shown via <img> MUST carry the SVG namespace or the browser shows a
+// broken image, so add xmlns when the model leaves it off.
 function safeSvg(s) {
   s = typeof s === "string" ? s.trim() : "";
-  return (/^<svg[\s>]/i.test(s) && s.length < 12000 && !/<script|<foreignobject|\son\w+\s*=|javascript:/i.test(s)) ? s : "";
+  if (!(/^<svg[\s>]/i.test(s) && s.length < 12000 && !/<script|<foreignobject|\son\w+\s*=|javascript:/i.test(s))) return "";
+  if (!/\sxmlns\s*=/i.test(s)) s = s.replace(/^<svg/i, "<svg xmlns='http://www.w3.org/2000/svg'");
+  return s;
 }
 // Keep only well-formed MCQs (a ballooning explanation signals the model could
 // not solve it cleanly, drop those rather than ship a mis-keyed question).
