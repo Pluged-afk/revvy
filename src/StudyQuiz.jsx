@@ -462,6 +462,37 @@ function safeSvg(s) {
   if (!/\sxmlns\s*=/i.test(s)) s = s.replace(/^<svg/i, "<svg xmlns='http://www.w3.org/2000/svg'");
   return s;
 }
+// Crash-safe mock-exam resume. An in-progress mock (any of the 8 exams) is
+// mirrored to device storage in two keys: the heavy question set (rewritten only
+// when it changes) and the light progress that changes often (answers, position,
+// clock). A refresh, crash, or accidental exit can then be resumed. Cleared the
+// instant the exam finishes or the user starts over. Stays on-device, never uploaded.
+const MOCK_LS_Q = "revyy_mock_q_v1";
+const MOCK_LS_P = "revyy_mock_p_v1";
+const MOCK_RESUME_TTL = 3 * 24 * 3600 * 1000; // stop offering a stale exam after 3 days
+function clearMockResume() {
+  try { localStorage.removeItem(MOCK_LS_Q); localStorage.removeItem(MOCK_LS_P); } catch { /* ignore */ }
+}
+// Light record only (which exam + where they are), enough for the "Continue" card.
+function readMockProgress() {
+  try {
+    if (!localStorage.getItem(MOCK_LS_Q)) return null;
+    const p = JSON.parse(localStorage.getItem(MOCK_LS_P) || "null");
+    if (!p || typeof p.secIdx !== "number") return null;
+    if (p.savedAt && Date.now() - p.savedAt > MOCK_RESUME_TTL) { clearMockResume(); return null; }
+    return p;
+  } catch { return null; }
+}
+// Full record (question set + progress), for actually continuing.
+function readMockResume() {
+  try {
+    const q = JSON.parse(localStorage.getItem(MOCK_LS_Q) || "null");
+    const p = JSON.parse(localStorage.getItem(MOCK_LS_P) || "null");
+    if (!q || !Array.isArray(q.sections) || !q.sections.length || !p) return null;
+    if (p.savedAt && Date.now() - p.savedAt > MOCK_RESUME_TTL) { clearMockResume(); return null; }
+    return { q, p };
+  } catch { return null; }
+}
 // Keep only well-formed MCQs (a ballooning explanation signals the model could
 // not solve it cleanly, drop those rather than ship a mis-keyed question).
 function sanitizeMockQs(qs) {
@@ -1997,6 +2028,7 @@ export default function StudyQuiz() {
   const [mockSecTimeLeft, setMockSecTimeLeft] = useState(0);
   const [mockPaused, setMockPaused] = useState(false); // pause + blur when tabbing out of a mock
   const [mockPrev, setMockPrev] = useState(null);       // previous attempt's composite, for retake motivation
+  const [mockResume, setMockResume] = useState(null);   // a saved, unfinished exam offered on the picker
   const mockScoredRef = useRef(null);
   const [mockGenErr, setMockGenErr] = useState("");
   const [showMockSubmit, setShowMockSubmit] = useState(false);
@@ -2068,6 +2100,7 @@ export default function StudyQuiz() {
   useEffect(() => {
     if (screen !== "mock_results" || !mock || mockScoredRef.current === mockSecResults) return;
     mockScoredRef.current = mockSecResults;
+    clearMockResume(); // the exam is finished, drop the saved-progress copy
     const sc = scoreMock(mock, mockSecResults);
     setMockPrev(srs.mockScores?.[mock.presetId]?.last || null);
     srs.recordMockScore(mock.presetId, sc.composite, sc.compositeMax);
@@ -2075,6 +2108,32 @@ export default function StudyQuiz() {
   useEffect(() => {
     if (screen === "mock_run" && mockSecTimeLeft === 0 && mock && submittedSecRef.current !== mockSecIdx) submitSectionRef.current();
   }, [mockSecTimeLeft, screen, mockSecIdx, mock]);
+  // Look for a resumable exam whenever the picker opens.
+  useEffect(() => { if (screen === "mock_select") setMockResume(readMockProgress()); }, [screen]);
+  // Mirror the in-progress exam to device storage so a crash/exit can resume it.
+  // Heavy part (the generated question set) is rewritten only when it changes.
+  useEffect(() => {
+    if (!mock || !(screen === "mock_run" || screen === "mock_break")) return;
+    try {
+      localStorage.setItem(MOCK_LS_Q, JSON.stringify({
+        v: 1, tilt: mockTilt, presetId: mock.presetId, name: mock.name,
+        scaleMin: mock.scaleMin, scaleMax: mock.scaleMax, sections: mock.sections,
+      }));
+    } catch { /* quota / private mode: skip, resume just won't be offered */ }
+  }, [mock, mockTilt, screen]);
+  // Light part (position, answers, clock) is small and rewritten as they go.
+  useEffect(() => {
+    if (!mock || !(screen === "mock_run" || screen === "mock_break")) return;
+    try {
+      localStorage.setItem(MOCK_LS_P, JSON.stringify({
+        v: 1, presetId: mock.presetId, name: mock.name, sectionsTotal: mock.sections.length,
+        secIdx: mockSecIdx, secName: mock.sections[mockSecIdx]?.name || "",
+        qIdx: mockQIdx, ans: mockAns, secResults: mockSecResults,
+        secTimeLeft: mockSecTimeLeft, phase: screen === "mock_break" ? "break" : "run",
+        savedAt: Date.now(),
+      }));
+    } catch { /* ignore */ }
+  }, [mock, screen, mockSecIdx, mockQIdx, mockAns, mockSecResults, mockSecTimeLeft]);
   const sortedPlans = [...plans].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const homePlan = sortedPlans.find(p=>!isPlanComplete(p)) || sortedPlans[0] || null;
   const activePlan = plans.find(p=>p.id===activePlanId) || homePlan;
@@ -3246,11 +3305,34 @@ export default function StudyQuiz() {
     setShareBusy(false);
   };
   const copyShare = async () => { try { await navigator.clipboard.writeText(shareLink); setShareCopied(true); setTimeout(()=>setShareCopied(false),1800); } catch { /* ignore */ } };
+  // Continue a saved, unfinished exam exactly where it left off.
+  const resumeMock = () => {
+    const r = readMockResume();
+    if (!r) { setMockResume(null); return; }
+    const { q, p } = r;
+    const secIdx = Math.min(Math.max(0, p.secIdx || 0), q.sections.length - 1);
+    const nQ = q.sections[secIdx]?.questions?.length || 1;
+    setMock({ presetId: q.presetId, name: q.name, scaleMin: q.scaleMin, scaleMax: q.scaleMax, sections: q.sections });
+    setMockTilt(q.tilt || "standard");
+    setMockPresetId(q.presetId);
+    setMockSecIdx(secIdx);
+    setMockQIdx(Math.min(Math.max(0, p.qIdx || 0), nQ - 1));
+    setMockAns(Array.isArray(p.ans) && p.ans.length ? p.ans : q.sections.map(() => []));
+    setMockSecResults(Array.isArray(p.secResults) ? p.secResults : []);
+    setMockSecTimeLeft(typeof p.secTimeLeft === "number" ? p.secTimeLeft : (q.sections[secIdx].minutes * 60));
+    setMockPaused(false);
+    submittedSecRef.current = -1;
+    mockScoredRef.current = null;
+    setScreen(p.phase === "break" ? "mock_break" : "mock_run");
+  };
+  // Throw away the saved exam so the picker starts clean.
+  const discardMockResume = () => { clearMockResume(); setMockResume(null); };
   // Generate a full standardized mock (all sections, from spec, no upload).
   const startMock = async () => {
     if (requireLogin()) return;
     if (!isPro) { setShowProModal(true); return; }
     setMockGenErr("");
+    clearMockResume(); // a fresh exam supersedes any half-finished one
     // Server-enforced, account-tied daily cap: atomically reserve one mock.
     const cap = await consumeMock();
     if (!cap || cap.allowed === false) { setMockGenErr(t.mockDailyLimit.replace("{n}", cap?.mock_daily_cap ?? 2)); return; }
@@ -4562,6 +4644,16 @@ export default function StudyQuiz() {
           <h2 style={{...Sb.h2,textAlign:"center",margin:"0 0 4px"}}>{t.mockChoose}</h2>
           <p style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.mockSelectSub}</p>
         </div>
+        {mockResume && (
+          <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-accent)",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
+            <div style={{fontWeight:700,fontSize:14.5,color:"var(--color-text-primary)",marginBottom:2}}>{t.mockResumeTitle}</div>
+            <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:12}}>{mockResume.name} · {t.mockSection} {(mockResume.secIdx||0)+1}/{mockResume.sectionsTotal||1}</div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={resumeMock} style={{...Sb.btnPrimary,flex:1,margin:0}}>{t.mockResumeContinue}</button>
+              <button onClick={discardMockResume} style={{...Sb.btnOutline,flex:1}}>{t.mockResumeStartOver}</button>
+            </div>
+          </div>
+        )}
         {MOCK_EXAMS.map(exam=>(
           <div key={exam.id} onClick={()=>{setMockPresetId(exam.id);setMockGenErr("");setScreen("mock_intro");}}
             style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px 16px",marginBottom:10,cursor:"pointer"}} className="exam-type-card">
