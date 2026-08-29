@@ -2643,35 +2643,18 @@ export default function StudyQuiz() {
     const dg = DIFFICULTY[diff] || DIFFICULTY[1];
     const totalQ = examMode==="custom" ? sectionTotalQs : (isPro ? Math.min(Math.max(parseInt(examTotalQ)||5,1),100) : 20);
 
-    // Exams carry model answers/explanations → ~200 tokens/Q. Cap at 20k.
-    const maxTokens = Math.min(Math.max(Math.round(totalQ*260)+3000, 6000), 48000);
-
     // Personalize the exam to this learner (weak-topic emphasis + calibration)
     // and fold in the content feedback loop's "avoid these" list, same as the
     // quiz flow. Empty for newcomers.
     const learnerBrief = [buildLearnerBrief(studyModel), buildAvoidNote(srs.bank)].filter(Boolean).join("\n\n");
-    // Build the prompt; `scale` (≤1) shrinks the question counts for a retry.
-    const buildPrompt=(scale)=>{
-      const base=isPro?Math.min(Math.max(parseInt(examTotalQ)||5,1),100):20;
-      const totN=Math.max(1,Math.round(base*scale));
-      let typeInst=""; const marksMap={};
-      if(examMode==="mcq") typeInst="Generate exactly "+totN+" multiple choice questions. 4 options each. Set type:\"mcq\" for all. Set \"section\":1 on every question.";
-      else if(examMode==="written") typeInst="Generate exactly "+totN+" open-ended short-answer questions. Include a model answer. Set type:\"written\", options:[] for all. Set \"section\":1 on every question.";
-      else {
-        typeInst = examSections.map((s,i)=>{
-          const n=Math.max(1,Math.round(Math.min(Math.max(parseInt(s.count)||5,1),100)*scale));
-          marksMap[i+1]=parseFloat(s.marksPerQ)||1;
-          const desc=s.type==="mcq"
-            ?n+" multiple choice questions (4 options, type:\"mcq\", correct:0-based index)"
-            :s.type==="fill"
-            ?n+" fill-in-blank questions (type:\"fill\", question MUST contain ___, answer=the exact missing word)"
-            :n+" open-ended written questions (type:\"written\", options:[])";
-          return "Section "+(i+1)+": generate exactly "+desc+". Set \"section\":" +(i+1)+" on EVERY question in this section.";
-        }).join("\n");
-      }
-      const prompt="You are creating a real graded exam.\n"+typeInst+"\nDIFFICULTY: "+dg.name+". "+dg.guide+" Calibrate every question to this "+dg.name+" level.\nLANGUAGE: Write the ENTIRE exam, every question, all options, model answers, explanations and the title, in the SAME language as the study material provided. Match the material's language exactly; do NOT translate it into English."+(LANGS[lang]?.name?" If the material is too short to tell its language, use "+LANGS[lang].name+".":"")+(learnerBrief?"\n"+learnerBrief:"")+"\nReturn ONLY raw JSON (no markdown):\n{\"title\":\"Exam title\",\"questions\":[{\"section\":1,\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"answer\":\"model answer\",\"explanation\":\"...\",\"topic\":\"2-4 word sub-topic\"}],\"summary\":\"a compact digest of this material for the study library\"}\nSet \"topic\" to the specific concept each question tests (2-4 words), used to track weak areas. For written/fill: options:[], correct:0. Keep questions in section order.\nALSO add a top-level \"summary\" field LAST: a compact digest (max 120 words) of the KEY concepts this material covers, in the same language as the material, for the learner's study library.";
-      return { prompt, marksMap };
-    };
+    // What to generate: one unit per custom-exam section, else a single block of
+    // the chosen type. Each unit is produced in CHUNKS below (a single model call
+    // reliably returns only ~25-30 questions no matter the count asked), so a big
+    // exam actually reaches its full number instead of stalling at ~25.
+    const examPlan = examMode==="custom"
+      ? examSections.map((s,i)=>({ section:i+1, type:(["mcq","fill","written"].includes(s.type)?s.type:"mcq"), marks:parseFloat(s.marksPerQ)||1, count:Math.min(Math.max(parseInt(s.count)||5,1),100) }))
+      : [{ section:1, type:(examMode==="written"?"written":"mcq"), marks:1, count: totalQ }];
+    const examMarksMap = {}; examPlan.forEach((s)=>{ examMarksMap[s.section]=s.marks; });
 
     setScreen("loading");
     try{
@@ -2695,31 +2678,63 @@ export default function StudyQuiz() {
         setError(t.errExamOverLimit.replace("{q}",totalQ).replace("{left}",left).replace("{limit}",consumed.daily_limit));
         setScreen("exam_setup"); return;
       }
-      const attempt=async(scale)=>{
-        const { prompt, marksMap }=buildPrompt(scale);
+      // Generate one CHUNK (<=25) of a section. Its own prompt is focused on a
+      // single type + count, which the model satisfies far more reliably than a
+      // giant "give me 100" ask.
+      const EXAM_CHUNK = 25;
+      const examChunk = async (n, type, section, avoid, withSummary) => {
+        const typeDesc = type==="mcq"
+          ? `EXACTLY ${n} multiple-choice questions, each with EXACTLY 4 options and "correct" set to the 0-based index of the one right option`
+          : type==="fill"
+          ? `EXACTLY ${n} fill-in-the-blank questions; every "question" MUST contain a blank written as ___ and "answer" is the exact missing word or phrase; set options to []`
+          : `EXACTLY ${n} open-ended written questions, each with a concise model answer in "answer"; set options to []`;
+        const prompt = `You are creating a real graded exam from the study material above.\nGenerate ${typeDesc}, not ${n-1}, not ${n+1}, EXACTLY ${n}. The "questions" array MUST contain exactly ${n} items; do not stop early, produce all ${n}, then count them before responding.\nSet "section":${section} and "type":"${type}" on EVERY question.\nDIFFICULTY: ${dg.name}. ${dg.guide} Calibrate every question to this ${dg.name} level.\nLANGUAGE: Write the ENTIRE exam in the SAME language as the study material; do NOT translate it into English.${LANGS[lang]?.name?` If the material is too short to tell its language, use ${LANGS[lang].name}.`:""}${learnerBrief?`\n${learnerBrief}`:""}${avoid}\nReturn ONLY raw JSON (no markdown): {"title":"Exam title","questions":[{"section":${section},"type":"${type}","question":"...","options":[${type==="mcq"?'"A","B","C","D"':""}],"correct":0,"answer":"...","explanation":"...","topic":"2-4 word sub-topic"}]${withSummary?`,"summary":"a compact digest of this material for the study library"`:""}}\nSet "topic" to the specific concept each question tests. The "questions" array length MUST equal ${n}.${withSummary?`\nALSO add a top-level "summary" (max 120 words) of the key concepts, in the same language as the material.`:""}`;
+        const cmax = Math.min(Math.max(n*280+2500, 4000), 24000);
         const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json", ...(await authHeader())},
-          body:JSON.stringify({model:AI_MODEL,max_tokens:maxTokens,
+          body:JSON.stringify({model:AI_MODEL,max_tokens:cmax,
             system:"You are an expert exam setter. Return ONLY valid raw JSON, no markdown.",
             messages:[{role:"user",content:[...blocks,{type:"text",text:prompt}]}]})});
         if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||"Error "+res.status);}
         const raw = stripFences(await readStream(res));
-        let parsed;
-        try { parsed = JSON.parse(raw); }
-        catch {
-          // Salvage a truncated big exam: close after the last complete question.
-          const cut = raw.lastIndexOf("}");
-          if (cut < 0) throw new Error("parse");
-          parsed = JSON.parse(raw.slice(0, cut + 1) + "]}");
-        }
-        return { parsed, marksMap };
+        let p;
+        try { p = JSON.parse(raw); }
+        catch { const cut = raw.lastIndexOf("}"); if (cut < 0) throw new Error("parse"); p = JSON.parse(raw.slice(0, cut + 1) + "]}"); }
+        return p;
       };
-      let parsed, marksMap;
-      try { ({ parsed, marksMap }=await attempt(1)); }
-      catch(e1){
-        const truncated=/JSON|Unexpected end|Unterminated|parse/i.test(e1.message||"");
-        if(truncated && totalQ>25){ ({ parsed, marksMap }=await attempt(0.5)); }
-        else throw e1;
+      // Build every section to its full count by chunking + de-duping, so a big
+      // exam (e.g. 100 questions) actually produces 100.
+      const seenEx = new Set();
+      const examAll = [];
+      let exTitle = "", exSummary = "", exLastErr = null;
+      for (const secSpec of examPlan) {
+        let got = 0, emptyRounds = 0, calls = 0;
+        const secMax = Math.ceil(secSpec.count / EXAM_CHUNK) + 3;
+        while (got < secSpec.count && calls < secMax && emptyRounds < 2) {
+          calls++;
+          const need = Math.min(EXAM_CHUNK, secSpec.count - got);
+          const written = examAll.filter((q) => q.section === secSpec.section).slice(-30);
+          const avoid = written.length ? `\nDo NOT repeat or lightly reword any of these questions already written:\n- ${written.map((q) => String(q.question || "").slice(0, 120)).join("\n- ")}` : "";
+          let r = null;
+          try { r = await examChunk(need, secSpec.type, secSpec.section, avoid, !exSummary); } catch (e) { exLastErr = e; }
+          let added = 0;
+          if (r?.questions?.length) {
+            if (!exTitle && r.title) exTitle = r.title;
+            if (!exSummary && r.summary) exSummary = r.summary;
+            for (const q of r.questions) {
+              const key = String(q?.question || "").trim().toLowerCase();
+              if (!key || seenEx.has(key)) continue;
+              seenEx.add(key);
+              examAll.push({ ...q, section: secSpec.section, type: secSpec.type });
+              added++; got++;
+              if (got >= secSpec.count) break;
+            }
+          }
+          emptyRounds = added === 0 ? emptyRounds + 1 : 0;
+        }
       }
+      if (!examAll.length) throw (exLastErr || new Error("No questions generated"));
+      const parsed = { title: exTitle, questions: examAll, summary: exSummary };
+      const marksMap = examMarksMap;
       if(!parsed.questions?.length) throw new Error("No questions generated");
       // Phase 3: remember a summary of this exam's material for the study library
       // (never the material itself), same as the quiz flow.
