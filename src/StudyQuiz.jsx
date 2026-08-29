@@ -14,7 +14,7 @@ import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, d
 import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
 import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/studentModel.js";
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
-import { makeLibraryDoc, buildLibraryMaterial, librarySize } from "./lib/studyLibrary.js";
+import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
 import Icon from "./components/Icon.jsx";
 
@@ -98,6 +98,7 @@ const LETTERS      = ["A","B","C","D","E","F"];
 // learner's vetted bank (rest are freshly generated). Caps API cost saving at
 // half so drills still feel fresh.
 const DRILL_REUSE_MAX = 5;
+const LIBRARY_REUSE_MAX = 4; // vetted bank questions reused in a 10-Q "quiz everything" review
 // Model for all generation/grading. Haiku 4.5: cheap + fast, plenty for
 // question writing. ($0.80/1M in, $4/1M out vs Sonnet's $3/$15.)
 const AI_MODEL     = "claude-haiku-4-5-20251001";
@@ -3059,11 +3060,16 @@ export default function StudyQuiz() {
           : "";
         let r = null;
         try {
-          r = await callClaude({ blocks, numQ: need, diff, type: finalType, uiLangName: LANGS[lang]?.name, learnerBrief: learnerBrief + avoidSeen, withSummary: calls === 1 });
+          // Ask for the material summary until we actually capture one: if the
+          // first chunk truncates before it, a later chunk still fills the library
+          // (once captured, we stop asking, so the usual cost is one summary).
+          r = await callClaude({ blocks, numQ: need, diff, type: finalType, uiLangName: LANGS[lang]?.name, learnerBrief: learnerBrief + avoidSeen, withSummary: !summary });
         } catch (e1) { lastErr = e1; }
         let added = 0;
         if (r?.questions?.length) {
-          if (calls === 1) { title = r.title || ""; subject = r.subject || ""; summary = r.summary || ""; }
+          if (!title && r.title) title = r.title;
+          if (!subject && r.subject) subject = r.subject;
+          if (!summary && r.summary) summary = r.summary;
           for (const q of r.questions) {
             const key = String(q?.question || "").trim().toLowerCase();
             if (!key || seen.has(key)) continue;
@@ -3169,24 +3175,40 @@ export default function StudyQuiz() {
     }
     setScreen("loading");
     try {
-      const blocks = [{ type: "text", text: material }];
+      // Reuse a few of the learner's OWN vetted questions from across everything
+      // they have studied (real spaced review + fewer to generate), then generate
+      // the rest as fresh cumulative questions. Empty bank -> all generated, as before.
+      const reused = bankPick(srs.bank, libraryTopics(srs.library), LIBRARY_REUSE_MAX);
+      const need = n - reused.length;
+      const avoidReused = reused.length
+        ? `\nDo NOT reuse or lightly reword these exact questions the learner has already practised:\n- ${reused.map((q) => String(q.question || "").slice(0, 120)).join("\n- ")}`
+        : "";
+      const blocks = [{ type: "text", text: material + avoidReused }];
       const learnerBrief = [buildLearnerBrief(studyModel), buildAvoidNote(srs.bank)].filter(Boolean).join("\n\n");
       let res = null, lastErr = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        let r = null;
-        try { r = await callClaude({ blocks, numQ: n, diff, type: "mcq", uiLangName: LANGS[lang]?.name, learnerBrief }); } catch (e1) { lastErr = e1; }
-        if (r?.questions?.length) { if (!res || r.questions.length > res.questions.length) res = r; if (res.questions.length >= n) break; }
+      if (need > 0) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          let r = null;
+          try { r = await callClaude({ blocks, numQ: need, diff, type: "mcq", uiLangName: LANGS[lang]?.name, learnerBrief }); } catch (e1) { lastErr = e1; }
+          if (r?.questions?.length) { if (!res || r.questions.length > res.questions.length) res = r; if (res.questions.length >= need) break; }
+        }
+        if (!res?.questions?.length && !reused.length) throw (lastErr || new Error("No questions returned"));
       }
-      if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
+      // Mix the reused (internal hash stripped) with the freshly generated ones and
+      // shuffle so the banked ones are not all up front.
+      const stripHash = (q) => { const c = { ...q }; delete c._bankHash; return c; };
+      const merged = [...reused.map(stripHash), ...(res?.questions || [])].sort(() => Math.random() - 0.5).slice(0, n);
+      if (!merged.length) throw (lastErr || new Error("No questions returned"));
       genBlocksRef.current = blocks; // keep the summaries for FlagFix regen
-      setQuiz({ ...res, title: res.title || t.libraryReviewTitle, subject: "", type: "mcq", fresh:true, genDiff:diff });
+      if (reused.length) srs.bankUsed(reused.map((q) => q._bankHash)); // rotate what is served next time
+      setQuiz({ title: res?.title || t.libraryReviewTitle, subject: "", questions: merged, type: "mcq", fresh:true, genDiff:diff });
       setQIdx(0); setAnswers([]); setSelected(null);
       setScreen("quiz");
     } catch (err) {
       setError(err.message.includes("parse") ? t.errAiFormat : err.message);
       setScreen("upload");
     }
-  }, [requireLogin, srs.library, srs.bank, consumeQuestions, diff, lang, t, isPro, studyModel]);
+  }, [requireLogin, srs.library, srs.bank, srs.bankUsed, consumeQuestions, diff, lang, t, isPro, studyModel]);
 
   const pick    = i => {
     if(selected!==null) return;

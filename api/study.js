@@ -306,7 +306,11 @@ async function mockFlag(req, res, body, userId) {
 async function mockDraw(req, res, body) {
   const exam = examKey(body.exam), section = sectionKey(body.section);
   if (!exam || !section) return res.status(400).json({ error: "Missing exam/section." });
-  const good = await sql`SELECT data FROM mock_bank WHERE exam = ${exam} AND section = ${section} AND flags = 0 ORDER BY random() LIMIT 3`;
+  // Weighted-random exemplars (Efraimidis-Spirakis): questions that recurred
+  // across many users' generations (higher `uses`) surface more often as the
+  // canonical style, while newer ones still get a fair chance, so the crowd's
+  // most-proven questions steer generation without the pool going stale.
+  const good = await sql`SELECT data FROM mock_bank WHERE exam = ${exam} AND section = ${section} AND flags = 0 ORDER BY power(random(), 1.0 / (uses + 1)) DESC LIMIT 3`;
   const bad = await sql`SELECT data->>'question' AS q FROM mock_bank WHERE exam = ${exam} AND section = ${section} AND flags >= ${MOCK_FLAG_AVOID} ORDER BY flags DESC, created_at DESC LIMIT 4`;
   return res.status(200).json({
     exemplars: good.map((r) => r.data).filter(Boolean),
