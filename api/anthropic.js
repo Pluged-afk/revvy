@@ -12,8 +12,41 @@
 // Environment Variables, NOT prefixed with VITE_).
 
 import { verifyToken } from "@clerk/backend";
+import sql from "./db.js";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+
+// Abuse guards. This proxy spends the server's Anthropic key, so a signed-in
+// user must not be able to turn it into an unmetered, arbitrary-cost gateway.
+const ALLOWED_MODEL = /^claude-haiku-/i; // the cheap tier the app uses; reject pricier models
+const MAX_OUTPUT_TOKENS = 64000;         // hard ceiling on client-requested max_tokens
+const MAX_AI_CALLS_DAILY = 400;          // per-account proxy calls/day (generous for heavy Pro use)
+
+// Per-account daily call counter (own tiny table, self-provisioned + cached per
+// warm lambda). Fail-OPEN on any DB hiccup so a counter blip never breaks
+// generation, the model pin + token cap still bound per-call cost regardless.
+let aiRateReady = false;
+async function underRateLimit(userId) {
+  try {
+    if (!aiRateReady) {
+      await sql`CREATE TABLE IF NOT EXISTS ai_rate (
+        clerk_user_id TEXT NOT NULL,
+        day           DATE NOT NULL DEFAULT CURRENT_DATE,
+        calls         INT  NOT NULL DEFAULT 0,
+        PRIMARY KEY (clerk_user_id, day)
+      )`;
+      aiRateReady = true;
+    }
+    const rows = await sql`INSERT INTO ai_rate (clerk_user_id, day, calls) VALUES (${userId}, CURRENT_DATE, 1)
+                           ON CONFLICT (clerk_user_id, day) DO UPDATE SET calls = ai_rate.calls + 1
+                           RETURNING calls`;
+    if (Math.random() < 0.02) { try { await sql`DELETE FROM ai_rate WHERE day < CURRENT_DATE - 2`; } catch { /* ignore */ } }
+    return (rows[0]?.calls || 1) <= MAX_AI_CALLS_DAILY;
+  } catch (e) {
+    console.error("[anthropic] rate-limit check failed (allowing):", e.message);
+    return true;
+  }
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -26,8 +59,10 @@ export default async function handler(req, res) {
   const authz = req.headers.authorization || "";
   const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
   if (!token) return res.status(401).json({ error: { message: "Sign in to use this feature." } });
-  try { await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY }); }
+  let userId;
+  try { const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY }); userId = payload?.sub; }
   catch { return res.status(401).json({ error: { message: "Invalid session." } }); }
+  if (!userId) return res.status(401).json({ error: { message: "Invalid session." } });
 
   const KEY = process.env.ANTHROPIC_API_KEY;
   if (!KEY) return res.status(500).json({ error: { message: "Server missing ANTHROPIC_API_KEY." } });
@@ -42,6 +77,16 @@ export default async function handler(req, res) {
   if (!model || !Array.isArray(messages)) {
     return res.status(400).json({ error: { message: "Missing model or messages." } });
   }
+  // Pin the model to the cheap tier the app uses, clamp the output budget, and
+  // rate-limit per account, so this authenticated proxy can't be driven as an
+  // arbitrary-cost Anthropic gateway.
+  if (!ALLOWED_MODEL.test(String(model))) {
+    return res.status(400).json({ error: { message: "Unsupported model." } });
+  }
+  const safeMaxTokens = Math.min(Math.max(parseInt(max_tokens, 10) || 4000, 1), MAX_OUTPUT_TOKENS);
+  if (!(await underRateLimit(userId))) {
+    return res.status(429).json({ error: { message: "You have reached today's generation limit. Please try again tomorrow." } });
+  }
 
   try {
     const upstream = await fetch(ANTHROPIC_URL, {
@@ -53,7 +98,7 @@ export default async function handler(req, res) {
         // Allows messages to reference uploaded files via source.type "file".
         "anthropic-beta": "files-api-2025-04-14",
       },
-      body: JSON.stringify({ model, max_tokens, system, messages, stream: true }),
+      body: JSON.stringify({ model, max_tokens: safeMaxTokens, system, messages, stream: true }),
     });
 
     // Errors (bad model, auth, oversized, etc.) come back before the stream, 
