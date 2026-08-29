@@ -1254,10 +1254,10 @@ function ContactModal({ defaultEmail, onClose, t }) {
       const r = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: email.trim(), email: email.trim(), message: msg.trim() + ctx }),
+        body: JSON.stringify({ name: email.trim(), email: email.trim(), message: msg.trim() + ctx, kind: "bug" }),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) { setErr(d.error || t.reportError); setState("error"); return; }
+      if (!r.ok) { setErr(d.code === "rate_limited" ? t.reportTooMany : (d.error || t.reportError)); setState("error"); return; }
       setState("sent");
     } catch { setErr(t.reportError); setState("error"); }
   };
