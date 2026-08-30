@@ -99,6 +99,23 @@ const LETTERS      = ["A","B","C","D","E","F"];
 // half so drills still feel fresh.
 const DRILL_REUSE_MAX = 5;
 const LIBRARY_REUSE_MAX = 4; // vetted bank questions reused in a 10-Q "quiz everything" review
+
+// Marks for a custom-exam section. Two modes: "perQ" (the user sets marks per
+// question) or "total" (the user sets the section's overall score, split evenly
+// across its questions). Per-question marks stay EXACT (fractional if needed) so
+// the section total is preserved when scoring. Missing markMode = "perQ" (old).
+function sectionPerQMarks(sec) {
+  const count = Math.max(1, parseInt(sec?.count) || 1);
+  if (sec?.markMode === "total") {
+    const tot = parseFloat(sec.sectionMarks);
+    return (isFinite(tot) && tot > 0) ? tot / count : 1;
+  }
+  return parseFloat(sec?.marksPerQ) || 1;
+}
+function sectionMarksTotal(sec) {
+  return (parseInt(sec?.count) || 0) * sectionPerQMarks(sec);
+}
+const roundMarks = (x) => Math.round((Number(x) || 0) * 100) / 100; // tidy fractional marks for display
 // Model for all generation/grading. Haiku 4.5: cheap + fast, plenty for
 // question writing. ($0.80/1M in, $4/1M out vs Sonnet's $3/$15.)
 const AI_MODEL     = "claude-haiku-4-5-20251001";
@@ -2498,13 +2515,13 @@ export default function StudyQuiz() {
   const removeExamFile=useCallback(idx=>{setExamFiles(prev=>prev.filter((_,i)=>i!==idx));},[]);
 
   const addSection = useCallback(()=>{
-    setExamSections(p=> p.length<5 ? [...p,{id:Date.now(),type:'mcq',count:'5',marksPerQ:'1'}] : p);
+    setExamSections(p=> p.length<5 ? [...p,{id:Date.now(),type:'mcq',count:'5',marksPerQ:'1',markMode:'perQ',sectionMarks:'20'}] : p);
   },[]);
   const removeSection = useCallback(id => setExamSections(p=>p.filter(s=>s.id!==id)),[]);
   const updateSection = useCallback((id,field,val) =>
     setExamSections(p=>p.map(s=>s.id===id?{...s,[field]:val}:s))
   ,[]);
-  const sectionTotalMarks = examSections.reduce((s,sec)=>s+(parseInt(sec.count)||0)*(parseFloat(sec.marksPerQ)||1),0);
+  const sectionTotalMarks = examSections.reduce((s,sec)=>s+sectionMarksTotal(sec),0);
   const sectionTotalQs    = examSections.reduce((s,sec)=>s+(parseInt(sec.count)||0),0);
 
   // Upload a raw File to the Anthropic Files API (via our server) → file_id.
@@ -2665,7 +2682,7 @@ export default function StudyQuiz() {
     // reliably returns only ~25-30 questions no matter the count asked), so a big
     // exam actually reaches its full number instead of stalling at ~25.
     const examPlan = examMode==="custom"
-      ? examSections.map((s,i)=>({ section:i+1, type:(["mcq","fill","written"].includes(s.type)?s.type:"mcq"), marks:parseFloat(s.marksPerQ)||1, count:Math.min(Math.max(parseInt(s.count)||5,1),100) }))
+      ? examSections.map((s,i)=>({ section:i+1, type:(["mcq","fill","written"].includes(s.type)?s.type:"mcq"), marks:sectionPerQMarks(s), count:Math.min(Math.max(parseInt(s.count)||5,1),100) }))
       : [{ section:1, type:(examMode==="written"?"written":"mcq"), marks:1, count: totalQ }];
     const examMarksMap = {}; examPlan.forEach((s)=>{ examMarksMap[s.section]=s.marks; });
 
@@ -4206,7 +4223,7 @@ export default function StudyQuiz() {
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {examSections.map((sec,si)=>{
-                const secMarks=(parseInt(sec.count)||0)*(parseFloat(sec.marksPerQ)||1);
+                const secMarks=roundMarks(sectionMarksTotal(sec));
                 return (
                   <div key={sec.id} style={{background:"var(--color-background-primary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)",overflow:"hidden"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",background:si%2===0?"var(--color-sel-tint)":"#fef3c7"}}>
@@ -4217,19 +4234,13 @@ export default function StudyQuiz() {
                       </div>
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:12,padding:"12px 14px"}}>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 96px",gap:8,alignItems:"end"}}>
-                        <div>
-                          <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>{t.questionTypeLbl}</div>
-                          <select value={sec.type} onChange={e=>updateSection(sec.id,"type",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:13,padding:"7px 8px",fontFamily:"inherit",outline:"none"}}>
-                            <option value="mcq">{t.quizTypes.mcq}</option>
-                            <option value="written">{t.qtWrittenOpen}</option>
-                            <option value="fill">{t.quizTypes.fill}</option>
-                          </select>
-                        </div>
-                        <div>
-                          <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>{t.marksPerQLbl}</div>
-                          <input type="number" min={0.5} max={20} step={0.5} value={sec.marksPerQ} onChange={e=>updateSection(sec.id,"marksPerQ",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
-                        </div>
+                      <div>
+                        <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>{t.questionTypeLbl}</div>
+                        <select value={sec.type} onChange={e=>updateSection(sec.id,"type",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:13,padding:"7px 8px",fontFamily:"inherit",outline:"none"}}>
+                          <option value="mcq">{t.quizTypes.mcq}</option>
+                          <option value="written">{t.qtWrittenOpen}</option>
+                          <option value="fill">{t.quizTypes.fill}</option>
+                        </select>
                       </div>
                       <div>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -4239,9 +4250,24 @@ export default function StudyQuiz() {
                         <input type="range" min={1} max={examCap()} step={1} value={Math.min(Math.max(parseInt(sec.count)||1,1),examCap())} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
                         <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>{examCap()}</span></div>
                       </div>
+                      <div>
+                        <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>{t.markingLbl}</div>
+                        <Seg options={[["perQ",t.markPerQ],["total",t.markSection]]} value={sec.markMode||"perQ"} onChange={v=>updateSection(sec.id,"markMode",v)}/>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8}}>
+                          {(sec.markMode||"perQ")==="total" ? (<>
+                            <input type="number" min={1} max={500} step={1} value={sec.sectionMarks ?? ""} onChange={e=>updateSection(sec.id,"sectionMarks",e.target.value)} style={{width:84,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
+                            <span style={{fontSize:11.5,color:"var(--color-text-secondary)",lineHeight:1.4}}>{t.marksWord} · <strong>{roundMarks(sectionPerQMarks(sec))}</strong> {t.marksEach}</span>
+                          </>) : (<>
+                            <input type="number" min={0.5} max={20} step={0.5} value={sec.marksPerQ} onChange={e=>updateSection(sec.id,"marksPerQ",e.target.value)} style={{width:84,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
+                            <span style={{fontSize:11.5,color:"var(--color-text-secondary)"}}>{t.marksPerQLbl}</span>
+                          </>)}
+                        </div>
+                      </div>
                     </div>
                     <div style={{padding:"6px 14px 10px",fontSize:11,color:"var(--color-text-secondary)"}}>
-                      {parseInt(sec.count)||0} {sec.type==="mcq"?t.typeMcqLower:sec.type==="fill"?t.typeFillLower:t.typeWrittenLower} {t.questionsLow} × {parseFloat(sec.marksPerQ)||1} {t.marksWord} = <strong>{secMarks} {t.marksWord}</strong>
+                      {(()=>{const cnt=parseInt(sec.count)||0, typeLbl=sec.type==="mcq"?t.typeMcqLower:sec.type==="fill"?t.typeFillLower:t.typeWrittenLower; return (sec.markMode||"perQ")==="total"
+                        ? <>{cnt} {typeLbl} {t.questionsLow} · <strong>{secMarks} {t.marksWord}</strong> ({roundMarks(sectionPerQMarks(sec))} {t.marksEach})</>
+                        : <>{cnt} {typeLbl} {t.questionsLow} × {roundMarks(sectionPerQMarks(sec))} {t.marksWord} = <strong>{secMarks} {t.marksWord}</strong></>;})()}
                     </div>
                   </div>
                 );
@@ -4342,7 +4368,7 @@ export default function StudyQuiz() {
             <div style={{background:"#2c2870",borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}} className="fade-in">
               <span style={{fontWeight:700,fontSize:14,color:"#fff"}}>{t.sectionNum.replace("{n}",q.section)}</span>
               {examMode==="custom"&&examSections[q.section-1]&&(
-                <span style={{fontSize:11,color:"rgba(255,255,255,0.75)"}}>{t.qsAndMarks.replace("{q}",examSections[q.section-1].count).replace("{m}",(parseInt(examSections[q.section-1].count)||0)*(parseFloat(examSections[q.section-1].marksPerQ)||1))}</span>
+                <span style={{fontSize:11,color:"rgba(255,255,255,0.75)"}}>{t.qsAndMarks.replace("{q}",examSections[q.section-1].count).replace("{m}",roundMarks(sectionMarksTotal(examSections[q.section-1])))}</span>
               )}
             </div>
           )}
@@ -4477,7 +4503,7 @@ export default function StudyQuiz() {
                     <span style={{width:22,height:22,borderRadius:"50%",background:si%2===0?"var(--color-sel-tint)":"#fef3c7",color:si%2===0?"#4338ca":"#92400e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{si+1}</span>
                     <div style={{flex:1}}>
                       <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)"}}>{t.sectionNum.replace("{n}",si+1)}: {sec.type==="mcq"?t.quizTypes.mcq:sec.type==="fill"?t.quizTypes.fill:t.writtenWord}</div>
-                      <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{t.qsTimesMarks.replace("{n}",secQs.length).replace("{m}",sec.marksPerQ)}</div>
+                      <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{t.qsTimesMarks.replace("{n}",secQs.length).replace("{m}",roundMarks(sectionPerQMarks(sec)))}</div>
                     </div>
                     <div style={{textAlign:"right"}}>
                       <div style={{fontSize:14,fontWeight:700,color:col}}>{Math.round(earned*10)/10}/{possible}</div>
