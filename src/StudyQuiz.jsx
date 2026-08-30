@@ -2455,12 +2455,23 @@ export default function StudyQuiz() {
   // File size: 999 (Pro) / 10 (ad-unlocked) / 5 (free) MB.
   const fileLimitMB = useCallback(() => isPro ? PRO_FILE_MB : (unlocks.isUnlocked("filesize") ? AD_FILE_MB : FREE_FILE_MB), [isPro, unlocks]);
 
+  // The most questions the user can actually make right now = their tier cap AND
+  // whatever daily allowance is left (packs included). Sliders/inputs never move
+  // past this, so a user with 30 left can't set 100 and then fail at generation.
+  // Unknown usage (still loading) does not cap. Universal across quiz + exam.
+  const remainingToday = useCallback(() => {
+    const r = usage?.remaining;
+    return (typeof r === "number" && r >= 0) ? r : Infinity;
+  }, [usage]);
+  const qMax   = useCallback(() => Math.max(1, Math.min(qCap(), remainingToday())), [qCap, remainingToday]);
+  const examCap = useCallback(() => Math.max(1, Math.min(isPro ? 100 : 20, remainingToday())), [isPro, remainingToday]);
+
   const effectiveNumQ = useCallback(()=>{
     // Custom box value takes precedence when on; otherwise the slider's numQ.
     let n = numQ;
     if (useCustomQ && canCustomQ()) { const c=parseInt(customQ,10); if(!isNaN(c)) n=c; }
-    return Math.min(Math.max(n,1), qCap());
-  },[useCustomQ,canCustomQ,numQ,customQ,qCap]);
+    return Math.min(Math.max(n,1), qMax());
+  },[useCustomQ,canCustomQ,numQ,customQ,qMax]);
 
   // Banner-ads master switch (mirrors AdBanners), separate from feature unlocks.
   const adsOn = dev.devMode && dev.ads!==null ? dev.ads : ADS_ENABLED;
@@ -2641,7 +2652,9 @@ export default function StudyQuiz() {
     if(examMode==="custom" && sectionTotalQs===0){setError(t.errAddQuestion);return;}
     setError("");
     const dg = DIFFICULTY[diff] || DIFFICULTY[1];
-    const totalQ = examMode==="custom" ? sectionTotalQs : (isPro ? Math.min(Math.max(parseInt(examTotalQ)||5,1),100) : 20);
+    // Cap the exam at what the user can actually make now: 100/exam (Pro) or their
+    // free limit, AND never more than their remaining daily allowance.
+    const totalQ = Math.min(examMode==="custom" ? sectionTotalQs : (isPro ? Math.max(parseInt(examTotalQ)||5,1) : 20), examCap());
 
     // Personalize the exam to this learner (weak-topic emphasis + calibration)
     // and fold in the content feedback loop's "avoid these" list, same as the
@@ -2706,12 +2719,15 @@ export default function StudyQuiz() {
       const seenEx = new Set();
       const examAll = [];
       let exTitle = "", exSummary = "", exLastErr = null;
+      let budget = totalQ; // hard cap on the whole exam (100/exam + remaining daily allowance)
       for (const secSpec of examPlan) {
+        const secTarget = Math.min(secSpec.count, budget);
+        if (secTarget <= 0) break;
         let got = 0, emptyRounds = 0, calls = 0;
-        const secMax = Math.ceil(secSpec.count / EXAM_CHUNK) + 3;
-        while (got < secSpec.count && calls < secMax && emptyRounds < 2) {
+        const secMax = Math.ceil(secTarget / EXAM_CHUNK) + 3;
+        while (got < secTarget && calls < secMax && emptyRounds < 2) {
           calls++;
-          const need = Math.min(EXAM_CHUNK, secSpec.count - got);
+          const need = Math.min(EXAM_CHUNK, secTarget - got);
           const written = examAll.filter((q) => q.section === secSpec.section).slice(-30);
           const avoid = written.length ? `\nDo NOT repeat or lightly reword any of these questions already written:\n- ${written.map((q) => String(q.question || "").slice(0, 120)).join("\n- ")}` : "";
           let r = null;
@@ -2726,11 +2742,12 @@ export default function StudyQuiz() {
               seenEx.add(key);
               examAll.push({ ...q, section: secSpec.section, type: secSpec.type });
               added++; got++;
-              if (got >= secSpec.count) break;
+              if (got >= secTarget) break;
             }
           }
           emptyRounds = added === 0 ? emptyRounds + 1 : 0;
         }
+        budget -= got;
       }
       if (!examAll.length) throw (exLastErr || new Error("No questions generated"));
       const parsed = { title: exTitle, questions: examAll, summary: exSummary };
@@ -2752,7 +2769,7 @@ export default function StudyQuiz() {
       setScreen("exam_run");
       if(!isPro) unlocks.consumeExam();   // free daily exam is now used up
     }catch(err){setError(err.message.includes("parse")?t.errUnexpectedFormat:err.message);setScreen("exam_setup");}
-  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks,studyModel,srs.bank]);
+  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks,studyModel,srs.bank,examCap]);
 
   const evaluateExam=useCallback(async(answers)=>{
     const hasWritten=examQs.some(q=>q.type==="written");
@@ -3771,34 +3788,34 @@ export default function StudyQuiz() {
           <div style={{...Sb.settingRow,flexDirection:"column",alignItems:"flex-start",gap:8}}>
             <div style={{display:"flex",justifyContent:"space-between",width:"100%",alignItems:"center"}}>
               <span style={Sb.settingLabel}>{t.questions}</span>
-              <span style={{fontWeight:700,fontSize:14,color:"var(--color-accent)",minWidth:32,textAlign:"right"}}>{Math.min(numQ,qCap())}</span>
+              <span style={{fontWeight:700,fontSize:14,color:"var(--color-accent)",minWidth:32,textAlign:"right"}}>{Math.min(numQ,qMax())}</span>
             </div>
             {/* Pro/unlocked: step the slider by 1 and reveal a type-in box. */}
             {canCustomQ()&&(
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%"}}>
                 <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.customAmount}</span>
-                <Toggle on={useCustomQ} onChange={v=>{setUseCustomQ(v); if(v) setCustomQ(String(Math.min(numQ,qCap())));}}/>
+                <Toggle on={useCustomQ} onChange={v=>{setUseCustomQ(v); if(v) setCustomQ(String(Math.min(numQ,qMax())));}}/>
               </div>
             )}
             <div style={{width:"100%",paddingRight:2}}>
               <div style={{display:"flex",gap:10,alignItems:"center"}}>
                 <input type="range"
-                  min={useCustomQ&&canCustomQ()?1:5} max={qCap()} step={useCustomQ&&canCustomQ()?1:5}
-                  value={Math.min(numQ,qCap())}
+                  min={useCustomQ&&canCustomQ()?1:Math.min(5,qMax())} max={qMax()} step={useCustomQ&&canCustomQ()?1:5}
+                  value={Math.min(numQ,qMax())}
                   onChange={e=>{const v=parseInt(e.target.value);setImportCount(null);setNumQ(v);setCustomQ(String(v));if(!canCustomQ())setUseCustomQ(false);}}
                   style={{flex:1,accentColor:"#4338ca",cursor:"pointer"}}
                 />
                 {useCustomQ&&canCustomQ()&&(
-                  <input type="number" min={1} max={qCap()} inputMode="numeric" value={customQ}
-                    onChange={e=>{const s=e.target.value.replace(/[^0-9]/g,"").slice(0,3);setImportCount(null);setCustomQ(s);const n=parseInt(s,10);if(!isNaN(n))setNumQ(Math.min(Math.max(n,1),qCap()));}}
-                    onBlur={e=>{const n=Math.min(Math.max(parseInt(e.target.value,10)||1,1),qCap());setCustomQ(String(n));setNumQ(n);}}
+                  <input type="number" min={1} max={qMax()} inputMode="numeric" value={customQ}
+                    onChange={e=>{const s=e.target.value.replace(/[^0-9]/g,"").slice(0,3);setImportCount(null);setCustomQ(s);const n=parseInt(s,10);if(!isNaN(n))setNumQ(Math.min(Math.max(n,1),qMax()));}}
+                    onBlur={e=>{const n=Math.min(Math.max(parseInt(e.target.value,10)||1,1),qMax());setCustomQ(String(n));setNumQ(n);}}
                     style={{width:58,borderRadius:8,border:"1.5px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"8px 6px",fontFamily:"inherit",outline:"none",boxSizing:"border-box",textAlign:"center"}}/>
                 )}
               </div>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>
-                <span>{useCustomQ&&canCustomQ()?1:5}</span>
+                <span>{useCustomQ&&canCustomQ()?1:Math.min(5,qMax())}</span>
                 <span style={{color:(!isPro&&!unlocks.isUnlocked("questions"))?"#f59e0b":"var(--color-text-tertiary)"}}>
-                  {qCap()}{!isPro&&!unlocks.isUnlocked("questions")?" "+t.freeMax:""}{!isPro&&unlocks.isUnlocked("questions")?` · ${unlocks.remainingLabel("questions")}`:""}
+                  {qMax()}{!isPro&&!unlocks.isUnlocked("questions")?" "+t.freeMax:""}{!isPro&&unlocks.isUnlocked("questions")?` · ${unlocks.remainingLabel("questions")}`:""}
                 </span>
               </div>
               {useCustomQ&&canCustomQ()&&<div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:3}}>{t.customAmountHint}</div>}
@@ -4165,10 +4182,10 @@ export default function StudyQuiz() {
               <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>{t.questionsLow}</span>
-                  <span style={{fontWeight:700,fontSize:18,color:"var(--color-accent)"}}>{Math.min(Math.max(parseInt(examTotalQ)||1,1),100)}</span>
+                  <span style={{fontWeight:700,fontSize:18,color:"var(--color-accent)"}}>{Math.min(Math.max(parseInt(examTotalQ)||1,1),examCap())}</span>
                 </div>
-                <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(examTotalQ)||1,1),100)} onChange={e=>setExamTotalQ(e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>100</span></div>
+                <input type="range" min={1} max={examCap()} step={1} value={Math.min(Math.max(parseInt(examTotalQ)||1,1),examCap())} onChange={e=>setExamTotalQ(e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>{examCap()}</span></div>
               </div>
             ) : (
               <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
@@ -4217,10 +4234,10 @@ export default function StudyQuiz() {
                       <div>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                           <span style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)"}}>{t.questionsUpperLbl}</span>
-                          <span style={{fontWeight:700,fontSize:14,color:"var(--color-accent)"}}>{Math.min(Math.max(parseInt(sec.count)||1,1),100)}</span>
+                          <span style={{fontWeight:700,fontSize:14,color:"var(--color-accent)"}}>{Math.min(Math.max(parseInt(sec.count)||1,1),examCap())}</span>
                         </div>
-                        <input type="range" min={1} max={100} step={1} value={Math.min(Math.max(parseInt(sec.count)||1,1),100)} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
-                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>100</span></div>
+                        <input type="range" min={1} max={examCap()} step={1} value={Math.min(Math.max(parseInt(sec.count)||1,1),examCap())} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
+                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>{examCap()}</span></div>
                       </div>
                     </div>
                     <div style={{padding:"6px 14px 10px",fontSize:11,color:"var(--color-text-secondary)"}}>
