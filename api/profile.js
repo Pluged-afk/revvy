@@ -1,6 +1,24 @@
 import { verifyToken } from "@clerk/backend";
 import sql, { readBody } from "./db.js";
 
+// Public username column + case-insensitive unique index (lazy, cached).
+let unameReady = false;
+async function ensureUsernameCol() {
+  if (unameReady) return;
+  try {
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username TEXT`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower ON profiles (lower(username)) WHERE username IS NOT NULL`;
+    unameReady = true;
+  } catch (e) { console.error("[profile] username col:", e.message); }
+}
+async function userIdFromToken(req) {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return null;
+  try { const p = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY }); return p.sub || null; }
+  catch { return null; }
+}
+
 // Consolidated profile endpoint (kept as ONE serverless function to stay under
 // the Vercel Hobby plan's 12-function limit). Routes by request:
 //   GET  /api/profile                      → read the signed-in user's profile
@@ -26,8 +44,9 @@ async function getProfile(req, res) {
   if (!userId) return res.status(401).json({ error: "No user in token.", is_pro: false });
 
   try {
+    await ensureUsernameCol();
     const rows = await sql`
-      SELECT id, email, is_pro, stripe_customer_id, subscription_id,
+      SELECT id, email, username, is_pro, stripe_customer_id, subscription_id,
              subscription_status, subscription_plan, current_period_end, cancel_at_period_end
       FROM profiles WHERE clerk_user_id = ${userId} OR id = ${userId} LIMIT 1`;
     const p = rows[0];
@@ -78,12 +97,35 @@ async function deleteAccount(req, res, body) {
   }
 }
 
+// POST action=setUsername: claim a public display name. Token-verified (the name
+// is public and used on the leaderboard, so we take the user id from the session,
+// never the body). Case-insensitive unique; a taken name returns 409.
+async function setUsername(req, res, body) {
+  const userId = await userIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: "Invalid session." });
+  const name = String(body.username || "").trim();
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(name)) {
+    return res.status(400).json({ error: "Use 3-20 letters, numbers or underscore.", invalid: true });
+  }
+  await ensureUsernameCol();
+  try {
+    await sql`INSERT INTO profiles (id, clerk_user_id) VALUES (${userId}, ${userId}) ON CONFLICT (id) DO NOTHING`;
+    await sql`UPDATE profiles SET username = ${name} WHERE clerk_user_id = ${userId} OR id = ${userId}`;
+    return res.status(200).json({ ok: true, username: name });
+  } catch (e) {
+    if (/duplicate|unique/i.test(e.message)) return res.status(409).json({ error: "That name is taken, try another.", taken: true });
+    console.error("[profile:setUsername]", e.message);
+    return res.status(500).json({ error: e.message });
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === "GET") return getProfile(req, res);
   if (req.method === "POST") {
     const body = await readBody(req);
     if (body.action === "create") return createProfile(req, res, body);
     if (body.action === "delete") return deleteAccount(req, res, body);
+    if (body.action === "setUsername") return setUsername(req, res, body);
     return res.status(400).json({ error: "Unknown action." });
   }
   res.setHeader("Allow", "GET, POST");

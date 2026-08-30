@@ -16,6 +16,7 @@ import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/stude
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
+import ArenaGame from "./components/ArenaGame.jsx";
 import Icon from "./components/Icon.jsx";
 
 // Clean line icons for the home "what you can upload" grid, matched to the
@@ -691,6 +692,55 @@ async function mockFlagGlobal(exam, section, question) {
     await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
       body: JSON.stringify({ action:"mockFlag", exam, section, qhash: qhashOf(question) }) });
   } catch { /* best effort */ }
+}
+
+// ── Endless Arena (client fetch helpers) ──
+async function arenaDrawGlobal() {
+  try {
+    const res = await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())}, body: JSON.stringify({ action:"arenaDraw" }) });
+    if (!res.ok) return [];
+    const j = await res.json().catch(() => ({}));
+    // Sort ascending by difficulty so a run ramps easy -> hard.
+    return (Array.isArray(j.questions) ? j.questions : []).slice().sort((a, b) => (a.difficulty || 0) - (b.difficulty || 0));
+  } catch { return []; }
+}
+async function arenaSubmitGlobal(result) {
+  try {
+    const res = await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())}, body: JSON.stringify({ action:"arenaSubmit", ...result }) });
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  } catch { return null; }
+}
+async function arenaBoardGlobal() {
+  try {
+    const res = await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())}, body: JSON.stringify({ action:"arenaBoard" }) });
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  } catch { return null; }
+}
+
+// Public-name picker. Shown once after login (skippable) and required before the
+// Arena. Validated live: 3-20 letters, numbers or underscore.
+function UsernameModal({ value, onChange, onSave, onSkip, err, busy, t }) {
+  const valid = /^[A-Za-z0-9_]{3,20}$/.test(value.trim());
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:650,display:"flex",alignItems:"flex-end"}}>
+      <div className="slide-up" style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"26px 20px 34px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box"}}>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{marginBottom:8,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="tag" size={28} stroke={1.7}/></div>
+          <h3 style={{margin:"0 0 6px",fontSize:19,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.unameTitle}</h3>
+          <p style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{t.unameSub}</p>
+        </div>
+        <input value={value} maxLength={20} inputMode="text" autoFocus placeholder={t.unamePlaceholder}
+          onChange={e=>onChange(e.target.value.replace(/[^A-Za-z0-9_]/g,""))}
+          onKeyDown={e=>{ if(e.key==="Enter" && valid && !busy) onSave(); }}
+          style={{width:"100%",borderRadius:11,border:"1.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:16,fontWeight:600,padding:"12px 14px",fontFamily:"inherit",outline:"none",boxSizing:"border-box",textAlign:"center",letterSpacing:0.3}}/>
+        {err && <div style={{fontSize:12.5,color:"#dc2626",marginTop:9,textAlign:"center"}}>{err}</div>}
+        <button disabled={!valid||busy} onClick={onSave} style={{...Sb.btnPrimary,width:"100%",marginTop:14,opacity:(!valid||busy)?0.5:1}}>{busy?t.unameSaving:t.unameSave}</button>
+        {onSkip && <button onClick={onSkip} style={{width:"100%",background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit",padding:"12px 4px 0"}}>{t.unameLater}</button>}
+      </div>
+    </div>
+  );
 }
 
 // The sender's challenge activity: quizzes they shared that others have taken.
@@ -1936,7 +1986,7 @@ export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const { t, lang, setLang } = useLang(); // language control now lives inside the account panel
   const dev = useDev();
-  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack, consumeMock } = useAuth();
+  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack, consumeMock, username, saveUsername, loading: authLoading } = useAuth();
   // Expose Clerk's getToken to the module-level AI-proxy / upload helpers so
   // every request to /api/anthropic and /api/upload-file carries a bearer token.
   useEffect(() => { _getToken = getToken; return () => { _getToken = null; }; }, [getToken]);
@@ -3443,6 +3493,62 @@ export default function StudyQuiz() {
       setScreen("mock_intro");
     }
   };
+  // ── Endless Arena (client) ──
+  const [arenaQs, setArenaQs] = useState([]);
+  const [arenaResult, setArenaResult] = useState(null);
+  const [arenaBoardData, setArenaBoardData] = useState(null);
+  const [arenaBusy, setArenaBusy] = useState(false);
+  const [arenaErr, setArenaErr] = useState("");
+  const [showUsername, setShowUsername] = useState(false);
+  const [unameInput, setUnameInput] = useState("");
+  const [unameErr, setUnameErr] = useState("");
+  const [unameBusy, setUnameBusy] = useState(false);
+  const arenaAfterName = useRef(null);
+  const unamePromptedRef = useRef(false);
+  // Prompt once, after the profile is known, for players without a public name.
+  useEffect(() => {
+    if (!authLoading && user && username === null && !unamePromptedRef.current) {
+      unamePromptedRef.current = true;
+      setUnameInput(""); setUnameErr(""); setShowUsername(true);
+    }
+  }, [authLoading, user, username]);
+  // Ensure a public name exists, then run `next`; otherwise open the picker first.
+  const requireUsername = useCallback((next) => {
+    if (username) { next && next(); return; }
+    arenaAfterName.current = next || null; setUnameInput(""); setUnameErr(""); setShowUsername(true);
+  }, [username]);
+  const submitUsername = useCallback(async () => {
+    const name = unameInput.trim();
+    setUnameErr(""); setUnameBusy(true);
+    const r = await saveUsername(name);
+    setUnameBusy(false);
+    if (r && r.ok) { setShowUsername(false); const after = arenaAfterName.current; arenaAfterName.current = null; if (after) after(); }
+    else setUnameErr((r && r.error) || t.unameErr);
+  }, [unameInput, saveUsername, t]);
+  const openArena = useCallback(() => {
+    if (requireLogin()) return;
+    setArenaErr(""); setArenaResult(null); requireUsername(() => setScreen("arena_intro"));
+  }, [requireLogin, requireUsername]);
+  const startArena = useCallback(() => {
+    requireUsername(async () => {
+      setArenaErr(""); setArenaBusy(true); setScreen("arena_gen");
+      const qs = await arenaDrawGlobal();
+      setArenaBusy(false);
+      if (qs.length < 5) { setArenaErr(t.arenaNoQs); setScreen("arena_intro"); return; }
+      setArenaQs(qs); setScreen("arena_play");
+    });
+  }, [requireUsername, t]);
+  const onArenaEnd = useCallback(async (result) => {
+    setScreen("arena_over"); setArenaResult({ ...result, best: result.score, isBest: false, pending: true });
+    const r = await arenaSubmitGlobal(result);
+    setArenaResult({ ...result, score: (r && r.score) ?? result.score, best: (r && r.best) ?? result.score, isBest: !!(r && r.isBest), pending: false });
+  }, []);
+  const openArenaBoard = useCallback(async () => {
+    setArenaBusy(true); setArenaBoardData(null); setScreen("arena_board");
+    const b = await arenaBoardGlobal();
+    setArenaBusy(false); setArenaBoardData(b);
+  }, []);
+
   const enableReminders = async () => { try { if (typeof Notification!=="undefined") { const p = await Notification.requestPermission(); setNotifPerm(p); } } catch { /* ignore */ } };
   // Tick a coached day off (once) when its quiz/exam results appear.
   useEffect(() => {
@@ -3904,12 +4010,22 @@ export default function StudyQuiz() {
           {!isPro && <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0}}>PRO</span>}
           <span style={{fontSize:18,color:"rgba(255,255,255,0.6)",flexShrink:0}}>›</span>
         </div>
+        <div onClick={openArena}
+          style={{background:"var(--color-accent)",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+          <span style={{flexShrink:0,display:"flex",color:"#fff"}}><Icon name="bolt" size={22}/></span>
+          <div style={{flex:1,color:"#fff",minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14}}>{t.arenaEntry}</div>
+            <div style={{fontSize:11,opacity:0.9,marginTop:2,lineHeight:1.45}}>{t.arenaEntrySub}</div>
+          </div>
+          <span style={{fontSize:18,color:"rgba(255,255,255,0.7)",flexShrink:0}}>›</span>
+        </div>
         <button style={{...Sb.btnPrimary,width:"100%"}} onClick={generate}>{t.generate}</button>
         </div>
       </div>
       <UnlockModal feature={unlockFeature} unlocks={unlocks} t={t}
         onClose={()=>setUnlockFeature(null)} onUpgrade={openUpgrade}/>
       {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
+      {showUsername && <UsernameModal value={unameInput} onChange={setUnameInput} onSave={submitUsername} onSkip={()=>setShowUsername(false)} err={unameErr} busy={unameBusy} t={t}/>}
       {showQuizlet && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>!quizletBusy&&setShowQuizlet(false)}>
           <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"24px 20px 32px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box",maxHeight:"88vh",overflowY:"auto"}}>
@@ -4717,6 +4833,133 @@ export default function StudyQuiz() {
                   <button onClick={()=>setConfirmDelPlan(false)} style={{...Sb.btnGhost,flex:1,padding:"9px"}}>{t.notNow||"Cancel"}</button>
                 </div>
               </div>}
+        </div>
+      </div>
+    );
+  }
+
+  // ── ENDLESS ARENA ─────────────────────────────────────────────────
+  if (screen==="arena_intro") {
+    const best = arenaBoardData?.you?.score ?? arenaResult?.best ?? null;
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        <AdBanners isPro={isPro}/>
+        <div style={Sb.topbar} className="rv-topbar">
+          <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← {t.backWord}</button>
+          <span style={Sb.brand}>{t.arenaTitle}</span><span/>
+        </div>
+        <div className="rv-center-narrow" style={{padding:"26px 16px 42px"}}>
+          <div style={{textAlign:"center",marginBottom:20}}>
+            <div style={{marginBottom:10,display:"flex",justifyContent:"center",color:"var(--color-accent)"}}><Icon name="bolt" size={40}/></div>
+            <h2 style={{...Sb.h2,textAlign:"center",margin:"0 0 6px"}}>{t.arenaTitle}</h2>
+            <p style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.55,maxWidth:360,margin:"0 auto"}}>{t.arenaTagline}</p>
+          </div>
+          {best!=null && (
+            <div style={{textAlign:"center",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,padding:"14px",marginBottom:16}}>
+              <div style={{fontSize:10,fontWeight:700,letterSpacing:1,color:"var(--color-text-tertiary)",textTransform:"uppercase"}}>{t.arenaYourBest}</div>
+              <div style={{fontSize:34,fontWeight:800,color:"var(--color-accent)",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1.1}}>{best.toLocaleString()}</div>
+            </div>
+          )}
+          {arenaErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>{arenaErr}</div>}
+          <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,fontSize:16}} onClick={startArena}><Icon name="bolt" size={17}/>{t.arenaPlay}</button>
+          <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>
+          <div style={{marginTop:22,display:"flex",flexDirection:"column",gap:11}}>
+            {[["bolt",t.arenaHow1],["target",t.arenaHow2],["gem",t.arenaHow3]].map(([ic,tx],i)=>(
+              <div key={i} style={{display:"flex",gap:11,alignItems:"flex-start",fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>
+                <span style={{color:"var(--color-accent)",flexShrink:0,marginTop:1}}><Icon name={ic} size={15}/></span><span>{tx}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {showUsername && <UsernameModal value={unameInput} onChange={setUnameInput} onSave={submitUsername} onSkip={()=>setShowUsername(false)} err={unameErr} busy={unameBusy} t={t}/>}
+      </div>
+    );
+  }
+  if (screen==="arena_gen") return (
+    <div style={{...Sb.root,alignItems:"center",justifyContent:"center",padding:"0 24px",textAlign:"center",minHeight:"100vh",display:"flex",flexDirection:"column"}}><style>{CSS}</style>
+      <div className="spin-ring" style={{width:48,height:48,borderRadius:"50%",border:"4px solid var(--color-border-tertiary)",borderTopColor:"var(--color-accent)"}}/>
+      <h2 style={{...Sb.h2,textAlign:"center",marginTop:24}}>{t.arenaLoading}</h2>
+    </div>
+  );
+  if (screen==="arena_play") return (
+    <div style={Sb.root}><style>{CSS}</style>
+      <div style={Sb.topbar} className="rv-topbar">
+        <button style={Sb.backBtn} onClick={()=>{ if(typeof window!=="undefined" && window.confirm(t.arenaQuitConfirm)) setScreen("arena_intro"); }}>✕</button>
+        <span style={Sb.brand}>{t.arenaTitle}</span><span/>
+      </div>
+      <ArenaGame key={`${arenaQs[0]?.id||0}_${arenaQs.length}`} questions={arenaQs} t={t} onEnd={onArenaEnd}/>
+    </div>
+  );
+  if (screen==="arena_over" && arenaResult) {
+    const r = arenaResult;
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        <AdBanners isPro={isPro}/>
+        <div style={{background:"#2c2870",padding:"36px 20px 28px",textAlign:"center"}}>
+          {r.isBest && <div style={{fontSize:12,fontWeight:800,letterSpacing:1,color:"#fcd34d",textTransform:"uppercase",marginBottom:6}}>{t.arenaNewBest}</div>}
+          <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"rgba(255,255,255,0.7)",textTransform:"uppercase"}}>{r.isBest?t.arenaScoreLbl:t.arenaRunScore}</div>
+          <div style={{fontSize:58,fontWeight:800,color:"#fff",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1.1}}>{(r.score||0).toLocaleString()}</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.7)"}}>{t.arenaInQuestions.replace("{n}",r.questions||0)}</div>
+          {!r.isBest && r.best!=null && <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",marginTop:6}}>{t.arenaBestIs.replace("{n}",(r.best||0).toLocaleString())}</div>}
+        </div>
+        <div className="rv-center" style={{padding:"22px 16px 40px"}}>
+          <div style={{display:"flex",gap:10,marginBottom:18}}>
+            {[[t.arenaFreeze,r.freeze],[t.arenaHint,r.hint],[t.arenaSkip,r.skip]].map(([lbl,n],i)=>(
+              <div key={i} style={{flex:1,textAlign:"center",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"11px 6px"}}>
+                <div style={{fontSize:19,fontWeight:800,color:"var(--color-accent)",fontFamily:"monospace"}}>{n||0}</div>
+                <div style={{fontSize:11,color:"var(--color-text-secondary)",fontWeight:600}}>{lbl}</div>
+              </div>
+            ))}
+          </div>
+          <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={startArena}><Icon name="repeat" size={16}/>{t.arenaPlayAgain}</button>
+          <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>
+          <button style={{width:"100%",background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit",padding:"14px 4px 0"}} onClick={()=>setScreen("upload")}>{t.arenaHome}</button>
+        </div>
+      </div>
+    );
+  }
+  if (screen==="arena_board") {
+    const b = arenaBoardData;
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        <AdBanners isPro={isPro}/>
+        <div style={Sb.topbar} className="rv-topbar">
+          <button style={Sb.backBtn} onClick={()=>setScreen(arenaResult?"arena_over":"arena_intro")}>← {t.backWord}</button>
+          <span style={Sb.brand}>{t.arenaLeaderboard}</span><span/>
+        </div>
+        <div className="rv-center-narrow" style={{padding:"20px 16px 40px"}}>
+          {arenaBusy && <div style={{textAlign:"center",padding:"36px 0",color:"var(--color-text-tertiary)"}}><div className="spin-ring" style={{width:34,height:34,borderRadius:"50%",border:"3px solid var(--color-border-tertiary)",borderTopColor:"var(--color-accent)",margin:"0 auto"}}/></div>}
+          {!arenaBusy && b && b.locked && (
+            <div style={{textAlign:"center",padding:"26px 18px",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:16}}>
+              <div style={{display:"flex",justifyContent:"center",color:"var(--color-text-tertiary)",marginBottom:12}}><Icon name="lock" size={28}/></div>
+              <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif"}}>{t.arenaLockedTitle}</h3>
+              <p style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5,maxWidth:320,margin:"0 auto 16px"}}>{t.arenaLockedSub.replace("{need}",b.need).replace("{have}",b.players)}</p>
+              <div style={{height:8,borderRadius:4,background:"var(--color-background-secondary)",overflow:"hidden",maxWidth:260,margin:"0 auto"}}>
+                <div style={{height:"100%",width:`${Math.min(100,(b.players/b.need)*100)}%`,background:"var(--color-accent)",borderRadius:4}}/>
+              </div>
+              <div style={{fontSize:12,fontFamily:"monospace",color:"var(--color-text-tertiary)",marginTop:8}}>{b.players} / {b.need}</div>
+              {b.you && <div style={{marginTop:18,fontSize:13,color:"var(--color-text-secondary)"}}>{t.arenaBestIs.replace("{n}",(b.you.score||0).toLocaleString())}</div>}
+            </div>
+          )}
+          {!arenaBusy && b && !b.locked && (<>
+            {b.you && <div style={{background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"12px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontWeight:700,fontSize:14}}>{t.arenaYouRank.replace("{r}",b.you.rank||"—")}</span>
+              <span style={{fontFamily:"monospace",fontWeight:700,color:"var(--color-accent)"}}>{(b.you.score||0).toLocaleString()}</span>
+            </div>}
+            <p style={{fontSize:10.5,color:"var(--color-text-tertiary)",margin:"0 0 8px 2px"}}>{t.arenaBoardLegend}</p>
+            <div style={{border:"0.5px solid var(--color-border-tertiary)",borderRadius:14,overflow:"hidden",background:"var(--color-background-primary)"}}>
+              {(b.top||[]).map((row,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"30px 1fr auto",gap:10,alignItems:"center",padding:"11px 14px",borderBottom:i<b.top.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
+                  <span style={{fontFamily:"monospace",fontWeight:700,fontSize:14,textAlign:"center",color:i===0?"#d97706":i===1?"#94a3b8":i===2?"#b45309":"var(--color-text-tertiary)"}}>{i+1}</span>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}</div>
+                    <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",fontFamily:"monospace"}}>{t.arenaQCount.replace("{n}",row.questions)} · {row.freeze}/{row.hint}/{row.skip}</div>
+                  </div>
+                  <span style={{fontFamily:"monospace",fontWeight:700,fontSize:15}}>{(row.score||0).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </>)}
         </div>
       </div>
     );

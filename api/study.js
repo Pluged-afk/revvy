@@ -65,7 +65,36 @@ function ensureTables() {
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (clerk_user_id, exam, section, qhash)
       )`,
+      // ── Endless Arena ──
+      // Pooled general-knowledge questions for the no-upload high-score game.
+      // Each carries a fixed correct answer plus a POOL of relevant distractors
+      // (3 are sampled at random per serve), a difficulty the generator guesses
+      // and the crowd then refines via play stats.
+      sql`CREATE TABLE IF NOT EXISTS gk_pool (
+        id            BIGSERIAL   PRIMARY KEY,
+        qhash         TEXT        UNIQUE NOT NULL,
+        category      TEXT        NOT NULL DEFAULT 'general',
+        question      TEXT        NOT NULL,
+        correct       TEXT        NOT NULL,
+        distractors   JSONB       NOT NULL,
+        difficulty    REAL        NOT NULL DEFAULT 2.5,
+        plays         INT         NOT NULL DEFAULT 0,
+        correct_count INT         NOT NULL DEFAULT 0,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      // One row per player: their public best run. The board is keyed on this.
+      sql`CREATE TABLE IF NOT EXISTS arena_score (
+        clerk_user_id TEXT        PRIMARY KEY,
+        best_score    INT         NOT NULL DEFAULT 0,
+        questions     INT         NOT NULL DEFAULT 0,
+        freeze_used   INT         NOT NULL DEFAULT 0,
+        hint_used     INT         NOT NULL DEFAULT 0,
+        skip_used     INT         NOT NULL DEFAULT 0,
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
     ]).then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS arena_board ON arena_score (best_score DESC)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS gk_pool_diff ON gk_pool (difficulty)`)
       .then(() => true).catch(() => { ensured = null; return false; });
   }
   return ensured;
@@ -318,6 +347,119 @@ async function mockDraw(req, res, body) {
   });
 }
 
+// ── Endless Arena (server) ──────────────────────────────────────────────────
+// Scoring/difficulty helpers MIRROR src/lib/arena.js; inlined so the serverless
+// bundle needs no cross-directory import. Keep the two in sync.
+const ARENA_GATE = 100, ADIFF_MIN = 1, ADIFF_MAX = 5, ACLOSE_BONUS = 2.0;
+const aclamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+const aCombo = (s) => aclamp(1 + Math.floor(Math.max(0, s) / 3) * 0.5, 1, 5);
+const aBasePts = (d) => Math.round(20 * aclamp(d, ADIFF_MIN, ADIFF_MAX));
+const aServeDiff = (base, close) => aclamp((Number(base) || 1) + aclamp(Number(close) || 0, 0, 1) * ACLOSE_BONUS, ADIFF_MIN, ADIFF_MAX);
+const aMaxQPts = (base, streak) => Math.round(aBasePts(aServeDiff(base, 1)) * aCombo(streak));
+function aDifficulty(base, plays, cc) {
+  const b = aclamp(Number(base) || 1, ADIFF_MIN, ADIFF_MAX);
+  const p = Number(plays) || 0;
+  if (p < 8) return b;
+  const rate = aclamp((Number(cc) || 0) / p, 0, 1);
+  const observed = aclamp(ADIFF_MAX - rate * (ADIFF_MAX - ADIFF_MIN), ADIFF_MIN, ADIFF_MAX);
+  const w = Math.min(1, p / 60);
+  return aclamp(b * (1 - w) + observed * w, ADIFF_MIN, ADIFF_MAX);
+}
+
+// Lazy self-heal of the public-username column + case-insensitive unique index.
+let unameReady = false;
+async function ensureUsernameCol() {
+  if (unameReady) return;
+  try {
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username TEXT`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower ON profiles (lower(username)) WHERE username IS NOT NULL`;
+    unameReady = true;
+  } catch (e) { console.error("[arena] username col:", e.message); }
+}
+
+// Draw a batch of pool questions near a target difficulty. Returns the correct
+// answer + full distractor pool + CROWD-CALIBRATED difficulty; the client
+// assembles each serve (3 random relevant distractors) and shows instant verdict.
+async function arenaDraw(req, res, body) {
+  void body;
+  // A random spread across difficulties; the client sorts ascending so the run
+  // ramps easy -> hard.
+  const rows = await sql`
+    SELECT id, category, question, correct, distractors, difficulty, plays, correct_count
+    FROM gk_pool ORDER BY random() LIMIT 60`;
+  return res.status(200).json({ questions: rows.map((r) => ({
+    id: String(r.id), category: r.category, question: r.question, correct: r.correct,
+    distractors: Array.isArray(r.distractors) ? r.distractors : [],
+    difficulty: Math.round(aDifficulty(r.difficulty, r.plays, r.correct_count) * 100) / 100,
+  })) });
+}
+
+// A finished run: recompute an authoritative score (each submitted per-question
+// pts is clamped to what that question could legitimately earn), calibrate the
+// pool's difficulty from the answers, and keep only the player's public BEST.
+async function arenaSubmit(req, res, body, userId) {
+  const answers = Array.isArray(body.answers) ? body.answers.slice(0, 600) : [];
+  const questions = Math.max(0, Math.min(parseInt(body.questions, 10) || answers.length, 100000));
+  const freeze = aclamp(parseInt(body.freeze, 10) || 0, 0, 999);
+  const hint = aclamp(parseInt(body.hint, 10) || 0, 0, 999);
+  const skip = aclamp(parseInt(body.skip, 10) || 0, 0, 999);
+  const ids = answers.map((a) => parseInt(a.id, 10)).filter(Number.isInteger);
+  const diffs = new Map();
+  if (ids.length) {
+    const drows = await sql`SELECT id, difficulty, plays, correct_count FROM gk_pool WHERE id = ANY(${ids}::bigint[])`;
+    for (const r of drows) diffs.set(Number(r.id), aDifficulty(r.difficulty, r.plays, r.correct_count));
+  }
+  let score = 0, streak = 0;
+  const statIds = [], oks = [];
+  for (const a of answers) {
+    const id = parseInt(a.id, 10);
+    if (!Number.isInteger(id)) continue;
+    const base = diffs.has(id) ? diffs.get(id) : 2.5;
+    const ok = a.ok === true || a.ok === 1;
+    statIds.push(id); oks.push(ok ? 1 : 0);
+    if (ok) { score += aclamp(parseInt(a.pts, 10) || 0, 0, aMaxQPts(base, streak)); streak += 1; }
+    else streak = 0;
+  }
+  if (statIds.length) {
+    try {
+      await sql`UPDATE gk_pool g SET plays = plays + 1, correct_count = correct_count + c.ok
+                FROM (SELECT unnest(${statIds}::bigint[]) AS id, unnest(${oks}::int[]) AS ok) c
+                WHERE g.id = c.id`;
+    } catch (e) { console.error("[arena] stat update:", e.message); }
+  }
+  const prev = (await sql`SELECT best_score FROM arena_score WHERE clerk_user_id = ${userId}`)[0]?.best_score || 0;
+  const isBest = score > prev;
+  if (isBest) {
+    await sql`INSERT INTO arena_score (clerk_user_id, best_score, questions, freeze_used, hint_used, skip_used, updated_at)
+              VALUES (${userId}, ${score}, ${questions}, ${freeze}, ${hint}, ${skip}, NOW())
+              ON CONFLICT (clerk_user_id) DO UPDATE SET best_score = EXCLUDED.best_score, questions = EXCLUDED.questions,
+                freeze_used = EXCLUDED.freeze_used, hint_used = EXCLUDED.hint_used, skip_used = EXCLUDED.skip_used, updated_at = NOW()`;
+  } else {
+    await sql`INSERT INTO arena_score (clerk_user_id, best_score, questions) VALUES (${userId}, ${score}, ${questions})
+              ON CONFLICT (clerk_user_id) DO NOTHING`;
+  }
+  return res.status(200).json({ ok: true, score, best: Math.max(prev, score), isBest });
+}
+
+// Leaderboard, hidden until GATE distinct players have a score.
+async function arenaBoard(req, res, userId) {
+  await ensureUsernameCol();
+  const players = (await sql`SELECT COUNT(*)::int AS n FROM arena_score`)[0]?.n || 0;
+  const mine = (await sql`SELECT best_score, questions, freeze_used, hint_used, skip_used FROM arena_score WHERE clerk_user_id = ${userId}`)[0] || null;
+  const unlocked = players >= ARENA_GATE;
+  const rank = mine && unlocked ? ((await sql`SELECT COUNT(*)::int AS n FROM arena_score WHERE best_score > ${mine.best_score}`)[0]?.n || 0) + 1 : null;
+  const you = mine ? { rank, score: mine.best_score, questions: mine.questions, freeze: mine.freeze_used, hint: mine.hint_used, skip: mine.skip_used } : null;
+  if (!unlocked) return res.status(200).json({ locked: true, players, need: ARENA_GATE, you });
+  const top = await sql`
+    SELECT a.best_score, a.questions, a.freeze_used, a.hint_used, a.skip_used, p.username
+    FROM arena_score a LEFT JOIN profiles p ON p.clerk_user_id = a.clerk_user_id
+    ORDER BY a.best_score DESC, a.updated_at ASC LIMIT 100`;
+  return res.status(200).json({
+    locked: false, players, you,
+    top: top.map((r) => ({ name: r.username || "player", score: r.best_score, questions: r.questions, freeze: r.freeze_used, hint: r.hint_used, skip: r.skip_used })),
+  });
+}
+
 export default async function handler(req, res) {
   try {
     await ensureTables();
@@ -340,6 +482,9 @@ export default async function handler(req, res) {
       if (body?.action === "mockContribute") return mockContribute(req, res, body, userId);
       if (body?.action === "mockFlag") return mockFlag(req, res, body, userId);
       if (body?.action === "mockDraw") return mockDraw(req, res, body);
+      if (body?.action === "arenaDraw") return arenaDraw(req, res, body);
+      if (body?.action === "arenaSubmit") return arenaSubmit(req, res, body, userId);
+      if (body?.action === "arenaBoard") return arenaBoard(req, res, userId);
 
       // Default: save the user's study blob.
       const data = body?.data;

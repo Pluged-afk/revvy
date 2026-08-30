@@ -27,6 +27,7 @@ export function AuthProvider({ children }) {
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [loading, setLoading] = useState(true);
   const [usage, setUsage] = useState(null); // question-limit state from /api/usage
+  const [username, setUsername] = useState(null); // public display name (leaderboards)
 
   // Normalized user object the rest of the app expects ({ id, email }).
   const user = useMemo(() => {
@@ -60,6 +61,7 @@ export function AuthProvider({ children }) {
       setSubPlan(p.subscription_plan || null);
       setPeriodEnd(p.current_period_end || null);
       setCancelAtPeriodEnd(!!p.cancel_at_period_end);
+      setUsername(p.username || null);
       return p.is_pro === true;
     } catch {
       return null;
@@ -238,11 +240,30 @@ export function AuthProvider({ children }) {
   // Dev-mode Pro override (local only, dev.devMode is false in production).
   const effIsPro = dev.devMode && dev.pro !== null ? dev.pro : isPro;
 
+  // Claim / change the public username used on leaderboards. Returns
+  // { ok } or { error, taken } so the picker can show a friendly message.
+  const saveUsername = useCallback(async (name) => {
+    try {
+      const token = await getToken();
+      if (!token) return { error: "Sign in first." };
+      const res = await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "setUsername", username: name }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) return { error: d.error || "Could not save name.", taken: !!d.taken };
+      setUsername(d.username);
+      return { ok: true, username: d.username };
+    } catch { return { error: "Could not save name." }; }
+  }, [getToken]);
+
   const value = {
     user, isPro: effIsPro, loading: loading || !isLoaded,
     subStatus, subPlan, periodEnd, cancelAtPeriodEnd, getToken,
     signOut, deleteAccount, reauthenticate, setProStatus, refreshProfile, startCheckout, openPortal,
     usage, refreshUsage, consumeQuestions, watchAd, buyPack, consumeMock,
+    username, saveUsername,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
