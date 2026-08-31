@@ -10,21 +10,22 @@ const MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const YEARLY_PRICE = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
 
 const FREE = [
-  "50 questions a day",
+  "50 questions a day (up to 70 with ads)",
   "Multiple choice, always free",
   "Flashcards, fill-in and match (with ads)",
-  "One exam a day (with ads)",
+  "One custom exam a day (with ads)",
   "Up to 20 questions per quiz",
+  "Adaptive difficulty and spaced-repetition review",
   "Files up to 5 MB",
 ];
 
 const PRO_MONTHLY = [
   "250 questions a day",
   "All four quiz types, no ads",
-  "Unlimited exam mode and custom papers",
+  "Unlimited custom exams from your notes",
+  "Full mock tests: SAT, ACT, GRE and 5 more",
   "Up to 100 questions per quiz",
-  "Unlimited file uploads",
-  "No ads, anywhere",
+  "Unlimited uploads, plus lecture audio and video",
   "Cancel anytime",
 ];
 
@@ -36,6 +37,10 @@ const PRO_YEARLY = [
 ];
 
 const FAQ = [
+  { q: "What can I upload?", a: "PDFs, photos of a page or whiteboard, and typed or pasted notes on any plan. Pro also reads lecture audio and video by transcribing it, and you can import an existing Quizlet set as flashcards." },
+  { q: "Which exams can I mock?", a: "The SAT, ACT, PSAT/NMSQT, GRE, GMAT, LSAT, MCAT and UCAT. Each mock uses the real sections, question counts, timing and score scale, and marks itself the moment you finish. Standardized mocks are a Pro feature." },
+  { q: "How accurate are the questions?", a: "Every quiz is built from the material you give it, so it asks about what is actually in your notes, and each answer comes with a short explanation. If a question ever looks wrong, you can flag it and Revyy replaces it." },
+  { q: "What languages does it support?", a: "Twenty, including Spanish, French, German, Portuguese, Japanese, Hindi and Arabic. You can generate and answer quizzes in your own language." },
   { q: "Can I cancel anytime?", a: "Yes. You can manage or cancel your subscription whenever you like from the billing portal. You keep Pro until the end of the period you already paid for, with no cancellation fee." },
   { q: "When am I charged?", a: "You are charged when you upgrade, then automatically each period (monthly or yearly) until you cancel." },
   { q: "What payment methods do you accept?", a: "All major credit and debit cards, handled securely by Stripe. We never see or store your card details." },

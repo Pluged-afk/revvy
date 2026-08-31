@@ -4,6 +4,15 @@ import { useAuth } from "../context/AuthContext.jsx";
 import usePageMeta from "../lib/usePageMeta.js";
 import AdSlot from "../components/AdSlot.jsx";
 import Icon from "../components/Icon.jsx";
+import { MOCK_EXAMS } from "../lib/mockExams.js";
+
+// The real standardized-test roster, straight from the app so the marketing page
+// can never claim a test the product does not actually build.
+const EXAM_ORDER = ["sat", "act", "psat", "gre", "gmat", "lsat", "mcat", "ucat"];
+const EXAMS = EXAM_ORDER
+  .map((id) => MOCK_EXAMS.find((e) => e.id === id))
+  .filter(Boolean)
+  .map((e) => ({ name: e.name, blurb: e.blurb, note: e.note }));
 
 // A faithful, static replica of the app's real quiz screen: same topbar,
 // progress bar, difficulty/type pills, Fraunces question, lettered options,
@@ -130,8 +139,8 @@ const FEATURES = [
   },
   {
     icon: "exam",
-    title: "Mock exams that feel like the real paper",
-    desc: "Timed papers with sections, written answers and marks. You get a grade and a breakdown of where the points went.",
+    title: "Real exam formats, not a generic quiz",
+    desc: "Build a timed exam from your own notes, or sit a full mock of the SAT, ACT, GRE and five other tests with their real sections, timing and scoring.",
   },
   {
     icon: "repeat",
@@ -139,9 +148,9 @@ const FEATURES = [
     desc: "Miss a question and Revyy schedules it to return a day later, then a few days later, until you stop missing it.",
   },
   {
-    icon: "layers",
-    title: "Four ways to practise",
-    desc: "Multiple choice, flashcards, fill in the blank, and match terms. Switch based on the subject and how close the exam is.",
+    icon: "target",
+    title: "Difficulty that tracks how you are doing",
+    desc: "Practice quizzes read your recent results and nudge the difficulty up or down, so you are neither bored nor buried.",
   },
 ];
 
@@ -163,27 +172,47 @@ const STEPS = [
   },
 ];
 
+// How the app adapts to each student. All real, all shipped.
+const ADAPTS = [
+  {
+    title: "It remembers your material",
+    desc: "Upload the same subject again and Revyy builds on what it already made, so a topic you keep studying gets deeper, not repetitive.",
+  },
+  {
+    title: "Fix your misses in one tap",
+    desc: "After a quiz, drill only the questions you got wrong as a fresh mini-quiz. No new upload, no waiting.",
+  },
+  {
+    title: "A review deck that schedules itself",
+    desc: "Every miss becomes a review card that resurfaces on a spaced schedule, the method shown to beat rereading for long-term recall.",
+  },
+  {
+    title: "Study in your own language",
+    desc: "Generate and answer quizzes in any of 20 languages, from Spanish and French to Japanese, Hindi and Arabic.",
+  },
+];
+
 const FREE_PERKS = [
   "50 questions a day",
   "Multiple choice, always free",
-  "Flashcards, match and one exam a day with ads",
+  "Flashcards, fill-in and match (with ads)",
+  "One custom exam a day (with ads)",
   "Up to 20 questions per quiz",
   "Files up to 5 MB",
 ];
 const PRO_PERKS = [
   "250 questions a day",
-  "All four quiz types",
-  "Unlimited and custom exam papers",
+  "All four quiz types, no ads",
+  "Unlimited custom exams from your notes",
+  "Full mock tests: SAT, ACT, GRE and 5 more",
   "Up to 100 questions per quiz",
-  "Unlimited file uploads",
-  "Lecture audio and video, transcribed",
-  "No ads, anywhere",
+  "Unlimited uploads, plus lecture audio and video",
 ];
 
 const TRUST = [
   { icon: "tag", label: "Free to start, no card" },
   { icon: "camera", label: "PDFs, notes, lectures, Quizlet" },
-  { icon: "globe", label: "Works in 20+ languages" },
+  { icon: "globe", label: "20 languages" },
   { icon: "lock", label: "Your notes stay private" },
 ];
 
@@ -286,6 +315,57 @@ export default function Home() {
                 <div className="step-num">{s.n}</div>
                 <h3>{s.title}</h3>
                 <p>{s.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Standardized mock exams (the real roster, from MOCK_EXAMS) */}
+      <section className="section">
+        <div className="container">
+          <div className="section-head">
+            <div className="section-label">Sit the real thing first</div>
+            <h2>Full mock exams for eight standardized tests</h2>
+            <p>
+              Each mock matches the real paper: the right sections, question
+              counts, timing and score scale. Every question is multiple choice,
+              so the whole paper is marked the moment you finish and you get a
+              scaled score, not just a percentage.
+            </p>
+          </div>
+          <div className="exam-grid">
+            {EXAMS.map((e) => (
+              <div key={e.name} className="exam-card">
+                <div className="exam-name">{e.name}</div>
+                <div className="exam-blurb">{e.blurb}</div>
+                <div className="exam-note">{e.note}</div>
+              </div>
+            ))}
+          </div>
+          <p className="hero-note" style={{ marginTop: 22 }}>
+            Mock tests are a Pro feature, up to two full papers a day. Timed exams
+            built from your own notes are on every plan.
+          </p>
+        </div>
+      </section>
+
+      {/* How it adapts to each student */}
+      <section className="section section-soft">
+        <div className="container">
+          <div className="section-head">
+            <div className="section-label">Personal by design</div>
+            <h2>It learns how you study, not just what you upload</h2>
+            <p>
+              Revyy keeps a private model of what you have practised and what you
+              keep getting wrong, then aims your next session at exactly that.
+            </p>
+          </div>
+          <div className="spec-list">
+            {ADAPTS.map((a) => (
+              <div key={a.title} className="spec-item">
+                <h3>{a.title}</h3>
+                <p>{a.desc}</p>
               </div>
             ))}
           </div>

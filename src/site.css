@@ -264,6 +264,23 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 .faq-item h3 { font-size: 18px; margin-bottom: 8px; font-weight: 600; }
 .faq-item p { font-size: 15.5px; color: var(--ink-soft); line-height: 1.66; margin: 0; }
 
+/* ── Exam roster (real standardized tests, pulled from MOCK_EXAMS) ── */
+.exam-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.exam-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 18px 16px; transition: border-color .18s ease, box-shadow .2s ease; }
+.exam-card:hover { border-color: #d8cfbd; box-shadow: var(--shadow-sm); }
+.exam-name { font-family: 'Fraunces', Georgia, serif; font-size: 20px; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+.exam-blurb { font-size: 12.5px; color: var(--clay); font-weight: 600; margin-top: 5px; }
+.exam-note { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin-top: 9px; }
+@media (max-width: 900px) { .exam-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 460px) { .exam-grid { grid-template-columns: 1fr; } }
+
+/* A compact two-column "spec" list for the personalization / method section. */
+.spec-list { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 48px; }
+.spec-item { padding: 22px 0; border-top: 1px solid var(--line); }
+.spec-item h3 { font-size: 18px; margin: 0 0 6px; font-weight: 600; }
+.spec-item p { font-size: 14.5px; color: var(--ink-soft); line-height: 1.6; margin: 0; }
+@media (max-width: 760px) { .spec-list { grid-template-columns: 1fr; } }
+
 /* ── Blog ────────────────────────────────────────────────────── */
 .link-arrow { display: inline-flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 600; color: var(--clay); }
 .byline { font-size: 14px; color: var(--muted); }

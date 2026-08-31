@@ -38,6 +38,26 @@ export default function About() {
             material and get a focused, accurate quiz in seconds, so your time goes on practising
             instead of preparing to practise.
           </p>
+
+          <h2>Built on how memory actually works</h2>
+          <p>
+            Two things move information into long-term memory better than anything else: pulling
+            it back out from scratch, and spacing that practice over time. Decades of research call
+            these active recall and spaced repetition. Revyy is built around both. Instead of
+            handing you notes to read again, it asks you questions, and the ones you miss come back
+            on a widening schedule until you stop missing them. That is the whole loop, and it is
+            the part most study apps skip.
+          </p>
+
+          <h2>Grounded in your material, not the internet</h2>
+          <p>
+            When you upload a page of notes, Revyy writes questions about what is on that page.
+            If a fact is not in your material, it does not show up in your quiz, and every answer
+            comes with a short explanation of why it is right. You can also flag a question that
+            looks off, and it gets replaced. The goal is simple: you should be able to trust that
+            practising here is practising the real thing, whether that is your own lecture notes or
+            a full mock of the SAT, ACT or GRE.
+          </p>
         </div>
       </section>
 
