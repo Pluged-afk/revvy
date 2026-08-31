@@ -5292,7 +5292,7 @@ export default function StudyQuiz() {
 const Sb = {
   root:        { minHeight:"100vh", background:"var(--color-background-tertiary)", color:"var(--color-text-primary)", fontFamily:"'DM Sans','Helvetica Neue',sans-serif", display:"flex", flexDirection:"column" },
   brand:       { fontFamily:"'Fraunces',Georgia,serif", fontSize:16, fontWeight:700, color:"var(--color-text-primary)", letterSpacing:0.5, display:"flex", alignItems:"center", gap:8 },
-  hero:        { background:"#312e81", padding:"36px 24px 34px" },
+  hero:        { background:"#312e81", padding:"26px 24px 28px" },
   h1:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:32, fontWeight:700, color:"#fff", lineHeight:1.15, letterSpacing:-0.5, margin:"14px 0 12px" },
   h2:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:22, fontWeight:700, color:"var(--color-text-primary)", letterSpacing:-0.3, margin:"0 0 16px" },
   secLabel:    { fontSize:11, fontWeight:700, color:"var(--color-text-tertiary)", letterSpacing:1.5, margin:"0 0 12px", textTransform:"uppercase" },
@@ -5300,7 +5300,7 @@ const Sb = {
   planCard:    { flex:1, background:"var(--color-background-primary)", borderRadius:14, padding:"16px 15px", border:"1px solid var(--color-border-secondary)" },
   topbar:      { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", background:"var(--color-background-primary)", borderBottom:"0.5px solid var(--color-border-tertiary)", position:"sticky", top:0, zIndex:10 },
   backBtn:     { background:"none", border:"none", cursor:"pointer", fontSize:13, color:"var(--color-text-secondary)", fontFamily:"inherit", padding:0, fontWeight:500 },
-  dropzone:    { border:"1.5px dashed var(--color-border-secondary)", borderRadius:14, padding:"28px 20px", cursor:"pointer", background:"var(--color-background-primary)", textAlign:"center", marginBottom:14, transition:"all 0.2s", display:"flex", flexDirection:"column", alignItems:"center", gap:8 },
+  dropzone:    { border:"1.5px dashed var(--color-border-secondary)", borderRadius:16, padding:"28px 20px", minHeight:230, cursor:"pointer", background:"var(--color-background-primary)", textAlign:"center", marginBottom:14, transition:"all 0.2s", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8 },
   textarea:    { width:"100%", height:180, borderRadius:12, border:"0.5px solid var(--color-border-secondary)", background:"var(--color-background-primary)", color:"var(--color-text-primary)", fontSize:14, padding:"13px 14px", resize:"vertical", fontFamily:"inherit", outline:"none", marginBottom:14, boxSizing:"border-box", lineHeight:1.6 },
   settingsBox: { background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-tertiary)", marginBottom:14, overflow:"hidden" },
   settingRow:  { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"11px 14px", borderBottom:"0.5px solid var(--color-border-tertiary)", gap:10, flexWrap:"wrap" },
@@ -5371,11 +5371,11 @@ const CSS = `
       max-width:900px;margin:0 auto;
       display:grid;grid-template-columns:1fr 1.05fr;
       grid-template-areas:"back back" "bar head" "sub cta";
-      column-gap:48px;row-gap:20px;align-items:start;
+      column-gap:48px;row-gap:14px;align-items:start;
     }
     .rv-hero-back{grid-area:back;margin-bottom:0!important;}
     .rv-hero-bar{grid-area:bar;}
-    .rv-hero-head{grid-area:head;align-self:start;font-size:40px!important;margin:0!important;}
+    .rv-hero-head{grid-area:head;align-self:center;font-size:30px!important;margin:0!important;}
     .rv-hero-sub{grid-area:sub;align-self:end;}
     .rv-hero-cta{grid-area:cta;align-self:end;justify-self:start;}
 
@@ -5388,8 +5388,8 @@ const CSS = `
     .rv-topbar{padding:12px 40px!important;}
 
     /* Upload: left=file input, right=settings */
-    .rv-upload-body{display:grid;grid-template-columns:1fr 1fr;gap:0 36px;padding:28px 40px!important;max-width:1100px;margin:0 auto;align-items:start;}
-    .rv-ul-right{padding-top:4px;}
+    .rv-upload-body{display:grid;grid-template-columns:1fr 1fr;gap:0 40px;padding:32px 40px!important;max-width:1000px;margin:0 auto;align-items:start;align-content:center;min-height:calc(100vh - 116px);}
+    .rv-ul-right{padding-top:2px;}
 
     /* Quiz / Results / Loading / Exam: centered wider */
     .rv-center{max-width:800px;margin:0 auto;width:100%;padding:32px 40px!important;}
