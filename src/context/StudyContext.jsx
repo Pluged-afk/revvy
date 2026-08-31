@@ -3,6 +3,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { makePerfEntry } from "../lib/studentModel.js";
 import { normBank, bankAddItems, bankRejectQ, bankMarkUsed, bankMerge } from "../lib/questionBank.js";
 import { normLibrary, libraryAddDoc, libraryRemove, libraryMerge } from "../lib/studyLibrary.js";
+import { normWallet, walletAdd, addSaverProgress, tickStreak, arenaEarn, passEarn, POWERUP_CAP, SAVER_CAP } from "../lib/rewards.js";
 
 // ── Server-synced study data ──────────────────────────────────────────
 // Single source of truth for the spaced-repetition deck, lifetime stats +
@@ -31,7 +32,7 @@ function normStats(s) {
   };
 }
 function emptyData() {
-  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, updatedAt: 0 };
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, updatedAt: 0 };
 }
 const asTopicStats = (t) => (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
 
@@ -71,6 +72,9 @@ function loadLocal() {
       bank: normBank(blob.bank),
       library: normLibrary(blob.library),
       mockScores: (blob.mockScores && typeof blob.mockScores === "object" && !Array.isArray(blob.mockScores)) ? blob.mockScores : {},
+      wallet: normWallet(blob.wallet),
+      streakSavers: Math.max(0, Math.min(SAVER_CAP, Number(blob.streakSavers) || 0)),
+      savedProgress: Math.max(0, Number(blob.savedProgress) || 0),
       updatedAt: blob.updatedAt || 0,
     };
   }
@@ -85,6 +89,9 @@ function loadLocal() {
     bank: normBank({}),
     library: normLibrary({}),
     mockScores: {},
+    wallet: normWallet({}),
+    streakSavers: 0,
+    savedProgress: 0,
     updatedAt: 0,
   };
 }
@@ -142,6 +149,11 @@ function mergeStudy(server, local) {
     bank: bankMerge(server.bank, local.bank),
     library: libraryMerge(server.library, local.library),
     mockScores: mergeMockScores(server.mockScores, local.mockScores),
+    // Rewards: never lose an earned power-up or saver across devices, so keep the
+    // higher of each (they are capped, so this cannot inflate past the limit).
+    wallet: (() => { const a = normWallet(server.wallet), b = normWallet(local.wallet); return { hint: Math.max(a.hint, b.hint), freeze: Math.max(a.freeze, b.freeze), skip: Math.max(a.skip, b.skip) }; })(),
+    streakSavers: Math.max(0, Math.min(SAVER_CAP, Math.max(Number(server.streakSavers) || 0, Number(local.streakSavers) || 0))),
+    savedProgress: Math.max(0, Number(server.savedProgress) || 0, Number(local.savedProgress) || 0),
     updatedAt: Date.now(),
   };
 }
@@ -291,6 +303,46 @@ export function StudyProvider({ children }) {
     });
   }, [commit]);
 
+  // Finish an activity (the one place rewards are granted): tick the universal
+  // streak (any mode keeps it alive), award the earned power-up (endless by
+  // score; quiz/exam/mock only on a pass), and add study questions toward the
+  // next streak saver (study modes only, never the arena). Returns the power-up
+  // type earned this time (or null) so the caller can show a toast.
+  const completeActivity = useCallback((opts = {}) => {
+    const mode = opts.mode || "quiz";
+    const correct = Math.max(0, Number(opts.correct) || 0);
+    const total = Math.max(0, Number(opts.total) || 0);
+    const score = Number(opts.score) || 0;
+    const isArena = mode === "arena";
+    const earned = isArena ? arenaEarn(score) : passEarn(correct, total);
+    commit((p) => {
+      const s = normStats(p.stats), today = dstr();
+      const st = tickStreak(
+        { streak: s.streak, best: s.best, lastActive: s.lastActive, streakSavers: p.streakSavers || 0 },
+        today, yesterdayStr(),
+      );
+      let streakSavers = st.streakSavers;
+      let savedProgress = Number(p.savedProgress) || 0;
+      if (!isArena) { const sp = addSaverProgress(savedProgress, streakSavers, total); savedProgress = sp.savedProgress; streakSavers = sp.streakSavers; }
+      const wallet = earned ? walletAdd(p.wallet, earned) : normWallet(p.wallet);
+      return {
+        ...p, wallet, streakSavers, savedProgress,
+        stats: {
+          answered: isArena ? s.answered : s.answered + total,
+          correct: isArena ? s.correct : s.correct + correct,
+          streak: st.streak, best: st.best, lastActive: today,
+        },
+      };
+    });
+    return earned;
+  }, [commit]);
+
+  // Spend one power-up the moment it is USED mid-activity, in any mode.
+  const usePowerup = useCallback((type) => {
+    if (!type || !(type in POWERUP_CAP)) return;
+    commit((p) => { const w = normWallet(p.wallet); return { ...p, wallet: { ...w, [type]: Math.max(0, w[type] - 1) } }; });
+  }, [commit]);
+
   // Record per-topic outcomes (seen + correct) from a finished quiz/exam. Powers
   // the mastery view and "drill weak spots". Ignores blank / "general" topics.
   const recordTopics = useCallback((rows) => {
@@ -381,7 +433,9 @@ export function StudyProvider({ children }) {
 
   const value = {
     cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans, topicStats: data.topicStats, perf: data.perf, bank: data.bank, library: data.library, mockScores: data.mockScores,
+    wallet: data.wallet, streakSavers: data.streakSavers, savedProgress: data.savedProgress,
     addMissed, grade, removeCard, clearAll, setExamDate, recordSession, recordTopics, recordPerf,
+    completeActivity, usePowerup,
     bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc, recordMockScore,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };

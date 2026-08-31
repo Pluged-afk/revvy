@@ -53,5 +53,9 @@ export function useSRS() {
     library: study?.library || { docs: [] },
     addLibraryDoc: study?.addLibraryDoc || (() => {}), removeLibraryDoc: study?.removeLibraryDoc || (() => {}),
     mockScores: study?.mockScores || {}, recordMockScore: study?.recordMockScore || (() => {}),
+    // Rewards economy: power-up wallet, streak savers, and the grant/spend API.
+    wallet: study?.wallet || { hint: 0, freeze: 0, skip: 0 },
+    streakSavers: study?.streakSavers || 0, savedProgress: study?.savedProgress || 0,
+    completeActivity: study?.completeActivity || (() => null), usePowerup: study?.usePowerup || (() => {}),
   };
 }

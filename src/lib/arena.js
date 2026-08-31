@@ -1,8 +1,10 @@
 // ── Endless Arena: pure game rules (shared by client + server) ──────────────
 // A single-player, sudden-death quiz run. Questions come from a pooled bank; the
 // player answers until one wrong answer (or a timeout) ends the run and locks a
-// score. Everything here is a pure function so both the client (to play) and the
-// server (to validate the submitted score) compute identical numbers.
+// score. A visible per-question timer ramps down with depth. Anti-cheat: leaving
+// the tab pauses the timer and swaps the question on return (client-side, in
+// ArenaGame). Everything here is a pure function so both the client (to play) and
+// the server (to validate the submitted score) compute identical numbers.
 
 export const ARENA = {
   BASE_TIMER: 15,     // seconds on the first questions
@@ -10,7 +12,6 @@ export const ARENA = {
   RAMP_EVERY: 5,      // every N questions the band + timer tighten
   N_OPTIONS: 4,       // 1 correct + 3 distractors
   GATE_PLAYERS: 100,  // leaderboard stays hidden until this many DISTINCT players have a score
-  POWERUP_EVERY: 5,   // earn a power-up every N questions survived
   POWERUPS: ["freeze", "hint", "skip"],
   DIFF_MIN: 1,
   DIFF_MAX: 5,
@@ -67,15 +68,6 @@ export function difficultyFromStats(baseDiff, plays, correctCount) {
 export function timerFor(qIndex) {
   const step = Math.floor(Math.max(0, qIndex) / ARENA.RAMP_EVERY);
   return Math.max(ARENA.MIN_TIMER, ARENA.BASE_TIMER - step);
-}
-
-// Which power-up (if any) is earned for surviving to this depth. Rotates so a
-// long run collects a mix of freeze / hint / skip.
-export function powerupAt(qIndexOneBased) {
-  if (qIndexOneBased > 0 && qIndexOneBased % ARENA.POWERUP_EVERY === 0) {
-    return ARENA.POWERUPS[(qIndexOneBased / ARENA.POWERUP_EVERY - 1) % ARENA.POWERUPS.length];
-  }
-  return null;
 }
 
 // Deterministic-ish shuffle / sample using an injectable RNG (default Math.random).

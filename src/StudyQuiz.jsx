@@ -29,6 +29,12 @@ const FEAT_ICONS = ["notes", "camera", "pencil", "layers", "chat", "globe"];
 const stripEmoji = (s) => String(s ?? "").replace(/^[\u{1F000}-\u{1FAFF}☀-➿⬀-⯿←-⇿️‍\s]+/u, "").trim();
 // Icon per upload tab id (labels come from the translation data with emoji).
 const TAB_ICONS = { file: "folder", text: "pencil", photo: "camera", media: "play" };
+// Localized name for a power-up ("hint" | "freeze" | "skip"), reusing the arena
+// labels so the reward economy speaks one language everywhere.
+const pupName = (t, key) => key === "freeze" ? (t.arenaFreeze || "Freeze") : key === "skip" ? (t.arenaSkip || "Skip") : (t.arenaHint || "Hint");
+// Leaderboard is hidden for now (still gated at 100 players server-side too). Flip
+// to true to re-expose the entry points on the arena intro + game-over screens.
+const SHOW_ARENA_LEADERBOARD = false;
 // Parse a pasted Quizlet export into flashcards. Quizlet separates term from
 // definition with a Tab (or comma) and cards with a newline (or semicolon); we
 // split on the FIRST separator per row so definitions keep their own commas.
@@ -2056,6 +2062,7 @@ export default function StudyQuiz() {
   const [qIdx,         setQIdx]         = useState(0);
   const [answers,      setAnswers]      = useState([]);
   const [selected,     setSelected]     = useState(null);
+  const [quizElim,     setQuizElim]     = useState([]); // MCQ option indices hidden by a spent hint power-up
   // The material blocks the current quiz was built from, kept so "Report a
   // problem" (FlagFix) can regenerate a replacement grounded in the same notes.
   const genBlocksRef = useRef(null);
@@ -2183,6 +2190,13 @@ export default function StudyQuiz() {
     const sc = scoreMock(mock, mockSecResults);
     setMockPrev(srs.mockScores?.[mock.presetId]?.last || null);
     srs.recordMockScore(mock.presetId, sc.composite, sc.compositeMax);
+    // Universal streak + rewards for a finished mock. Question count (all graded
+    // sections) feeds the streak saver; the raw correct fraction (excluding the
+    // few point-banded sections like SJT) gates the earned power-up.
+    const graded = [...sc.rows, ...sc.extras];
+    const rawTotal = graded.reduce((a, r) => a + (Number(r.count) || 0), 0);
+    const rawCorrect = graded.filter((r) => !r.band).reduce((a, r) => a + (Number(r.raw) || 0), 0);
+    setEarnedReward(srs.completeActivity({ mode: "mock", correct: rawCorrect, total: rawTotal }));
   }, [screen, mock, mockSecResults, srs]);
   useEffect(() => {
     if (screen === "mock_run" && mockSecTimeLeft === 0 && mock && submittedSecRef.current !== mockSecIdx) submitSectionRef.current();
@@ -2250,6 +2264,7 @@ export default function StudyQuiz() {
   const [reviewPos,   setReviewPos]   = useState(0);
   const [reviewShown, setReviewShown] = useState(false); // answer revealed?
   const [srsAdded,    setSrsAdded]    = useState(0); // "+N added to review" note
+  const [earnedReward, setEarnedReward] = useState(null); // power-up earned on this finished quiz/exam (null = none)
   const startReview = () => {
     setReviewQueue(srs.dueCards.map((c) => c.id));
     setReviewPos(0); setReviewShown(false); setScreen("review");
@@ -2287,12 +2302,14 @@ export default function StudyQuiz() {
       // A scrambled retry of already-seen questions: mark it handled but record
       // nothing, so stats, the review deck, the bank and the adaptive signal are
       // not double-counted.
-      srsAddedRef.current = quiz; setSrsAdded(0);
+      srsAddedRef.current = quiz; setSrsAdded(0); setEarnedReward(null);
     } else if (screen === "results" && quiz && srsAddedRef.current !== quiz) {
       srsAddedRef.current = quiz;
       const missed = quiz.questions.filter((_, i) => answers[i] && answers[i].isCorrect === false).map(toCard);
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
-      stats.recordSession(answers.length, answers.filter((a) => a && a.isCorrect).length);
+      // Universal streak + rewards: passing earns a power-up, and the questions
+      // count toward the next (silent) streak saver. Supersedes recordSession.
+      setEarnedReward(srs.completeActivity({ mode: "quiz", correct: answers.filter((a) => a && a.isCorrect).length, total: answers.length }));
       srs.recordTopics(quiz.questions.map((q, i) => ({ topic: q.topic, correct: answers[i]?.isCorrect === true })));
       // Adaptive difficulty: log this round only if it was a fresh, difficulty-
       // calibrated set (not a fix-your-misses re-drill or a retry of seen
@@ -2310,7 +2327,7 @@ export default function StudyQuiz() {
       srsAddedRef.current = examEvals;
       const missed = examQs.filter((_, i) => (examEvals[i]?.score ?? 0) < 1).map(toCard);
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
-      stats.recordSession(examEvals.length, examEvals.filter((e) => (e?.score ?? 0) >= 1).length);
+      setEarnedReward(srs.completeActivity({ mode: "exam", correct: examEvals.filter((e) => (e?.score ?? 0) >= 1).length, total: examEvals.length }));
       srs.recordTopics(examQs.map((q, i) => ({ topic: q.topic, correct: (examEvals[i]?.score ?? 0) >= 1 })));
       // Personalization for exam mode: feed the exam into the adaptive-difficulty
       // history and bank its well-formed MCQs (leanQ skips written/fill), same as
@@ -2701,7 +2718,7 @@ export default function StudyQuiz() {
       const gate = await gateContent({ blocks: [{ type: "text", text: joined }], uiLangName: LANGS[lang]?.name });
       if (gate.decision === "block") { setQuizletErr(gateMessage(gate.category, t)); setQuizletBusy(false); return; }
       setQuiz({ type: "cards", title: t.qzImportedTitle, subject: "", questions: cards });
-      setQIdx(0); setAnswers([]); setSelected(null);
+      setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
       setShowQuizlet(false); setQuizletText(""); setQuizletBusy(false);
       setScreen("quiz");
     } catch { setQuizletErr(t.qzImportErr); setQuizletBusy(false); }
@@ -3190,7 +3207,7 @@ export default function StudyQuiz() {
       // fresh + genDiff mark this as a first-play, difficulty-calibrated round so
       // the results handler logs it into the adaptive-difficulty perf history.
       setQuiz({...res, type:finalType, fresh:true, genDiff:diff});
-      setQIdx(0); setAnswers([]); setSelected(null);
+      setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
       setScreen("quiz");
     } catch(err) {
       setError(err.message.includes("parse")?t.errAiFormat:err.message);
@@ -3249,7 +3266,7 @@ export default function StudyQuiz() {
       genBlocksRef.current = blocks; // keep the weak-spot brief for FlagFix regen
       if (reusedHashes.length) srs.bankUsed(reusedHashes); // rotate what's served next time
       setQuiz({ title: res?.title || t.drillWeak, subject: "", questions: merged, type: "mcq", fresh:true, genDiff:diff });
-      setQIdx(0); setAnswers([]); setSelected(null);
+      setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
       setScreen("quiz");
     } catch (err) {
       setError(err.message.includes("parse") ? t.errAiFormat : err.message);
@@ -3301,7 +3318,7 @@ export default function StudyQuiz() {
       genBlocksRef.current = blocks; // keep the summaries for FlagFix regen
       if (reused.length) srs.bankUsed(reused.map((q) => q._bankHash)); // rotate what is served next time
       setQuiz({ title: res?.title || t.libraryReviewTitle, subject: "", questions: merged, type: "mcq", fresh:true, genDiff:diff });
-      setQIdx(0); setAnswers([]); setSelected(null);
+      setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
       setScreen("quiz");
     } catch (err) {
       setError(err.message.includes("parse") ? t.errAiFormat : err.message);
@@ -3319,17 +3336,29 @@ export default function StudyQuiz() {
   const nextQ   = (isCorrect, detail) => {
     // `detail` carries what the learner picked (e.g. {selected} for MCQ) so the
     // results screen can show "Your answer" next to the correct one.
-    const upd=[...answers,{isCorrect,...(detail||{})}]; setAnswers(upd); setSelected(null);
+    const upd=[...answers,{isCorrect,...(detail||{})}]; setAnswers(upd); setSelected(null); setQuizElim([]);
     if (qIdx+1>=quiz.questions.length) setScreen("results");
     else setQIdx(i=>i+1);
   };
   const nextMCQ = () => { if(selected===null)return; nextQ(selected===quiz.questions[qIdx].correct,{selected}); };
+  // Spend a hint power-up in a normal quiz (the same wallet earned in the arena):
+  // hide two wrong options, before answering, once per question. Keeps at least
+  // two options on screen so short MCQs are not trivialised.
+  const quizHint = () => {
+    if (selected!==null || quizElim.length || (srs.wallet?.hint||0) <= 0) return;
+    const q = quiz.questions[qIdx];
+    const wrong = (q?.options||[]).map((_,i)=>i).filter(i=>i!==q.correct);
+    const nElim = Math.min(2, wrong.length-1);
+    if (nElim <= 0) return;
+    for (let x=wrong.length-1;x>0;x--){const j=Math.floor(Math.random()*(x+1));[wrong[x],wrong[j]]=[wrong[j],wrong[x]];}
+    setQuizElim(wrong.slice(0,nElim)); srs.usePowerup("hint"); haptic();
+  };
   // Retry re-shuffles the SAME questions into a new order (never regenerates),
   // so a second attempt isn't a memorised run. Marked `replay` so the results
   // handler doesn't double-count it into stats / the deck / the adaptive signal.
   const retry   = () => {
     setQuiz(prev => prev ? { ...prev, questions:[...prev.questions].sort(()=>Math.random()-0.5), fresh:false, replay:true } : prev);
-    setQIdx(0);setAnswers([]);setSelected(null);setScreen("quiz");
+    setQIdx(0);setAnswers([]);setSelected(null);setQuizElim([]);setScreen("quiz");
   };
   // Swap the flagged question in place with a freshly-generated replacement and
   // clear any pick, so the learner answers the corrected question (FlagFix).
@@ -3345,7 +3374,7 @@ export default function StudyQuiz() {
       qs[qIdx] = { ...qs[qIdx], ...nq };
       return { ...prev, questions: qs };
     });
-    setSelected(null);
+    setSelected(null); setQuizElim([]);
   };
   // Open an uploaded file in a new tab so the learner can see what they sent.
   const openFile = (f) => {
@@ -3373,7 +3402,7 @@ export default function StudyQuiz() {
     // fresh:false so this re-drill of already-missed questions is NOT logged
     // into the adaptive-difficulty perf history (it would skew accuracy low).
     setQuiz((prev) => ({ ...prev, questions: missedThisQuiz, title: t.fixMissesTitle, fresh:false }));
-    setQIdx(0); setAnswers([]); setSelected(null);
+    setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
     setScreen("quiz");
   };
 
@@ -3541,8 +3570,12 @@ export default function StudyQuiz() {
   const onArenaEnd = useCallback(async (result) => {
     setScreen("arena_over"); setArenaResult({ ...result, best: result.score, isBest: false, pending: true });
     const r = await arenaSubmitGlobal(result);
-    setArenaResult({ ...result, score: (r && r.score) ?? result.score, best: (r && r.best) ?? result.score, isBest: !!(r && r.isBest), pending: false });
-  }, []);
+    const finalScore = (r && r.score) ?? result.score;
+    // Grant the run's reward from the AUTHORITATIVE score, and keep the streak
+    // alive (endless counts toward the universal streak, not toward savers).
+    const earned = srs.completeActivity({ mode: "arena", score: finalScore });
+    setArenaResult({ ...result, score: finalScore, best: (r && r.best) ?? result.score, isBest: !!(r && r.isBest), pending: false, earned });
+  }, [srs]);
   const openArenaBoard = useCallback(async () => {
     setArenaBusy(true); setArenaBoardData(null); setScreen("arena_board");
     const b = await arenaBoardGlobal();
@@ -4102,6 +4135,7 @@ export default function StudyQuiz() {
               <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></h3>
               <div style={{display:"flex",flexDirection:"column",gap:9,marginTop:20}}>
                 {q.options.map((opt,i)=>{
+                  if(quizElim.includes(i)) return <div key={i} style={{height:54,borderRadius:12,border:"1px dashed var(--color-border-tertiary)",opacity:0.35}}/>;
                   const isChosen=selected===i,isCorrect=q.correct===i;
                   let extra={};
                   if(selected!==null){
@@ -4118,6 +4152,11 @@ export default function StudyQuiz() {
                   </button>;
                 })}
               </div>
+              {selected===null && (srs.wallet?.hint||0) > 0 && q.options.length>=3 && (
+                <button onClick={quizHint} disabled={quizElim.length>0} style={{marginTop:12,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,background:quizElim.length?"var(--color-background-secondary)":"var(--color-sel-tint)",border:`1px solid ${quizElim.length?"var(--color-border-tertiary)":"var(--color-accent)"}`,borderRadius:11,padding:"10px 12px",cursor:quizElim.length?"default":"pointer",opacity:quizElim.length?0.5:1,fontFamily:"inherit",fontSize:13,fontWeight:700,color:"var(--color-accent)"}}>
+                  <Icon name="gem" size={15}/>{quizElim.length?(t.hintUsed||"Two options removed"):(t.useHint||"Use a hint").concat(` (${srs.wallet?.hint||0})`)}
+                </button>
+              )}
               {selected!==null&&instant&&<div style={{borderRadius:10,padding:"12px 14px",marginTop:14,...(selected===q.correct?{background:"#f0fdf4",border:"0.5px solid #86efac",color:"#15803d"}:{background:"#fef2f2",border:"0.5px solid #fca5a5",color:"#b91c1c"})}} className="slide-up"><strong style={{fontSize:14}}>{selected===q.correct?t.correct:t.incorrect}</strong><p style={{margin:"5px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p></div>}
               {settings.autoAdvance && instant && selected!==null && <AutoAdvanceBar sec={autoAdvanceSec} runId={qIdx} t={t}/>}
               {(!settings.autoAdvance || instant) && <button style={{...Sb.btnPrimary,width:"100%",marginTop:settings.autoAdvance?12:20,opacity:selected===null?0.35:1,cursor:selected===null?"not-allowed":"pointer"}} onClick={nextMCQ} disabled={selected===null}>{settings.autoAdvance?t.skip||t.next:(isLast?t.finish:t.next)}</button>}
@@ -4147,6 +4186,12 @@ export default function StudyQuiz() {
         <div style={{display:"flex",flexWrap:"wrap",gap:5,justifyContent:"center",marginTop:16}}>{answers.map((a,i)=><span key={i} style={{width:14,height:14,borderRadius:4,background:a.isCorrect?"#4ade80":"#f87171"}}/>)}</div>
       </div>
       <div className="rv-center" style={{padding:"20px 16px"}}>
+        {earnedReward && (
+          <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
+            <Icon name="gem" size={18} style={{color:"var(--color-accent)",flexShrink:0}}/>
+            <span style={{flex:1,fontSize:12.5,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4}}>{(t.rewardEarned||"You earned a {p} power-up!").replace("{p}",pupName(t,earnedReward))}</span>
+          </div>
+        )}
         {srsAdded>0 && (
           <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
             <Icon name="repeat" size={18} style={{color:"var(--color-accent)",flexShrink:0}}/>
@@ -4577,6 +4622,12 @@ export default function StudyQuiz() {
           <p style={{margin:"14px 0 0",fontSize:14,color:"rgba(255,255,255,0.88)",lineHeight:1.6,maxWidth:300,marginLeft:"auto",marginRight:"auto"}}>{theme.msg}</p>
         </div>
         <div className="rv-center" style={{padding:"20px 16px"}}>
+          {earnedReward && (
+            <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
+              <Icon name="gem" size={18} style={{color:"var(--color-accent)",flexShrink:0}}/>
+              <span style={{flex:1,fontSize:12.5,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4}}>{(t.rewardEarned||"You earned a {p} power-up!").replace("{p}",pupName(t,earnedReward))}</span>
+            </div>
+          )}
           {srsAdded>0 && (
             <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid #c7d2fe",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
               <Icon name="repeat" size={18} style={{color:"var(--color-accent)",flexShrink:0}}/>
@@ -4862,7 +4913,7 @@ export default function StudyQuiz() {
           )}
           {arenaErr && <div style={{background:"#fef2f2",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>{arenaErr}</div>}
           <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,fontSize:16}} onClick={startArena}><Icon name="bolt" size={17}/>{t.arenaPlay}</button>
-          <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>
+          {SHOW_ARENA_LEADERBOARD && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
           <div style={{marginTop:22,display:"flex",flexDirection:"column",gap:11}}>
             {[["bolt",t.arenaHow1],["target",t.arenaHow2],["gem",t.arenaHow3]].map(([ic,tx],i)=>(
               <div key={i} style={{display:"flex",gap:11,alignItems:"flex-start",fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>
@@ -4887,7 +4938,7 @@ export default function StudyQuiz() {
         <button style={Sb.backBtn} onClick={()=>{ if(typeof window!=="undefined" && window.confirm(t.arenaQuitConfirm)) setScreen("arena_intro"); }}>✕</button>
         <span style={Sb.brand}>{t.arenaTitle}</span><span/>
       </div>
-      <ArenaGame key={`${arenaQs[0]?.id||0}_${arenaQs.length}`} questions={arenaQs} t={t} onEnd={onArenaEnd}/>
+      <ArenaGame key={`${arenaQs[0]?.id||0}_${arenaQs.length}`} questions={arenaQs} t={t} onEnd={onArenaEnd} initialPowerups={srs.wallet} onUsePowerup={srs.usePowerup}/>
     </div>
   );
   if (screen==="arena_over" && arenaResult) {
@@ -4903,6 +4954,12 @@ export default function StudyQuiz() {
           {!r.isBest && r.best!=null && <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",marginTop:6}}>{t.arenaBestIs.replace("{n}",(r.best||0).toLocaleString())}</div>}
         </div>
         <div className="rv-center" style={{padding:"22px 16px 40px"}}>
+          {r.earned && (
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
+              <Icon name="gem" size={16}/>
+              <span style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)"}}>{(t.rewardEarned||"You earned a {p} power-up!").replace("{p}",pupName(t,r.earned))}</span>
+            </div>
+          )}
           <div style={{display:"flex",gap:10,marginBottom:18}}>
             {[[t.arenaFreeze,r.freeze],[t.arenaHint,r.hint],[t.arenaSkip,r.skip]].map(([lbl,n],i)=>(
               <div key={i} style={{flex:1,textAlign:"center",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"11px 6px"}}>
@@ -4912,7 +4969,7 @@ export default function StudyQuiz() {
             ))}
           </div>
           <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={startArena}><Icon name="repeat" size={16}/>{t.arenaPlayAgain}</button>
-          <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>
+          {SHOW_ARENA_LEADERBOARD && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
           <button style={{width:"100%",background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit",padding:"14px 4px 0"}} onClick={()=>setScreen("upload")}>{t.arenaHome}</button>
         </div>
       </div>
@@ -5159,6 +5216,12 @@ export default function StudyQuiz() {
           {sc.goodScore!=null && <div style={{fontSize:11.5,color:"rgba(255,255,255,0.55)",marginTop:6}}>{(t.mockGoodScore||"A strong score is around {n}+").replace("{n}",sc.goodScore)}</div>}
         </div>
         <div className="rv-center" style={{padding:"20px 16px 40px"}}>
+          {earnedReward && (
+            <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
+              <Icon name="gem" size={18} style={{color:"var(--color-accent)",flexShrink:0}}/>
+              <span style={{flex:1,fontSize:12.5,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4}}>{(t.rewardEarned||"You earned a {p} power-up!").replace("{p}",pupName(t,earnedReward))}</span>
+            </div>
+          )}
           {/* Retake motivation: cheer an improvement, soften a dip. */}
           {mockPrev && (() => {
             const cur = sc.composite, prev = mockPrev.composite;

@@ -1,23 +1,40 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { buildServe, questionPoints, serveDifficulty, comboMult, timerFor, powerupAt, ARENA } from "../lib/arena.js";
+import { buildServe, questionPoints, serveDifficulty, comboMult, timerFor } from "../lib/arena.js";
 
-// The endless run itself: one life, a per-question timer that ramps down, and
-// three earn-as-you-go power-ups (freeze / hint / skip). Self-contained, it just
-// needs a batch of pool questions and calls onEnd(result) when the player misses.
-export default function ArenaGame({ questions, t, onEnd }) {
-  const [qi, setQi] = useState(0);
+// The endless run itself: one life, a visible per-question timer that ramps down,
+// and the three power-ups (freeze / hint / skip) the player already owns. A wrong
+// answer or a timeout ends the run. Anti-cheat: if the player leaves the tab (to
+// go search), the timer PAUSES while away and the question is SWAPPED for a fresh
+// one on return, with a short note, so any lookup is void. Power-ups are NOT
+// earned mid-run: you bring your wallet in (initialPowerups) and spend it, and a
+// run earns at most one new power-up at the end (granted by the score, outside
+// this component). Self-contained: give it a batch of pool questions and it calls
+// onEnd(result) when the player misses. onUsePowerup(type) is called the moment a
+// power-up is spent so the shared wallet is debited immediately.
+export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUsePowerup }) {
+  const [qi, setQi] = useState(0);                    // depth shown (1-based label)
   const [serve, setServe] = useState(() => buildServe(questions[0]));
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [timeLeft, setTimeLeft] = useState(() => timerFor(0));
-  const [frozen, setFrozen] = useState(false);
-  const [picked, setPicked] = useState(null);        // index once answered (brief reveal)
+  const [frozen, setFrozen] = useState(false);        // freeze power-up: pause the timer
+  const [tabHidden, setTabHidden] = useState(false);  // tab is backgrounded: pause the timer
+  const [picked, setPicked] = useState(null);         // index once answered (brief reveal)
   const [eliminated, setEliminated] = useState([]);   // option indices hidden by a hint
-  const [pups, setPups] = useState({ freeze: 0, hint: 0, skip: 0 });   // available
-  const [earned, setEarned] = useState(null);         // toast text for a just-earned power-up
+  const [swapNote, setSwapNote] = useState(false);    // "question changed, you left the tab" toast
+  const [pups, setPups] = useState(() => ({          // available (from the player's wallet)
+    freeze: Math.max(0, Number(initialPowerups?.freeze) || 0),
+    hint: Math.max(0, Number(initialPowerups?.hint) || 0),
+    skip: Math.max(0, Number(initialPowerups?.skip) || 0),
+  }));
   const [used, setUsed] = useState({ freeze: 0, hint: 0, skip: 0 }); // power-ups spent (submitted at the end)
   const answersRef = useRef([]);
   const overRef = useRef(false);
+  const poolRef = useRef(0);            // index of the last question consumed from the batch
+  const pickedRef = useRef(null);       // mirror of `picked` for the visibility handler
+  const hiddenRef = useRef(false);      // did the tab go hidden since the last question?
+  const swapTimerRef = useRef(null);
+  useEffect(() => { pickedRef.current = picked; }, [picked]);
 
   const total = questions.length;
   const cur = serve;
@@ -33,17 +50,44 @@ export default function ArenaGame({ questions, t, onEnd }) {
     });
   }, [onEnd, score, used]);
 
-  // Move to the next question (or end if the batch is exhausted).
+  // Draw the next question from the batch, wrapping so the run stays truly endless
+  // (it ends only on a wrong answer or a timeout, never because the batch ran out).
+  const nextServe = useCallback(() => {
+    poolRef.current = total ? (poolRef.current + 1) % total : 0;
+    return buildServe(questions[poolRef.current]);
+  }, [questions, total]);
+
+  // Move to the next question.
   const advance = useCallback((nextIndex) => {
-    if (nextIndex >= total) { finish(nextIndex); return; }
-    setServe(buildServe(questions[nextIndex]));
+    setServe(nextServe());
     setTimeLeft(timerFor(nextIndex));
     setPicked(null); setEliminated([]); setFrozen(false);
-    // Earn a power-up for surviving to this depth (1-based count of questions cleared).
-    const earn = powerupAt(nextIndex);
-    if (earn) { setPups((p) => ({ ...p, [earn]: p[earn] + 1 })); setEarned(earn); setTimeout(() => setEarned(null), 1400); }
     setQi(nextIndex);
-  }, [questions, total, finish]);
+  }, [nextServe]);
+
+  // Swap the current (unanswered) question for a fresh one and restart its timer.
+  // Used when the player leaves the tab and returns, so any lookup is void.
+  const swapQuestion = useCallback(() => {
+    if (overRef.current || pickedRef.current !== null) return;
+    setServe(nextServe());
+    setTimeLeft(timerFor(qi));
+    setEliminated([]); setFrozen(false);
+    setSwapNote(true);
+    if (swapTimerRef.current) clearTimeout(swapTimerRef.current);
+    swapTimerRef.current = setTimeout(() => setSwapNote(false), 2600);
+  }, [nextServe, qi]);
+
+  // Anti-cheat: leaving the tab pauses the timer; returning swaps the question.
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden) { hiddenRef.current = true; setTabHidden(true); return; }
+      if (!hiddenRef.current) return;
+      hiddenRef.current = false; setTabHidden(false);
+      swapQuestion();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { document.removeEventListener("visibilitychange", onVis); if (swapTimerRef.current) clearTimeout(swapTimerRef.current); };
+  }, [swapQuestion]);
 
   // Answer the current question.
   const pick = useCallback((i) => {
@@ -54,38 +98,37 @@ export default function ArenaGame({ questions, t, onEnd }) {
     answersRef.current.push({ id: cur.id, ok, pts });
     if (ok) {
       setScore((s) => s + pts);
-      const ns = streak + 1;
-      setStreak(ns);
+      setStreak(streak + 1);
       setTimeout(() => advance(qi + 1), 650);   // brief green flash, then next
     } else {
       setTimeout(() => finish(answersRef.current.length), 900);  // brief red flash, then game over
     }
   }, [picked, cur, pot, streak, qi, advance, finish]);
 
-  // Countdown. Frozen (via the freeze power-up) pauses it; answered pauses it.
+  // Countdown. Paused while frozen, answered, backgrounded, or over.
   useEffect(() => {
-    if (frozen || picked !== null || overRef.current) return;
+    if (frozen || tabHidden || picked !== null || overRef.current) return;
     if (timeLeft <= 0) { // ran out of time counts as a miss
       if (!overRef.current && picked === null) { answersRef.current.push({ id: cur.id, ok: false, pts: 0 }); setPicked(-1); setTimeout(() => finish(answersRef.current.length), 700); }
       return;
     }
     const id = setInterval(() => setTimeLeft((tl) => Math.max(0, tl - 0.1)), 100);
     return () => clearInterval(id);
-  }, [timeLeft, frozen, picked, cur, finish]);
+  }, [timeLeft, frozen, tabHidden, picked, cur, finish]);
 
   // ── Power-ups (event handlers, so ref/RNG access here is off the render path) ──
-  const doFreeze = useCallback(() => { if (pups.freeze <= 0 || picked !== null || frozen) return; setPups((p) => ({ ...p, freeze: p.freeze - 1 })); setUsed((u) => ({ ...u, freeze: u.freeze + 1 })); setFrozen(true); }, [pups.freeze, picked, frozen]);
+  const doFreeze = useCallback(() => { if (pups.freeze <= 0 || picked !== null || frozen) return; setPups((p) => ({ ...p, freeze: p.freeze - 1 })); setUsed((u) => ({ ...u, freeze: u.freeze + 1 })); onUsePowerup?.("freeze"); setFrozen(true); }, [pups.freeze, picked, frozen, onUsePowerup]);
   const doHint = useCallback(() => {
     if (pups.hint <= 0 || picked !== null || eliminated.length) return;
     const wrong = cur.options.map((_, i) => i).filter((i) => i !== cur.correctIndex);
     for (let x = wrong.length - 1; x > 0; x--) { const j = Math.floor(Math.random() * (x + 1)); [wrong[x], wrong[j]] = [wrong[j], wrong[x]]; }
-    setPups((p) => ({ ...p, hint: p.hint - 1 })); setUsed((u) => ({ ...u, hint: u.hint + 1 }));
+    setPups((p) => ({ ...p, hint: p.hint - 1 })); setUsed((u) => ({ ...u, hint: u.hint + 1 })); onUsePowerup?.("hint");
     setEliminated(wrong.slice(0, 2));   // hide two wrong options
-  }, [pups.hint, picked, eliminated, cur]);
-  const doSkip = useCallback(() => { if (pups.skip <= 0 || picked !== null) return; setPups((p) => ({ ...p, skip: p.skip - 1 })); setUsed((u) => ({ ...u, skip: u.skip + 1 })); advance(qi + 1); }, [pups.skip, picked, advance, qi]);
+  }, [pups.hint, picked, eliminated, cur, onUsePowerup]);
+  const doSkip = useCallback(() => { if (pups.skip <= 0 || picked !== null) return; setPups((p) => ({ ...p, skip: p.skip - 1 })); setUsed((u) => ({ ...u, skip: u.skip + 1 })); onUsePowerup?.("skip"); advance(qi + 1); }, [pups.skip, picked, advance, qi, onUsePowerup]);
 
   const timerPct = Math.max(0, Math.min(100, (timeLeft / timerFor(qi)) * 100));
-  const low = timeLeft <= 4 && !frozen;
+  const low = timeLeft <= 4 && !frozen && !tabHidden;
 
   const box = { background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", borderRadius: 14 };
   const pupLabel = { freeze: t.arenaFreeze || "Freeze", hint: t.arenaHint || "Hint", skip: t.arenaSkip || "Skip" };
@@ -106,10 +149,10 @@ export default function ArenaGame({ questions, t, onEnd }) {
 
       {/* timer */}
       <div style={{ height: 7, borderRadius: 4, background: "var(--color-background-secondary)", overflow: "hidden", marginBottom: 4 }}>
-        <div style={{ height: "100%", width: `${timerPct}%`, background: frozen ? "#38bdf8" : low ? "#dc2626" : "var(--color-accent)", transition: "width .1s linear", borderRadius: 4 }} />
+        <div style={{ height: "100%", width: `${timerPct}%`, background: (frozen || tabHidden) ? "#38bdf8" : low ? "#dc2626" : "var(--color-accent)", transition: "width .1s linear", borderRadius: 4 }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-text-tertiary)", fontFamily: "monospace", marginBottom: 14 }}>
-        <span>{frozen ? (t.arenaFrozen || "Frozen") : `${Math.ceil(timeLeft)}s`}</span>
+        <span>{(frozen || tabHidden) ? (t.arenaFrozen || "Frozen") : `${Math.ceil(timeLeft)}s`}</span>
         <span style={{ color: "#d97706" }}>+{pot}</span>
       </div>
 
@@ -146,14 +189,14 @@ export default function ArenaGame({ questions, t, onEnd }) {
       <div style={{ display: "flex", gap: 9, marginTop: 16 }}>
         {["freeze", "hint", "skip"].map((key) => {
           const n = pups[key];
-          const disabled = n <= 0 || picked !== null;
+          const disabled = n <= 0 || picked !== null || (key === "freeze" && frozen);
           return (
             <button key={key} disabled={disabled}
               onClick={() => { if (key === "freeze") doFreeze(); else if (key === "hint") doHint(); else doSkip(); }}
               style={{
                 flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "9px 4px",
-                background: n > 0 && picked === null ? "var(--color-sel-tint)" : "var(--color-background-secondary)",
-                border: `1px solid ${n > 0 && picked === null ? "var(--color-accent)" : "var(--color-border-tertiary)"}`,
+                background: n > 0 && !disabled ? "var(--color-sel-tint)" : "var(--color-background-secondary)",
+                border: `1px solid ${n > 0 && !disabled ? "var(--color-accent)" : "var(--color-border-tertiary)"}`,
                 borderRadius: 11, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, fontFamily: "inherit",
               }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)" }}>{pupLabel[key]}</span>
@@ -162,11 +205,11 @@ export default function ArenaGame({ questions, t, onEnd }) {
           );
         })}
       </div>
-      <p style={{ fontSize: 10.5, color: "var(--color-text-tertiary)", textAlign: "center", marginTop: 8 }}>{(t.arenaEarnHint || "Earn a power-up every {n} questions").replace("{n}", ARENA.POWERUP_EVERY)}</p>
+      <p style={{ fontSize: 10.5, color: "var(--color-text-tertiary)", textAlign: "center", marginTop: 8 }}>{t.arenaWalletHint || "Power-ups come from your wallet. Score high to earn one, usable here or in any quiz."}</p>
 
-      {earned && (
-        <div style={{ position: "fixed", left: "50%", bottom: 30, transform: "translateX(-50%)", background: "var(--color-accent)", color: "#fff", padding: "10px 18px", borderRadius: 999, fontSize: 13, fontWeight: 700, boxShadow: "0 8px 24px rgba(0,0,0,0.25)", zIndex: 50 }}>
-          {(t.arenaEarned || "Earned a {p}!").replace("{p}", earned === "freeze" ? (t.arenaFreeze || "Freeze") : earned === "hint" ? (t.arenaHint || "Hint") : (t.arenaSkip || "Skip"))}
+      {swapNote && (
+        <div style={{ position: "fixed", left: "50%", bottom: 30, transform: "translateX(-50%)", background: "var(--color-text-primary)", color: "var(--color-background-primary)", padding: "10px 18px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, boxShadow: "0 8px 24px rgba(0,0,0,0.25)", zIndex: 50, maxWidth: "90%", textAlign: "center" }}>
+          {t.arenaTabSwap || "New question: you left the tab, so this one was swapped."}
         </div>
       )}
     </div>
