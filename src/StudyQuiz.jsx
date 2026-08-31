@@ -5293,8 +5293,8 @@ const Sb = {
   root:        { minHeight:"100vh", background:"var(--color-background-tertiary)", color:"var(--color-text-primary)", fontFamily:"'DM Sans','Helvetica Neue',sans-serif", display:"flex", flexDirection:"column" },
   brand:       { fontFamily:"'Fraunces',Georgia,serif", fontSize:16, fontWeight:700, color:"var(--color-text-primary)", letterSpacing:0.5, display:"flex", alignItems:"center", gap:8 },
   hero:        { background:"#312e81", padding:"44px 24px 40px" },
-  h1:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:30, fontWeight:700, color:"#fff", lineHeight:1.2, margin:"14px 0 12px" },
-  h2:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:22, fontWeight:700, color:"var(--color-text-primary)", margin:"0 0 16px" },
+  h1:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:32, fontWeight:700, color:"#fff", lineHeight:1.15, letterSpacing:-0.5, margin:"14px 0 12px" },
+  h2:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:22, fontWeight:700, color:"var(--color-text-primary)", letterSpacing:-0.3, margin:"0 0 16px" },
   secLabel:    { fontSize:11, fontWeight:700, color:"var(--color-text-tertiary)", letterSpacing:1.5, margin:"0 0 12px", textTransform:"uppercase" },
   fCard:       { background:"var(--color-background-primary)", borderRadius:12, padding:"13px 12px", border:"0.5px solid var(--color-border-tertiary)", display:"flex", flexDirection:"column", gap:4, cursor:"default" },
   planCard:    { flex:1, background:"var(--color-background-primary)", borderRadius:12, padding:"14px 12px", border:"0.5px solid var(--color-border-tertiary)" },
@@ -5306,7 +5306,7 @@ const Sb = {
   settingRow:  { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"11px 14px", borderBottom:"0.5px solid var(--color-border-tertiary)", gap:10, flexWrap:"wrap" },
   settingLabel:{ fontSize:13, fontWeight:600, color:"var(--color-text-primary)", flexShrink:0 },
   langSel:     { background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:8, padding:"5px 8px", fontSize:12, color:"var(--color-text-primary)", cursor:"pointer", fontFamily:"inherit", outline:"none" },
-  btnPrimary:  { background:"#4f46e5", color:"#fff", border:"none", borderRadius:12, padding:"13px 20px", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'Fraunces',Georgia,serif", transition:"opacity 0.15s", margin:0 },
+  btnPrimary:  { background:"#4f46e5", color:"#fff", border:"none", borderRadius:12, padding:"13px 20px", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.1, boxShadow:"0 1px 2px rgba(15,23,42,0.12)", transition:"opacity 0.15s, box-shadow 0.15s", margin:0 },
   btnHero:     { background:"#fff", color:"#312e81", border:"none", borderRadius:12, padding:"13px 30px", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"inherit" },
   btnOutline:  { background:"none", color:"var(--color-text-primary)", border:"1px solid var(--color-border-secondary)", borderRadius:12, padding:"12px 20px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" },
   btnGhost:    { background:"none", color:"var(--color-text-secondary)", border:"0.5px solid var(--color-border-tertiary)", borderRadius:12, padding:"11px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
@@ -5319,7 +5319,10 @@ const CSS = `
   *{box-sizing:border-box} body{margin:0}
   /* Small-font zoom (body{zoom:0.9}) leaves a gap below the app; painting html
      with the theme colour stops a white rectangle showing through there. */
-  html,body{background:var(--color-background-tertiary)}
+  html,body{background:var(--color-background-tertiary);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+  /* Modern polish: crisp selection, an accessible accent focus ring on controls. */
+  ::selection{background:var(--color-sel-tint)}
+  button:focus-visible,a:focus-visible,[role="button"]:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
   /* Mock passage layout: passage stacks above the question on narrow screens,
      sits beside it (sticky) on wide ones, so it stays put across its questions. */
   .rv-mock-split{display:flex;flex-direction:column;gap:16px;align-items:stretch}
@@ -5349,7 +5352,7 @@ const CSS = `
   .rv-timer-flash{animation:rvTimerFlash 1s steps(1) infinite}
   @keyframes rvAutoBar{from{width:0%}to{width:100%}}
   .settings-panel{animation:slideFromRight 0.22s ease}
-  ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--color-border-secondary);border-radius:2px}
+  ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--color-border-primary);border-radius:5px;border:2px solid transparent;background-clip:content-box}::-webkit-scrollbar-thumb:hover{background:var(--color-text-tertiary);background-clip:content-box}::-webkit-scrollbar-track{background:transparent}
 
   /* Hero (mobile base, stacks: back, brand bar, headline, sub, CTA) */
   .rv-hero-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;}
