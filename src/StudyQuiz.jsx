@@ -1508,7 +1508,25 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
 
 function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, t }) {
   const s = t.set || {};
-  const { user, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
+  const { user, username, saveUsername, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
+  // Public display name editor (the account name shown everywhere).
+  const [nameInput, setNameInput] = useState(username || "");
+  const [nameBusy, setNameBusy] = useState(false);
+  const [nameErr, setNameErr] = useState("");
+  const [nameSaved, setNameSaved] = useState(false);
+  useEffect(() => { setNameInput(username || ""); }, [username]);
+  const saveName = async () => {
+    const v = nameInput.trim();
+    if (nameBusy || v === (username || "")) return;
+    setNameBusy(true); setNameErr(""); setNameSaved(false);
+    const r = await saveUsername?.(v);
+    setNameBusy(false);
+    if (r && r.ok) { setNameSaved(true); setTimeout(() => setNameSaved(false), 2200); }
+    else setNameErr((r && r.error) || (t.unameErr || "Could not save that name."));
+  };
+  const joinedLabel = (() => {
+    try { if (!user?.createdAt) return null; return new Date(user.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }); } catch { return null; }
+  })();
   // Language is edited on the draft (like every other setting) and applied on Save.
   const acctSrs = useSRS();                 // review-deck stats for the header
   const acctStats = useStudyStats();        // streak + accuracy
@@ -1576,9 +1594,12 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           padding:"16px 18px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",flexShrink:0}}>
           {signedIn && user ? (
             <div style={{display:"flex",alignItems:"center",gap:11,minWidth:0}}>
-              <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#4f46e5,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0}}>{(((draft.nickname||"").trim())||user.email||"?").charAt(0).toUpperCase()}</div>
+              <div style={{position:"relative",width:40,height:40,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#4f46e5,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0}}>
+                {((username||user.email||"?").charAt(0)).toUpperCase()}
+                {user.image && <img src={user.image} alt="" onError={e=>e.currentTarget.remove()} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>}
+              </div>
               <div style={{minWidth:0}}>
-                <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{((draft.nickname||"").trim())||user.email||"Your account"}</div>
+                <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{username||user.email||"Your account"}</div>
                 <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,padding:"2px 8px",borderRadius:999,color:isPro?"#422006":"var(--color-text-secondary)",background:isPro?"linear-gradient(135deg,#fde68a,#f59e0b)":"var(--color-background-tertiary)",border:isPro?"none":"0.5px solid var(--color-border-secondary)",display:"inline-block",marginTop:3}}>{isPro?"✦ PRO":t.freePlanBadge}</span>
               </div>
             </div>
@@ -1608,14 +1629,35 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             {acctSrs.dueCount > 0 && <div style={{fontSize:11.5,color:"var(--color-accent)",fontWeight:600,marginTop:9,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><Icon name="repeat" size={13}/>{acctSrs.dueCount} card{acctSrs.dueCount>1?"s":""} due for review today</div>}
           </div>
 
-          {signedIn && user && (
-            <div style={{padding:"14px 18px 6px"}}>
-              <div style={{fontSize:13,fontWeight:600,color:"var(--color-text-primary)",marginBottom:6}}>{t.nickLabel}</div>
-              <input value={draft.nickname||""} maxLength={24} onChange={e=>update("nickname",e.target.value)} placeholder={(user.email||"").split("@")[0]||t.nickLabel}
-                style={{width:"100%",borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
-              <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:5,lineHeight:1.4}}>{t.nickHint}</div>
+          {signedIn && user && (<>
+            <SectionLabel label={s.secAccount||"ACCOUNT"}/>
+            <div style={{padding:"4px 18px 8px"}}>
+              {/* Display name (the public account name shown everywhere) */}
+              <div style={{fontSize:13,fontWeight:600,color:"var(--color-text-primary)",marginBottom:6}}>{t.displayNameLabel||"Display name"}</div>
+              <div style={{display:"flex",gap:8}}>
+                <input value={nameInput} maxLength={20} onChange={e=>{setNameInput(e.target.value);setNameErr("");setNameSaved(false);}} placeholder={(user.email||"").split("@")[0]||"username"}
+                  style={{flex:1,minWidth:0,borderRadius:10,border:"1px solid "+(nameErr?"#ef4444":"var(--color-border-secondary)"),background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+                <button onClick={saveName} disabled={nameBusy||!nameInput.trim()||nameInput.trim()===(username||"")}
+                  style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"0 16px",fontSize:13,fontWeight:700,cursor:(nameBusy||!nameInput.trim()||nameInput.trim()===(username||""))?"default":"pointer",fontFamily:"inherit",opacity:(nameBusy||!nameInput.trim()||nameInput.trim()===(username||""))?0.45:1}}>
+                  {nameBusy?"…":nameSaved?"✓":(t.saveWord||"Save")}
+                </button>
+              </div>
+              <div style={{fontSize:11,color:nameErr?"#ef4444":"var(--color-text-tertiary)",marginTop:5,lineHeight:1.4}}>{nameErr||(t.displayNameHint||"3-20 letters, numbers or underscore. Shown on your profile, the leaderboard and shared quizzes.")}</div>
+              {/* Email + member since */}
+              <div style={{marginTop:12,borderRadius:12,border:"0.5px solid var(--color-border-tertiary)",overflow:"hidden"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"10px 13px",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+                  <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.emailLabel||"Email"}</span>
+                  <span style={{fontSize:12.5,color:"var(--color-text-primary)",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:180}}>{user.email||"—"}</span>
+                </div>
+                {joinedLabel && (
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"10px 13px"}}>
+                    <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.memberSinceLabel||"Member since"}</span>
+                    <span style={{fontSize:12.5,color:"var(--color-text-primary)",fontWeight:600}}>{joinedLabel}</span>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+          </>)}
 
           <SectionLabel label={s.secAppearance}/>
           <SettingRow label={s.theme} desc={draft.theme==="light"?s.themeLight:draft.theme==="dark"?s.themeDark:s.themeFollows}>
@@ -1770,7 +1812,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             )}
           </div>
 
-          <SectionLabel label={s.secAccount}/>
+          <SectionLabel label={s.secSecurity||"LOGIN & SECURITY"}/>
           <div style={{padding:"4px 18px 6px",display:"flex",flexDirection:"column",gap:9}}>
             <button onClick={()=>{ try { clerk.openUserProfile(); } catch { /* Clerk not ready */ } }}
               style={{width:"100%",background:"var(--color-background-secondary)",
@@ -3485,7 +3527,7 @@ export default function StudyQuiz() {
     setShareBusy(true);
     try {
       const token = await getToken?.();
-      const ownerName = (settings.nickname||"").trim() || (user?.email || "").split("@")[0] || "";
+      const ownerName = (settings.nickname||"").trim() || username || (user?.email || "").split("@")[0] || "";
       const res = await fetch("/api/study", {
         method:"POST",
         headers:{ "Content-Type":"application/json", ...(token ? { Authorization:`Bearer ${token}` } : {}) },

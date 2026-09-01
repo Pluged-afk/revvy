@@ -38,6 +38,7 @@ export function AuthProvider({ children }) {
       id: clerkUser.id,
       email: clerkUser.primaryEmailAddress?.emailAddress || "",
       image: clerkUser.imageUrl || "",  // profile photo (Clerk serves a generated avatar if none)
+      createdAt: clerkUser.createdAt || null,  // account creation date ("member since")
       // Clerk handles re-auth itself, so no email/password identity is exposed
       // (this makes account-deletion skip the password re-prompt).
       identities: [],
