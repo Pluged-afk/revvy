@@ -100,6 +100,7 @@ const FREE_DAILY   = 50;  // free daily QUESTION allowance (shown in plan lists)
 const Q_FREE       = [5, 10, 15, 20];
 const Q_EXTRA      = [25, 30, 40, 50];
 const QUIZ_TYPES   = ["mcq","cards","fill","match"];
+const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link" };
 const LETTERS      = ["A","B","C","D","E","F"];
 // Phase 2: how many of a 10-question weak-spot drill may be reused from the
 // learner's vetted bank (rest are freshly generated). Caps API cost saving at
@@ -816,6 +817,36 @@ function Chip({ label, active, onClick, locked, small, hideBadge, rec }) {
       {rec && !active && <span style={{marginLeft:5,display:"inline-block",width:6,height:6,borderRadius:"50%",background:"var(--color-accent)",verticalAlign:"middle"}}/>}
       {locked && !hideBadge && <span style={{marginLeft:4,fontSize:7,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"1px 4px",fontWeight:700,verticalAlign:"middle"}}>PRO</span>}
     </button>
+  );
+}
+
+// A clean segmented control: one connected track, the selected option raised as a
+// card. `options` = [{value,label,icon?,locked?,rec?}]. onChange gets the option
+// so callers can route a locked pick to an unlock flow.
+function Segmented({ options, value, onChange, size }) {
+  const sm = size==="sm";
+  return (
+    <div style={{display:"flex",width:"100%",background:"var(--color-background-secondary)",border:"1px solid var(--color-border-secondary)",borderRadius:11,padding:3,gap:2}}>
+      {options.map((o)=>{
+        const active=o.value===value;
+        return (
+          <button key={o.value} onClick={()=>onChange(o)} title={o.title||o.label} style={{
+            flex:1,minWidth:0,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,
+            padding:sm?"7px 6px":"9px 8px",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",
+            fontSize:sm?11.5:13,fontWeight:active?700:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+            background:active?"var(--color-background-primary)":"transparent",
+            color:active?"var(--color-text-primary)":"var(--color-text-secondary)",
+            boxShadow:active?"0 1px 3px rgba(15,23,42,0.12)":"none",
+            transition:"background .15s, color .15s, box-shadow .15s",
+          }}>
+            {o.icon && <Icon name={o.icon} size={sm?13:15} style={{flexShrink:0}}/>}
+            <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{o.label}</span>
+            {o.rec && !active && <span style={{width:6,height:6,borderRadius:"50%",background:"var(--color-accent)",flexShrink:0}}/>}
+            {o.locked && <Icon name="lock" size={11} style={{opacity:0.65,flexShrink:0}}/>}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -3858,8 +3889,13 @@ export default function StudyQuiz() {
           </div>
         )}
         <h2 style={Sb.h2}>{t.uploadTitle}</h2>
-        <div style={{display:"flex",gap:5,marginBottom:16}}>
-          {[["file",t.tabs[0]],["text",t.tabs[1]],["photo",t.tabs[3]],["media",t.mediaTab]].map(([id,lb])=> <button key={id} onClick={()=>setTab(id)} style={{flex:1,position:"relative",padding:"8px 4px",borderRadius:8,border:"0.5px solid",borderColor:tab===id?"#4f46e5":"var(--color-border-secondary)",background:tab===id?"#4f46e5":"var(--color-background-primary)",color:tab===id?"#fff":"var(--color-text-secondary)",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:500,transition:"all 0.15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name={TAB_ICONS[id]} size={15}/>{stripEmoji(lb)}{id==="media"&&!isPro&&<span style={{position:"absolute",top:-6,right:-4,background:"#f59e0b",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 5px",fontWeight:800,letterSpacing:0.3,lineHeight:1.4,pointerEvents:"none"}}>PRO</span>}</button>)}
+        <div style={{marginBottom:16}}>
+          <Segmented value={tab} onChange={(o)=>setTab(o.value)} options={[
+            {value:"file",label:stripEmoji(t.tabs[0]),icon:TAB_ICONS.file},
+            {value:"text",label:stripEmoji(t.tabs[1]),icon:TAB_ICONS.text},
+            {value:"photo",label:stripEmoji(t.tabs[3]),icon:TAB_ICONS.photo},
+            {value:"media",label:stripEmoji(t.mediaTab),icon:TAB_ICONS.media,locked:!isPro},
+          ]}/>
         </div>
         {tab==="file" && (
           <div style={{...Sb.dropzone,position:"relative",...(drag?{borderColor:"#4f46e5",background:"var(--color-sel-tint)"}:{}),...(file?{borderStyle:"solid",borderColor:"#4f46e5"}:{})}}
@@ -3925,21 +3961,24 @@ export default function StudyQuiz() {
         </div>
         <div className="rv-ul-right">
         <div style={Sb.settingsBox}>
-          <div style={Sb.settingRow}>
+          <div style={{...Sb.settingRow,flexDirection:"column",alignItems:"stretch",gap:10}}>
             <span style={Sb.settingLabel}>{t.quizType}</span>
-            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               {QUIZ_TYPES.map(type=>{
-                const feat = QTYPE_FEATURE[type];
                 const unlocked = canUseQType(type);
-                const active = !isPro && feat && unlocks.isUnlocked(feat); // ad-unlocked window
-                const adLockable = !isPro && feat && !unlocked;            // free, locked, ad-unlockable
+                const active = qType===type;
                 return (
-                  <div key={type} style={{position:"relative"}}>
-                    <Chip small hideBadge label={t.quizTypes[type]} active={qType===type} locked={!unlocked}
-                      onClick={()=>{ if(unlocked) setQType(type); else setUnlockFeature(feat); }}/>
-                    {adLockable&&<span style={{position:"absolute",top:-6,right:-4,background:"#7c3aed",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 5px",fontWeight:800,letterSpacing:0.3,lineHeight:1.4,pointerEvents:"none"}}>{t.badgeAd}</span>}
-                    {active&&<span style={{position:"absolute",top:-6,right:-4,background:"#16a34a",color:"#fff",fontSize:8,borderRadius:8,padding:"1px 4px",fontWeight:700,lineHeight:1.4,pointerEvents:"none"}}>{unlocks.remainingLabel(feat)}</span>}
-                  </div>
+                  <button key={type} onClick={()=>{ if(unlocked) setQType(type); else setUnlockFeature(QTYPE_FEATURE[type]); }} style={{
+                    display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,padding:"11px 8px",
+                    border:active?"1.5px solid var(--color-accent)":"1px solid var(--color-border-secondary)",
+                    borderRadius:11,cursor:"pointer",fontFamily:"inherit",fontSize:12.5,fontWeight:600,
+                    background:active?"var(--color-sel-tint)":"var(--color-background-primary)",
+                    color:active?"var(--color-accent)":"var(--color-text-secondary)",transition:"all 0.15s",
+                  }}>
+                    <Icon name={QT_ICON[type]} size={15} style={{flexShrink:0}}/>
+                    <span>{t.quizTypes[type]}</span>
+                    {!unlocked && <Icon name="lock" size={11} style={{opacity:0.6,flexShrink:0}}/>}
+                  </button>
                 );
               })}
             </div>
@@ -3985,11 +4024,10 @@ export default function StudyQuiz() {
               </button>
             )}
           </div>
-          <div style={Sb.settingRow}>
+          <div style={{...Sb.settingRow,flexDirection:"column",alignItems:"stretch",gap:10}}>
             <span style={Sb.settingLabel}>{t.difficulty}</span>
-            <div style={{display:"flex",gap:5}}>
-              {t.diffOpts.map((d,i)=><Chip key={d} small label={d} active={diff===i} rec={diffRec.confidence>=0.6 && diffRec.diff===i} onClick={()=>pickDiff(i)}/>)}
-            </div>
+            <Segmented value={diff} onChange={(o)=>pickDiff(o.value)}
+              options={t.diffOpts.map((d,i)=>({value:i,label:d,rec:diffRec.confidence>=0.6&&diffRec.diff===i}))}/>
           </div>
           {t.diffDesc?.[diff] && <div style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.45,padding:"2px 2px 0",textAlign:"right"}}>{t.diffDesc[diff]}</div>}
           {/* Adaptive difficulty (Phase 1): once there's enough history, show the
@@ -4019,42 +4057,47 @@ export default function StudyQuiz() {
               {adBusy?t.loadingAd:`${t.watchAdForQuestions.replace("{n}",usage?.ad_question_bonus??10)} · ${usage?.ad_watches_today??0}/${usage?.max_ad_watches??2}`}
             </button>}
         </div>
-        {isPro&&<button style={{width:"100%",marginBottom:14,background:"#312e81",color:"#fff",border:"none",borderRadius:12,padding:"14px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"'Fraunces',Georgia,serif",display:"flex",alignItems:"center",justifyContent:"space-between"}} onClick={()=>setScreen("exam_setup")}><span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="cap" size={17}/>{stripEmoji(t.examModeLabel)}</span><span style={{fontSize:10,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"3px 8px",fontWeight:700}}>{t.badgeUnlimited}</span></button>}
-        {!isPro&&(
-          <div
-            onClick={unlocks.examUsedToday()?undefined:enterExamMode}
-            style={{background:"var(--color-sel-tint)",border:"1.5px solid "+(unlocks.examUnlocked()?"#4f46e5":"#f59e0b55"),borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:unlocks.examUsedToday()?"default":"pointer",opacity:unlocks.examUsedToday()?0.65:1}}>
-            <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="cap" size={22}/></span>
-            <div style={{flex:1}}>
-              <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{stripEmoji(t.examModeLabel)}</div>
-              <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.45}}>
-                {examAdBusy?t.loadingAd:unlocks.examUsedToday()?t.examAdUsed:unlocks.examUnlocked()?t.examAdUnlocked:t.examAdWatch}
+        {/* Other ways to study: one consistent, scannable set */}
+        <p style={{...Sb.secLabel,margin:"2px 0 9px"}}>{t.otherWays||"More ways to study"}</p>
+        {(() => {
+          const shell = {display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 14px",marginBottom:10,transition:"all 0.15s"};
+          const tile = {width:38,height:38,borderRadius:10,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-sel-tint)",color:"var(--color-accent)"};
+          const ttl = {fontWeight:700,fontSize:13.5,color:"var(--color-text-primary)"};
+          const sub = {fontSize:11.5,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"};
+          const pill = (bg) => ({fontSize:10,fontWeight:700,borderRadius:8,padding:"3px 8px",flexShrink:0,whiteSpace:"nowrap",color:"#fff",background:bg});
+          const chev = {fontSize:17,color:"var(--color-text-tertiary)",flexShrink:0};
+          const examUsed = !isPro && unlocks.examUsedToday();
+          return (<>
+            {/* Exam mode */}
+            <div onClick={isPro?()=>setScreen("exam_setup"):(examUsed?undefined:enterExamMode)} style={{...shell,cursor:examUsed?"default":"pointer",opacity:examUsed?0.6:1}}>
+              <span style={tile}><Icon name="cap" size={19}/></span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={ttl}>{stripEmoji(t.examModeLabel)}</div>
+                <div style={sub}>{isPro?(t.examUnlimitedSub||"Unlimited custom exams from your notes"):(examAdBusy?t.loadingAd:examUsed?t.examAdUsed:unlocks.examUnlocked()?t.examAdUnlocked:t.examAdWatch)}</div>
               </div>
+              <span style={pill(isPro?"#4f46e5":examUsed?"#94a3b8":unlocks.examUnlocked()?"#4f46e5":"#f59e0b")}>{isPro?t.badgeUnlimited:examUsed?t.examBadgeUsed:unlocks.examUnlocked()?t.examBadgeReady:t.examBadgeFree}</span>
             </div>
-            <span style={{fontSize:10,background:unlocks.examUsedToday()?"#94a3b8":unlocks.examUnlocked()?"#4f46e5":"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>
-              {unlocks.examUsedToday()?t.examBadgeUsed:unlocks.examUnlocked()?t.examBadgeReady:t.examBadgeFree}
-            </span>
-          </div>
-        )}
-        <div onClick={()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }}
-          style={{background:"#312e81",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-          <span style={{flexShrink:0,display:"flex",color:"#fff"}}><Icon name="cap" size={22}/></span>
-          <div style={{flex:1,color:"#fff",minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:14}}>{t.mockCardTitle}</div>
-            <div style={{fontSize:11,opacity:0.85,marginTop:2,lineHeight:1.45}}>{t.mockCardSub}</div>
-          </div>
-          {!isPro && <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"3px 8px",fontWeight:700,flexShrink:0}}>PRO</span>}
-          <span style={{fontSize:18,color:"rgba(255,255,255,0.6)",flexShrink:0}}>›</span>
-        </div>
-        <div onClick={openArena}
-          style={{background:"var(--color-accent)",borderRadius:12,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-          <span style={{flexShrink:0,display:"flex",color:"#fff"}}><Icon name="bolt" size={22}/></span>
-          <div style={{flex:1,color:"#fff",minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:14}}>{t.arenaEntry}</div>
-            <div style={{fontSize:11,opacity:0.9,marginTop:2,lineHeight:1.45}}>{t.arenaEntrySub}</div>
-          </div>
-          <span style={{fontSize:18,color:"rgba(255,255,255,0.7)",flexShrink:0}}>›</span>
-        </div>
+            {/* Mock exams */}
+            <div onClick={()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }} style={{...shell,cursor:"pointer"}}>
+              <span style={tile}><Icon name="cap" size={19}/></span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={ttl}>{t.mockCardTitle}</div>
+                <div style={sub}>{t.mockCardSub}</div>
+              </div>
+              {!isPro && <span style={pill("#f59e0b")}>PRO</span>}
+              <span style={chev}>›</span>
+            </div>
+            {/* Endless Arena */}
+            <div onClick={openArena} style={{...shell,marginBottom:14,cursor:"pointer"}}>
+              <span style={tile}><Icon name="bolt" size={19}/></span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={ttl}>{t.arenaEntry}</div>
+                <div style={sub}>{t.arenaEntrySub}</div>
+              </div>
+              <span style={chev}>›</span>
+            </div>
+          </>);
+        })()}
         <button style={{...Sb.btnPrimary,width:"100%"}} onClick={generate}>{t.generate}</button>
         </div>
       </div>

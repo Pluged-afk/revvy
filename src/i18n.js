@@ -169,6 +169,7 @@ const T_EN = {
   // ── Standardized mock exams ──
   mockTitle:"Mock Exams", mockCardTitle:"Mock exams",
   mockCardSub:"Full timed practice tests, ACT, SAT, PSAT, GRE. No PDF needed.",
+  otherWays:"More ways to study", examUnlimitedSub:"Unlimited custom exams from your notes",
   mockChoose:"Choose a test",
   mockSelectSub:"Full-length, timed practice exams that mirror the real thing, no upload needed.",
   mockNoPdf:"No notes or PDF required, every test is generated fresh.",
