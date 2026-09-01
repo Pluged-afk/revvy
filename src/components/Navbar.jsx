@@ -15,7 +15,8 @@ const LINKS = [
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
-  const { user, isPro } = useAuth();
+  const { user, isPro, username } = useAuth();
+  const accountName = username || user?.email?.split("@")[0] || "Account";
   return (
     <nav className="nav">
       <div className="container nav-inner">
@@ -46,7 +47,13 @@ export default function Navbar() {
 
         <div className="nav-right">
           {user ? (
-            <Link to="/app" className="btn btn-primary">Open App →</Link>
+            <Link to="/app" className="nav-account" title={accountName}>
+              <span className="nav-avatar">
+                {accountName.charAt(0).toUpperCase()}
+                {user.image && <img src={user.image} alt="" onError={(e) => e.currentTarget.remove()} />}
+              </span>
+              <span className="nav-account-name">{accountName}</span>
+            </Link>
           ) : (
             <Link to="/app" className="btn btn-primary">Try Revyy Free</Link>
           )}
