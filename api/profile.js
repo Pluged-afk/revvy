@@ -8,6 +8,7 @@ async function ensureUsernameCol() {
   try {
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username TEXT`;
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower ON profiles (lower(username)) WHERE username IS NOT NULL`;
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS language TEXT`;
     unameReady = true;
   } catch (e) { console.error("[profile] username col:", e.message); }
 }
@@ -46,7 +47,7 @@ async function getProfile(req, res) {
   try {
     await ensureUsernameCol();
     const rows = await sql`
-      SELECT id, email, username, is_pro, stripe_customer_id, subscription_id,
+      SELECT id, email, username, language, is_pro, stripe_customer_id, subscription_id,
              subscription_status, subscription_plan, current_period_end, cancel_at_period_end
       FROM profiles WHERE clerk_user_id = ${userId} OR id = ${userId} LIMIT 1`;
     const p = rows[0];
@@ -119,6 +120,24 @@ async function setUsername(req, res, body) {
   }
 }
 
+// POST action=setLanguage: remember the signed-in user's language on their
+// account so it follows them across devices. Token-verified.
+async function setLanguage(req, res, body) {
+  const userId = await userIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: "Invalid session." });
+  const lang = String(body.language || "").trim().toLowerCase().slice(0, 8);
+  if (!/^[a-z]{2}$/.test(lang)) return res.status(400).json({ error: "Invalid language." });
+  await ensureUsernameCol();
+  try {
+    await sql`INSERT INTO profiles (id, clerk_user_id) VALUES (${userId}, ${userId}) ON CONFLICT (id) DO NOTHING`;
+    await sql`UPDATE profiles SET language = ${lang} WHERE clerk_user_id = ${userId} OR id = ${userId}`;
+    return res.status(200).json({ ok: true, language: lang });
+  } catch (e) {
+    console.error("[profile:setLanguage]", e.message);
+    return res.status(500).json({ error: e.message });
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === "GET") return getProfile(req, res);
   if (req.method === "POST") {
@@ -126,6 +145,7 @@ export default async function handler(req, res) {
     if (body.action === "create") return createProfile(req, res, body);
     if (body.action === "delete") return deleteAccount(req, res, body);
     if (body.action === "setUsername") return setUsername(req, res, body);
+    if (body.action === "setLanguage") return setLanguage(req, res, body);
     return res.status(400).json({ error: "Unknown action." });
   }
   res.setHeader("Allow", "GET, POST");

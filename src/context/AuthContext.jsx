@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { useUser, useAuth as useClerkAuth } from "@clerk/clerk-react";
 import { useDev } from "./DevContext.jsx";
+import { useLang } from "./LanguageContext.jsx";
 
 // Exported so the build-time prerenderer (entry-server.jsx) can supply a
 // logged-out mock value without pulling in Clerk.
@@ -19,6 +20,7 @@ export function AuthProvider({ children }) {
   const { isLoaded, isSignedIn, user: clerkUser } = useUser();
   const { signOut: clerkSignOut, getToken } = useClerkAuth();
   const dev = useDev();
+  const { setLang } = useLang();
 
   const [isPro, setIsPro] = useState(false);
   const [subStatus, setSubStatus] = useState(null);
@@ -35,6 +37,7 @@ export function AuthProvider({ children }) {
     return {
       id: clerkUser.id,
       email: clerkUser.primaryEmailAddress?.emailAddress || "",
+      image: clerkUser.imageUrl || "",  // profile photo (Clerk serves a generated avatar if none)
       // Clerk handles re-auth itself, so no email/password identity is exposed
       // (this makes account-deletion skip the password re-prompt).
       identities: [],
@@ -62,11 +65,14 @@ export function AuthProvider({ children }) {
       setPeriodEnd(p.current_period_end || null);
       setCancelAtPeriodEnd(!!p.cancel_at_period_end);
       setUsername(p.username || null);
+      // Language is remembered on the account: apply it so it follows the user
+      // across devices (overrides the per-device default). No-op if unchanged.
+      if (p.language) setLang(p.language);
       return p.is_pro === true;
     } catch {
       return null;
     }
-  }, [getToken]);
+  }, [getToken, setLang]);
 
   // Read question-usage state (token-verified server-side).
   const refreshUsage = useCallback(async () => {
@@ -258,12 +264,26 @@ export function AuthProvider({ children }) {
     } catch { return { error: "Could not save name." }; }
   }, [getToken]);
 
+  // Remember the chosen language on the account (best-effort) so it follows the
+  // user to any device. Called alongside the local setLang when signed in.
+  const saveLanguage = useCallback(async (l) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "setLanguage", language: l }),
+      });
+    } catch { /* non-blocking */ }
+  }, [getToken]);
+
   const value = {
     user, isPro: effIsPro, loading: loading || !isLoaded,
     subStatus, subPlan, periodEnd, cancelAtPeriodEnd, getToken,
     signOut, deleteAccount, reauthenticate, setProStatus, refreshProfile, startCheckout, openPortal,
     usage, refreshUsage, consumeQuestions, watchAd, buyPack, consumeMock,
-    username, saveUsername,
+    username, saveUsername, saveLanguage,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

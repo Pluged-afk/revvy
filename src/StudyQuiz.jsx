@@ -2026,7 +2026,7 @@ export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const { t, lang, setLang } = useLang(); // language control now lives inside the account panel
   const dev = useDev();
-  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack, consumeMock, username, saveUsername, loading: authLoading } = useAuth();
+  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack, consumeMock, username, saveUsername, saveLanguage, loading: authLoading } = useAuth();
   // Expose Clerk's getToken to the module-level AI-proxy / upload helpers so
   // every request to /api/anthropic and /api/upload-file carries a bearer token.
   useEffect(() => { _getToken = getToken; return () => { _getToken = null; }; }, [getToken]);
@@ -3075,7 +3075,7 @@ export default function StudyQuiz() {
     setDiff(rest.defaultDiff);
     setNumQ(rest.defaultQCount);
     SoundEngine.setVolume(rest.volume);
-    if(draftLang && draftLang!==lang) setLang(draftLang);
+    if(draftLang && draftLang!==lang) { setLang(draftLang); if(user) saveLanguage(draftLang); }
     window.storage.set("revyy_settings",JSON.stringify(rest)).catch(()=>{});
     setSettingsDraft(null);
     setShowSettings(false);
@@ -3568,13 +3568,27 @@ export default function StudyQuiz() {
   const [unameBusy, setUnameBusy] = useState(false);
   const arenaAfterName = useRef(null);
   const unamePromptedRef = useRef(false);
-  // Prompt once, after the profile is known, for players without a public name.
+  // Prompt for a public name exactly ONCE, ever (a persisted flag survives
+  // reloads and new sessions), only for a signed-in user who has none yet. The
+  // arena's requireUsername still opens the picker on demand regardless.
   useEffect(() => {
-    if (!authLoading && user && username === null && !unamePromptedRef.current) {
-      unamePromptedRef.current = true;
-      setUnameInput(""); setUnameErr(""); setShowUsername(true);
-    }
+    if (authLoading || !user || username !== null || unamePromptedRef.current) return;
+    try { if (localStorage.getItem("revyy_uname_prompted") === "1") return; } catch { /* ignore */ }
+    unamePromptedRef.current = true;
+    try { localStorage.setItem("revyy_uname_prompted", "1"); } catch { /* ignore */ }
+    setUnameInput(""); setUnameErr(""); setShowUsername(true);
   }, [authLoading, user, username]);
+  // "Maybe later": give them a random name (changeable later in settings) so the
+  // leaderboard has one and they are never asked again, then run any pending action.
+  const skipUsername = useCallback(async () => {
+    const after = arenaAfterName.current; arenaAfterName.current = null;
+    try { localStorage.setItem("revyy_uname_prompted", "1"); } catch { /* ignore */ }
+    if (username === null) {
+      for (let i = 0; i < 3; i++) { const r = await saveUsername("Learner" + Math.floor(1000 + Math.random() * 9000)); if (r && r.ok) break; }
+    }
+    setShowUsername(false);
+    if (after) after();
+  }, [username, saveUsername]);
   // Ensure a public name exists, then run `next`; otherwise open the picker first.
   const requireUsername = useCallback((next) => {
     if (username) { next && next(); return; }
@@ -3647,8 +3661,12 @@ export default function StudyQuiz() {
             <div className="rv-hero-tools">
               {user ? (
                 <button onClick={()=>openSettings()} title={t.accountLbl} aria-label={t.accountLbl}
-                  style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,0.16)",border:"1.5px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  {(user.email||"?").charAt(0).toUpperCase()}
+                  style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(255,255,255,0.14)",border:"1px solid rgba(255,255,255,0.28)",borderRadius:999,padding:"4px 12px 4px 4px",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                  <span style={{position:"relative",width:28,height:28,borderRadius:"50%",overflow:"hidden",flexShrink:0,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff"}}>
+                    {(username||user.email||"?").charAt(0).toUpperCase()}
+                    {user.image && <img src={user.image} alt="" onError={(e)=>e.currentTarget.remove()} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>}
+                  </span>
+                  <span style={{fontSize:13,fontWeight:600,color:"#fff",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{username||user.email?.split("@")[0]||t.accountLbl}</span>
                 </button>
               ) : (
                 <button onClick={()=>navigate("/login")} style={{background:"rgba(255,255,255,0.16)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,fontSize:12,fontWeight:600,padding:"7px 14px",cursor:"pointer",fontFamily:"inherit"}}>{t.logIn}</button>
@@ -4104,7 +4122,7 @@ export default function StudyQuiz() {
       <UnlockModal feature={unlockFeature} unlocks={unlocks} t={t}
         onClose={()=>setUnlockFeature(null)} onUpgrade={openUpgrade}/>
       {showProModal&&<ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
-      {showUsername && <UsernameModal value={unameInput} onChange={setUnameInput} onSave={submitUsername} onSkip={()=>setShowUsername(false)} err={unameErr} busy={unameBusy} t={t}/>}
+      {showUsername && <UsernameModal value={unameInput} onChange={setUnameInput} onSave={submitUsername} onSkip={skipUsername} err={unameErr} busy={unameBusy} t={t}/>}
       {showQuizlet && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>!quizletBusy&&setShowQuizlet(false)}>
           <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"24px 20px 32px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box",maxHeight:"88vh",overflowY:"auto"}}>
@@ -4968,7 +4986,7 @@ export default function StudyQuiz() {
             ))}
           </div>
         </div>
-        {showUsername && <UsernameModal value={unameInput} onChange={setUnameInput} onSave={submitUsername} onSkip={()=>setShowUsername(false)} err={unameErr} busy={unameBusy} t={t}/>}
+        {showUsername && <UsernameModal value={unameInput} onChange={setUnameInput} onSave={submitUsername} onSkip={skipUsername} err={unameErr} busy={unameBusy} t={t}/>}
       </div>
     );
   }
