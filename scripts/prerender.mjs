@@ -82,3 +82,19 @@ for (const r of routes) {
   }
 }
 console.log(`[prerender] wrote ${ok} pages${failed ? `, skipped ${failed}` : ""}.`);
+
+// Generate sitemap.xml from the SAME routes, so it can never drift from the
+// pages that actually exist (adding a blog post updates the sitemap for free).
+const today = new Date().toISOString().slice(0, 10);
+const postDate = Object.fromEntries(POSTS.map((p) => [`/blog/${p.slug}`, p.date]));
+const sitemapBody = routes.map((r) => {
+  const loc = SITE + (r.path === "/" ? "/" : r.path);
+  const isPost = r.path.startsWith("/blog/");
+  const lastmod = postDate[r.path] || today;
+  const priority = r.path === "/" ? "1.0" : isPost ? "0.7" : "0.8";
+  const changefreq = isPost ? "monthly" : "weekly";
+  return `  <url><loc>${loc}</loc><lastmod>${lastmod}</lastmod><changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`;
+}).join("\n");
+writeFileSync(join(DIST, "sitemap.xml"),
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapBody}\n</urlset>\n`);
+console.log(`[prerender] wrote sitemap with ${routes.length} URLs.`);

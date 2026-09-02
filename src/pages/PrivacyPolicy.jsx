@@ -75,10 +75,15 @@ export default function PrivacyPolicy() {
 
         <h2>5. Advertising</h2>
         <p>
-          Free-plan pages may display ads through Google AdSense. Google and its partners may use
-          cookies to show ads based on your visits to this and other sites. You can review and turn
-          off personalised advertising at Google's Ads Settings and through your browser or device
-          controls.
+          Free-plan pages may display ads through Google AdSense. Google, as a third-party vendor, uses
+          cookies (including the DoubleClick cookie) to serve ads based on your prior visits to this and
+          other websites. You can review and turn off personalised advertising at{" "}
+          <a href="https://www.google.com/settings/ads" target="_blank" rel="noopener noreferrer">Google's Ads Settings</a>,
+          opt out of third-party vendor cookies at{" "}
+          <a href="https://www.aboutads.info/choices/" target="_blank" rel="noopener noreferrer">aboutads.info</a>,
+          or read more in{" "}
+          <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener noreferrer">Google's advertising policy</a>,
+          as well as through your browser or device controls.
         </p>
 
         <h2>6. Who we share data with</h2>
