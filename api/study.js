@@ -92,9 +92,60 @@ function ensureTables() {
         skip_used     INT         NOT NULL DEFAULT 0,
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
+      // ── Friends + study groups ──
+      // One row per relationship: a directed request that becomes mutual once
+      // accepted. Friends of X = rows where X is requester or addressee and
+      // status='accepted'.
+      sql`CREATE TABLE IF NOT EXISTS friendships (
+        id         BIGSERIAL   PRIMARY KEY,
+        requester  TEXT        NOT NULL,
+        addressee  TEXT        NOT NULL,
+        status     TEXT        NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (requester, addressee)
+      )`,
+      sql`CREATE TABLE IF NOT EXISTS study_groups (
+        id          BIGSERIAL   PRIMARY KEY,
+        name        TEXT        NOT NULL,
+        owner       TEXT        NOT NULL,
+        invite_code TEXT        UNIQUE NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      sql`CREATE TABLE IF NOT EXISTS group_members (
+        group_id      BIGINT      NOT NULL,
+        clerk_user_id TEXT        NOT NULL,
+        role          TEXT        NOT NULL DEFAULT 'member',
+        joined_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (group_id, clerk_user_id)
+      )`,
+      // Pooled study material summaries shared to a group; any member can
+      // generate a quiz from them (mirrors the personal study library).
+      sql`CREATE TABLE IF NOT EXISTS group_library (
+        id            BIGSERIAL   PRIMARY KEY,
+        group_id      BIGINT      NOT NULL,
+        clerk_user_id TEXT        NOT NULL,
+        title         TEXT        NOT NULL,
+        subject       TEXT,
+        summary       TEXT,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      // Recent group activity feed (joined / shared / quiz / mock).
+      sql`CREATE TABLE IF NOT EXISTS group_activity (
+        id            BIGSERIAL   PRIMARY KEY,
+        group_id      BIGINT      NOT NULL,
+        clerk_user_id TEXT        NOT NULL,
+        kind          TEXT        NOT NULL,
+        detail        TEXT,
+        at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
     ]).then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS arena_board ON arena_score (best_score DESC)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS gk_pool_diff ON gk_pool (difficulty)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS friendships_addr ON friendships (addressee, status)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS friendships_req ON friendships (requester, status)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS group_members_user ON group_members (clerk_user_id)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS group_library_grp ON group_library (group_id, created_at DESC)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS group_activity_grp ON group_activity (group_id, at DESC)`)
       .then(() => true).catch(() => { ensured = null; return false; });
   }
   return ensured;
@@ -460,6 +511,191 @@ async function arenaBoard(req, res, userId) {
   });
 }
 
+// ── Friends + study groups ───────────────────────────────────────────────
+// Map a set of clerk user ids to their public usernames (one query).
+async function usernamesFor(ids) {
+  if (!ids.length) return {};
+  const rows = await sql`SELECT COALESCE(clerk_user_id, id) AS uid, username FROM profiles
+                         WHERE clerk_user_id = ANY(${ids}::text[]) OR id = ANY(${ids}::text[])`;
+  const out = {};
+  for (const r of rows) if (r.uid) out[r.uid] = r.username || null;
+  return out;
+}
+
+async function friendAdd(req, res, body, me) {
+  const name = clean(body.username, 30);
+  if (!name) return res.status(400).json({ error: "Enter a username." });
+  const found = (await sql`SELECT COALESCE(clerk_user_id, id) AS uid FROM profiles WHERE lower(username) = lower(${name}) LIMIT 1`)[0];
+  const them = found?.uid;
+  if (!them) return res.status(404).json({ error: "No one goes by that username." });
+  if (them === me) return res.status(400).json({ error: "That's you." });
+  const e = (await sql`SELECT id, requester, status FROM friendships
+    WHERE (requester=${me} AND addressee=${them}) OR (requester=${them} AND addressee=${me}) LIMIT 1`)[0];
+  if (e) {
+    if (e.status === "accepted") return res.status(200).json({ ok: true, status: "accepted" });
+    if (e.requester === them) { await sql`UPDATE friendships SET status='accepted' WHERE id=${e.id}`; return res.status(200).json({ ok: true, status: "accepted" }); }
+    return res.status(200).json({ ok: true, status: "pending" });
+  }
+  await sql`INSERT INTO friendships (requester, addressee, status) VALUES (${me}, ${them}, 'pending') ON CONFLICT (requester, addressee) DO NOTHING`;
+  return res.status(200).json({ ok: true, status: "pending" });
+}
+
+async function friendRespond(req, res, body, me) {
+  const id = parseInt(body.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad request." });
+  const f = (await sql`SELECT id, addressee, status FROM friendships WHERE id=${id} LIMIT 1`)[0];
+  if (!f || f.addressee !== me) return res.status(404).json({ error: "Request not found." });
+  if (body.accept) await sql`UPDATE friendships SET status='accepted' WHERE id=${id}`;
+  else await sql`DELETE FROM friendships WHERE id=${id}`;
+  return res.status(200).json({ ok: true });
+}
+
+async function friendRemove(req, res, body, me) {
+  const them = clean(body.userId, 60);
+  if (!them) return res.status(400).json({ error: "Bad request." });
+  await sql`DELETE FROM friendships WHERE (requester=${me} AND addressee=${them}) OR (requester=${them} AND addressee=${me})`;
+  return res.status(200).json({ ok: true });
+}
+
+// One read for the whole social screen: friends, requests, and the user's groups.
+async function socialOverview(req, res, me) {
+  const fr = await sql`SELECT id, requester, addressee, status FROM friendships WHERE requester=${me} OR addressee=${me}`;
+  const grpRows = await sql`SELECT g.id, g.name, g.owner, g.invite_code,
+      (SELECT COUNT(*) FROM group_members m2 WHERE m2.group_id=g.id) AS members
+    FROM study_groups g JOIN group_members m ON m.group_id=g.id AND m.clerk_user_id=${me}
+    ORDER BY g.created_at DESC`;
+  const uids = new Set();
+  for (const r of fr) { uids.add(r.requester); uids.add(r.addressee); }
+  const names = await usernamesFor([...uids]);
+  const nameOf = (u) => names[u] || "student";
+  const friends = [], incoming = [], outgoing = [];
+  for (const r of fr) {
+    if (r.status === "accepted") { const o = r.requester === me ? r.addressee : r.requester; friends.push({ userId: o, username: nameOf(o) }); }
+    else if (r.addressee === me) incoming.push({ id: Number(r.id), userId: r.requester, username: nameOf(r.requester) });
+    else outgoing.push({ id: Number(r.id), userId: r.addressee, username: nameOf(r.addressee) });
+  }
+  friends.sort((a, b) => a.username.localeCompare(b.username));
+  const groups = grpRows.map((g) => ({ id: Number(g.id), name: g.name, members: Number(g.members), isOwner: g.owner === me }));
+  return res.status(200).json({ friends, incoming, outgoing, groups });
+}
+
+async function groupCreate(req, res, body, me) {
+  const name = clean(body.name, 40);
+  if (!name) return res.status(400).json({ error: "Give your group a name." });
+  const n = Number((await sql`SELECT COUNT(*) AS n FROM group_members WHERE clerk_user_id=${me}`)[0]?.n || 0);
+  if (n >= 25) return res.status(400).json({ error: "You're in too many groups already." });
+  const code = shortId();
+  const g = (await sql`INSERT INTO study_groups (name, owner, invite_code) VALUES (${name}, ${me}, ${code}) RETURNING id`)[0];
+  await sql`INSERT INTO group_members (group_id, clerk_user_id, role) VALUES (${g.id}, ${me}, 'owner')`;
+  await sql`INSERT INTO group_activity (group_id, clerk_user_id, kind, detail) VALUES (${g.id}, ${me}, 'created', ${name})`;
+  return res.status(200).json({ ok: true, id: Number(g.id), code });
+}
+
+async function groupJoin(req, res, body, me) {
+  const code = clean(body.code, 20);
+  const g = (await sql`SELECT id FROM study_groups WHERE invite_code=${code} LIMIT 1`)[0];
+  if (!g) return res.status(404).json({ error: "That invite code is not valid." });
+  const members = Number((await sql`SELECT COUNT(*) AS n FROM group_members WHERE group_id=${g.id}`)[0]?.n || 0);
+  if (members >= 50) return res.status(400).json({ error: "This group is full." });
+  const ins = await sql`INSERT INTO group_members (group_id, clerk_user_id) VALUES (${g.id}, ${me}) ON CONFLICT DO NOTHING RETURNING group_id`;
+  if (ins.length) await sql`INSERT INTO group_activity (group_id, clerk_user_id, kind) VALUES (${g.id}, ${me}, 'joined')`;
+  return res.status(200).json({ ok: true, id: Number(g.id) });
+}
+
+async function groupInvite(req, res, body, me) {
+  const gid = parseInt(body.groupId, 10);
+  const them = clean(body.userId, 60);
+  if (!Number.isInteger(gid) || !them) return res.status(400).json({ error: "Bad request." });
+  if (!(await sql`SELECT 1 FROM group_members WHERE group_id=${gid} AND clerk_user_id=${me} LIMIT 1`).length)
+    return res.status(403).json({ error: "You're not in this group." });
+  if (!(await sql`SELECT 1 FROM friendships WHERE status='accepted' AND ((requester=${me} AND addressee=${them}) OR (requester=${them} AND addressee=${me})) LIMIT 1`).length)
+    return res.status(400).json({ error: "You can only add your friends." });
+  const members = Number((await sql`SELECT COUNT(*) AS n FROM group_members WHERE group_id=${gid}`)[0]?.n || 0);
+  if (members >= 50) return res.status(400).json({ error: "This group is full." });
+  const ins = await sql`INSERT INTO group_members (group_id, clerk_user_id) VALUES (${gid}, ${them}) ON CONFLICT DO NOTHING RETURNING group_id`;
+  if (ins.length) await sql`INSERT INTO group_activity (group_id, clerk_user_id, kind) VALUES (${gid}, ${them}, 'joined')`;
+  return res.status(200).json({ ok: true });
+}
+
+async function groupLeave(req, res, body, me) {
+  const gid = parseInt(body.groupId, 10);
+  if (!Number.isInteger(gid)) return res.status(400).json({ error: "Bad request." });
+  const g = (await sql`SELECT owner FROM study_groups WHERE id=${gid} LIMIT 1`)[0];
+  if (!g) return res.status(404).json({ error: "Group not found." });
+  await sql`DELETE FROM group_members WHERE group_id=${gid} AND clerk_user_id=${me}`;
+  const remaining = await sql`SELECT clerk_user_id FROM group_members WHERE group_id=${gid} ORDER BY joined_at ASC`;
+  if (!remaining.length) {
+    await sql`DELETE FROM study_groups WHERE id=${gid}`;
+    await sql`DELETE FROM group_library WHERE group_id=${gid}`;
+    await sql`DELETE FROM group_activity WHERE group_id=${gid}`;
+  } else if (g.owner === me) {
+    const heir = remaining[0].clerk_user_id;
+    await sql`UPDATE study_groups SET owner=${heir} WHERE id=${gid}`;
+    await sql`UPDATE group_members SET role='owner' WHERE group_id=${gid} AND clerk_user_id=${heir}`;
+  }
+  return res.status(200).json({ ok: true });
+}
+
+async function groupGet(req, res, body, me) {
+  const gid = parseInt(body.groupId, 10);
+  if (!Number.isInteger(gid)) return res.status(400).json({ error: "Bad request." });
+  const g = (await sql`SELECT id, name, owner, invite_code FROM study_groups WHERE id=${gid} LIMIT 1`)[0];
+  if (!g) return res.status(404).json({ error: "Group not found." });
+  const mem = await sql`SELECT clerk_user_id, role FROM group_members WHERE group_id=${gid}`;
+  if (!mem.some((m) => m.clerk_user_id === me)) return res.status(403).json({ error: "You're not in this group." });
+  const ids = mem.map((m) => m.clerk_user_id);
+  const names = await usernamesFor(ids);
+  const statRows = await sql`SELECT clerk_user_id, data->'stats' AS stats FROM study_data WHERE clerk_user_id = ANY(${ids}::text[])`;
+  const statMap = Object.fromEntries(statRows.map((r) => [r.clerk_user_id, r.stats || {}]));
+  const members = mem.map((m) => {
+    const s = statMap[m.clerk_user_id] || {};
+    const answered = Number(s.answered) || 0, correct = Number(s.correct) || 0;
+    return { userId: m.clerk_user_id, username: names[m.clerk_user_id] || "student", role: m.role,
+      streak: Number(s.streak) || 0, answered, accuracy: answered ? Math.round((correct / answered) * 100) : 0, you: m.clerk_user_id === me };
+  }).sort((a, b) => b.streak - a.streak || b.answered - a.answered);
+  const library = (await sql`SELECT id, clerk_user_id, title, subject FROM group_library WHERE group_id=${gid} ORDER BY created_at DESC LIMIT 60`)
+    .map((d) => ({ id: Number(d.id), by: names[d.clerk_user_id] || "student", title: d.title, subject: d.subject }));
+  const activity = (await sql`SELECT clerk_user_id, kind, detail, at FROM group_activity WHERE group_id=${gid} ORDER BY at DESC LIMIT 30`)
+    .map((a) => ({ by: names[a.clerk_user_id] || "student", kind: a.kind, detail: a.detail, at: a.at }));
+  return res.status(200).json({ id: Number(g.id), name: g.name, code: g.invite_code, isOwner: g.owner === me, members, library, activity });
+}
+
+async function groupShare(req, res, body, me) {
+  const gid = parseInt(body.groupId, 10);
+  const title = clean(body.title, 120), subject = clean(body.subject, 80), summary = clean(body.summary, 8000);
+  if (!Number.isInteger(gid) || !title) return res.status(400).json({ error: "Bad request." });
+  if (!(await sql`SELECT 1 FROM group_members WHERE group_id=${gid} AND clerk_user_id=${me} LIMIT 1`).length)
+    return res.status(403).json({ error: "You're not in this group." });
+  const n = Number((await sql`SELECT COUNT(*) AS n FROM group_library WHERE group_id=${gid}`)[0]?.n || 0);
+  if (n >= 200) return res.status(400).json({ error: "The group library is full." });
+  await sql`INSERT INTO group_library (group_id, clerk_user_id, title, subject, summary) VALUES (${gid}, ${me}, ${title}, ${subject}, ${summary})`;
+  await sql`INSERT INTO group_activity (group_id, clerk_user_id, kind, detail) VALUES (${gid}, ${me}, 'shared', ${title})`;
+  return res.status(200).json({ ok: true });
+}
+
+// Fetch one shared doc's summary so a member can generate a quiz from it.
+async function groupDoc(req, res, body, me) {
+  const id = parseInt(body.docId, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad request." });
+  const d = (await sql`SELECT group_id, title, subject, summary FROM group_library WHERE id=${id} LIMIT 1`)[0];
+  if (!d) return res.status(404).json({ error: "Not found." });
+  if (!(await sql`SELECT 1 FROM group_members WHERE group_id=${d.group_id} AND clerk_user_id=${me} LIMIT 1`).length)
+    return res.status(403).json({ error: "You're not in this group." });
+  return res.status(200).json({ title: d.title, subject: d.subject, summary: d.summary });
+}
+
+// Append an activity item (e.g. after a member finishes a quiz on group material).
+async function groupLog(req, res, body, me) {
+  const gid = parseInt(body.groupId, 10);
+  const kind = clean(body.kind, 16), detail = clean(body.detail, 120);
+  if (!Number.isInteger(gid) || !kind) return res.status(400).json({ error: "Bad request." });
+  if (!(await sql`SELECT 1 FROM group_members WHERE group_id=${gid} AND clerk_user_id=${me} LIMIT 1`).length)
+    return res.status(403).json({ error: "You're not in this group." });
+  await sql`INSERT INTO group_activity (group_id, clerk_user_id, kind, detail) VALUES (${gid}, ${me}, ${kind}, ${detail})`;
+  await sql`DELETE FROM group_activity WHERE group_id=${gid} AND id NOT IN (SELECT id FROM group_activity WHERE group_id=${gid} ORDER BY at DESC LIMIT 100)`;
+  return res.status(200).json({ ok: true });
+}
+
 export default async function handler(req, res) {
   try {
     await ensureTables();
@@ -485,6 +721,19 @@ export default async function handler(req, res) {
       if (body?.action === "arenaDraw") return arenaDraw(req, res, body);
       if (body?.action === "arenaSubmit") return arenaSubmit(req, res, body, userId);
       if (body?.action === "arenaBoard") return arenaBoard(req, res, userId);
+      // Friends + study groups
+      if (body?.action === "social") return socialOverview(req, res, userId);
+      if (body?.action === "friendAdd") return friendAdd(req, res, body, userId);
+      if (body?.action === "friendRespond") return friendRespond(req, res, body, userId);
+      if (body?.action === "friendRemove") return friendRemove(req, res, body, userId);
+      if (body?.action === "groupCreate") return groupCreate(req, res, body, userId);
+      if (body?.action === "groupJoin") return groupJoin(req, res, body, userId);
+      if (body?.action === "groupInvite") return groupInvite(req, res, body, userId);
+      if (body?.action === "groupLeave") return groupLeave(req, res, body, userId);
+      if (body?.action === "groupGet") return groupGet(req, res, body, userId);
+      if (body?.action === "groupShare") return groupShare(req, res, body, userId);
+      if (body?.action === "groupDoc") return groupDoc(req, res, body, userId);
+      if (body?.action === "groupLog") return groupLog(req, res, body, userId);
 
       // Default: save the user's study blob.
       const data = body?.data;
