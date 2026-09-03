@@ -138,7 +138,29 @@ function ensureTables() {
         detail        TEXT,
         at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
-    ]).then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
+      // Group chat: members discuss their material.
+      sql`CREATE TABLE IF NOT EXISTS group_messages (
+        id            BIGSERIAL   PRIMARY KEY,
+        group_id      BIGINT      NOT NULL,
+        clerk_user_id TEXT        NOT NULL,
+        text          TEXT        NOT NULL,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      // Collective rewards: when the group levels up its shared goal, every member
+      // gets a claimable reward (added to their personal power-up wallet). One row
+      // per (group, member, level) so a level is only ever rewarded once each.
+      sql`CREATE TABLE IF NOT EXISTS group_reward (
+        group_id      BIGINT      NOT NULL,
+        clerk_user_id TEXT        NOT NULL,
+        level         INT         NOT NULL,
+        reward        JSONB       NOT NULL,
+        claimed       BOOLEAN     NOT NULL DEFAULT FALSE,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (group_id, clerk_user_id, level)
+      )`,
+    ]).then(() => sql`ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS points INT NOT NULL DEFAULT 0`)
+      .then(() => sql`ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 1`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS arena_board ON arena_score (best_score DESC)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS gk_pool_diff ON gk_pool (difficulty)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS friendships_addr ON friendships (addressee, status)`)
@@ -146,6 +168,7 @@ function ensureTables() {
       .then(() => sql`CREATE INDEX IF NOT EXISTS group_members_user ON group_members (clerk_user_id)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS group_library_grp ON group_library (group_id, created_at DESC)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS group_activity_grp ON group_activity (group_id, at DESC)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS group_messages_grp ON group_messages (group_id, id DESC)`)
       .then(() => true).catch(() => { ensured = null; return false; });
   }
   return ensured;
@@ -512,6 +535,8 @@ async function arenaBoard(req, res, userId) {
 }
 
 // ── Friends + study groups ───────────────────────────────────────────────
+const GROUP_GOAL_BASE = 300;                        // points per group level (cumulative)
+const GROUP_LEVEL_REWARD = { hint: 2, freeze: 1 };  // every member earns this each level-up
 // Map a set of clerk user ids to their public usernames (one query).
 async function usernamesFor(ids) {
   if (!ids.length) return {};
@@ -639,7 +664,7 @@ async function groupLeave(req, res, body, me) {
 async function groupGet(req, res, body, me) {
   const gid = parseInt(body.groupId, 10);
   if (!Number.isInteger(gid)) return res.status(400).json({ error: "Bad request." });
-  const g = (await sql`SELECT id, name, owner, invite_code FROM study_groups WHERE id=${gid} LIMIT 1`)[0];
+  const g = (await sql`SELECT id, name, owner, invite_code, points, level FROM study_groups WHERE id=${gid} LIMIT 1`)[0];
   if (!g) return res.status(404).json({ error: "Group not found." });
   const mem = await sql`SELECT clerk_user_id, role FROM group_members WHERE group_id=${gid}`;
   if (!mem.some((m) => m.clerk_user_id === me)) return res.status(403).json({ error: "You're not in this group." });
@@ -657,7 +682,15 @@ async function groupGet(req, res, body, me) {
     .map((d) => ({ id: Number(d.id), by: names[d.clerk_user_id] || "student", title: d.title, subject: d.subject }));
   const activity = (await sql`SELECT clerk_user_id, kind, detail, at FROM group_activity WHERE group_id=${gid} ORDER BY at DESC LIMIT 30`)
     .map((a) => ({ by: names[a.clerk_user_id] || "student", kind: a.kind, detail: a.detail, at: a.at }));
-  return res.status(200).json({ id: Number(g.id), name: g.name, code: g.invite_code, isOwner: g.owner === me, members, library, activity });
+  // Shared goal progress + this member's unclaimed collective reward.
+  const level = Number(g.level) || 1, points = Number(g.points) || 0;
+  const unc = await sql`SELECT reward FROM group_reward WHERE group_id=${gid} AND clerk_user_id=${me} AND claimed=false`;
+  let reward = null;
+  if (unc.length) { reward = { hint: 0, freeze: 0, skip: 0 }; for (const r of unc) { const rw = r.reward || {}; reward.hint += Number(rw.hint) || 0; reward.freeze += Number(rw.freeze) || 0; reward.skip += Number(rw.skip) || 0; } }
+  return res.status(200).json({
+    id: Number(g.id), name: g.name, code: g.invite_code, isOwner: g.owner === me, members, library, activity,
+    level, points, goal: level * GROUP_GOAL_BASE, prevGoal: (level - 1) * GROUP_GOAL_BASE, reward,
+  });
 }
 
 async function groupShare(req, res, body, me) {
@@ -684,16 +717,73 @@ async function groupDoc(req, res, body, me) {
   return res.status(200).json({ title: d.title, subject: d.subject, summary: d.summary });
 }
 
-// Append an activity item (e.g. after a member finishes a quiz on group material).
+// Append an activity item and, when `points` are supplied (e.g. correct answers on
+// group material), add them to the group's shared total; crossing a level threshold
+// grants EVERY member a claimable reward.
 async function groupLog(req, res, body, me) {
   const gid = parseInt(body.groupId, 10);
   const kind = clean(body.kind, 16), detail = clean(body.detail, 120);
+  const pts = Math.max(0, Math.min(100, parseInt(body.points, 10) || 0));
   if (!Number.isInteger(gid) || !kind) return res.status(400).json({ error: "Bad request." });
   if (!(await sql`SELECT 1 FROM group_members WHERE group_id=${gid} AND clerk_user_id=${me} LIMIT 1`).length)
     return res.status(403).json({ error: "You're not in this group." });
   await sql`INSERT INTO group_activity (group_id, clerk_user_id, kind, detail) VALUES (${gid}, ${me}, ${kind}, ${detail})`;
   await sql`DELETE FROM group_activity WHERE group_id=${gid} AND id NOT IN (SELECT id FROM group_activity WHERE group_id=${gid} ORDER BY at DESC LIMIT 100)`;
+  let leveledTo = 0;
+  if (pts > 0) {
+    const row = (await sql`UPDATE study_groups SET points = points + ${pts} WHERE id=${gid} RETURNING points, level`)[0];
+    if (row) {
+      let level = row.level;
+      while (row.points >= level * GROUP_GOAL_BASE) level++;   // may cross several at once
+      if (level > row.level) {
+        await sql`UPDATE study_groups SET level=${level} WHERE id=${gid}`;
+        for (let L = row.level + 1; L <= level; L++) {
+          await sql`INSERT INTO group_reward (group_id, clerk_user_id, level, reward)
+                    SELECT group_id, clerk_user_id, ${L}, ${JSON.stringify(GROUP_LEVEL_REWARD)}::jsonb
+                    FROM group_members WHERE group_id=${gid}
+                    ON CONFLICT DO NOTHING`;
+        }
+        await sql`INSERT INTO group_activity (group_id, clerk_user_id, kind, detail) VALUES (${gid}, ${me}, 'level', ${String(level)})`;
+        leveledTo = level;
+      }
+    }
+  }
+  return res.status(200).json({ ok: true, leveledTo });
+}
+
+// Claim any group-level rewards waiting for this member; returns the summed bundle
+// so the client can add it to the personal power-up wallet.
+async function groupClaim(req, res, body, me) {
+  const gid = parseInt(body.groupId, 10);
+  if (!Number.isInteger(gid)) return res.status(400).json({ error: "Bad request." });
+  const rows = await sql`SELECT reward FROM group_reward WHERE group_id=${gid} AND clerk_user_id=${me} AND claimed=false`;
+  if (!rows.length) return res.status(200).json({ ok: true, reward: null });
+  const total = { hint: 0, freeze: 0, skip: 0 };
+  for (const r of rows) { const rw = r.reward || {}; total.hint += Number(rw.hint) || 0; total.freeze += Number(rw.freeze) || 0; total.skip += Number(rw.skip) || 0; }
+  await sql`UPDATE group_reward SET claimed=true WHERE group_id=${gid} AND clerk_user_id=${me} AND claimed=false`;
+  return res.status(200).json({ ok: true, reward: total });
+}
+
+// Group chat.
+async function groupChatSend(req, res, body, me) {
+  const gid = parseInt(body.groupId, 10);
+  const text = clean(body.text, 1000);
+  if (!Number.isInteger(gid) || !text) return res.status(400).json({ error: "Bad request." });
+  if (!(await sql`SELECT 1 FROM group_members WHERE group_id=${gid} AND clerk_user_id=${me} LIMIT 1`).length)
+    return res.status(403).json({ error: "You're not in this group." });
+  await sql`INSERT INTO group_messages (group_id, clerk_user_id, text) VALUES (${gid}, ${me}, ${text})`;
+  await sql`DELETE FROM group_messages WHERE group_id=${gid} AND id NOT IN (SELECT id FROM group_messages WHERE group_id=${gid} ORDER BY id DESC LIMIT 300)`;
   return res.status(200).json({ ok: true });
+}
+async function groupChat(req, res, body, me) {
+  const gid = parseInt(body.groupId, 10);
+  if (!Number.isInteger(gid)) return res.status(400).json({ error: "Bad request." });
+  if (!(await sql`SELECT 1 FROM group_members WHERE group_id=${gid} AND clerk_user_id=${me} LIMIT 1`).length)
+    return res.status(403).json({ error: "You're not in this group." });
+  const rows = await sql`SELECT id, clerk_user_id, text, created_at FROM group_messages WHERE group_id=${gid} ORDER BY id DESC LIMIT 60`;
+  const names = await usernamesFor([...new Set(rows.map((r) => r.clerk_user_id))]);
+  const messages = rows.reverse().map((r) => ({ id: Number(r.id), by: names[r.clerk_user_id] || "student", mine: r.clerk_user_id === me, text: r.text, at: r.created_at }));
+  return res.status(200).json({ messages });
 }
 
 export default async function handler(req, res) {
@@ -734,6 +824,9 @@ export default async function handler(req, res) {
       if (body?.action === "groupShare") return groupShare(req, res, body, userId);
       if (body?.action === "groupDoc") return groupDoc(req, res, body, userId);
       if (body?.action === "groupLog") return groupLog(req, res, body, userId);
+      if (body?.action === "groupClaim") return groupClaim(req, res, body, userId);
+      if (body?.action === "groupChat") return groupChat(req, res, body, userId);
+      if (body?.action === "groupChatSend") return groupChatSend(req, res, body, userId);
 
       // Default: save the user's study blob.
       const data = body?.data;

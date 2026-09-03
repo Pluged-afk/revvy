@@ -2431,7 +2431,7 @@ export default function StudyQuiz() {
       if (groupQuizRef.current) {
         const gq = groupQuizRef.current; groupQuizRef.current = null;
         const c = answers.filter((a) => a && a.isCorrect).length;
-        socialApi("groupLog", { groupId: gq.groupId, kind: "quiz", detail: `${c}/${answers.length} · ${gq.title}` });
+        socialApi("groupLog", { groupId: gq.groupId, kind: "quiz", detail: `${c}/${answers.length} · ${gq.title}`, points: c });
       }
       srs.recordTopics(quiz.questions.map((q, i) => ({ topic: q.topic, correct: answers[i]?.isCorrect === true })));
       // Adaptive difficulty: log this round only if it was a fresh, difficulty-
@@ -3664,6 +3664,9 @@ export default function StudyQuiz() {
   const [groupTab, setGroupTab] = useState("board");    // board | library | activity
   const [showShare, setShowShare] = useState(false);    // share-to-group picker
   const [copiedCode, setCopiedCode] = useState(false);
+  const [chatMsgs, setChatMsgs] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [claimMsg, setClaimMsg] = useState("");         // "Claimed +2 hints..." toast
   const loadSocial = useCallback(async () => {
     setSocialBusy(true);
     const r = await socialApi("social");
@@ -3767,6 +3770,38 @@ export default function StudyQuiz() {
     try { const u = new URL(window.location.href); u.searchParams.delete("join"); window.history.replaceState({}, "", u); } catch { /* ignore */ }
     (async () => { const r = await socialApi("groupJoin", { code }); if (r && r.id) openGroup(r.id); else openSocial(); })();
   }, [user, openGroup, openSocial]);
+  // Claim the group's collective reward into the personal power-up wallet.
+  const doClaimReward = useCallback(async () => {
+    if (!activeGroup) return;
+    const r = await socialApi("groupClaim", { groupId: activeGroup.id });
+    if (r.reward) {
+      srs.grantPowerups(r.reward);
+      const parts = [];
+      if (r.reward.hint) parts.push(`${r.reward.hint} ${t.arenaHint || "hint"}`);
+      if (r.reward.freeze) parts.push(`${r.reward.freeze} ${t.arenaFreeze || "freeze"}`);
+      if (r.reward.skip) parts.push(`${r.reward.skip} ${t.arenaSkip || "skip"}`);
+      setClaimMsg((t.groupRewardClaimed || "Claimed {p}, your whole group earned it!").replace("{p}", parts.join(", ")));
+      setTimeout(() => setClaimMsg(""), 3500);
+      refreshGroup();
+    }
+  }, [activeGroup, srs, t, refreshGroup]);
+  // Group chat: load + send, polled while the chat tab is open.
+  const loadChat = useCallback(async (groupId) => {
+    const r = await socialApi("groupChat", { groupId });
+    if (!r.error) setChatMsgs(r.messages || []);
+  }, []);
+  const sendChat = useCallback(async () => {
+    const text = chatInput.trim(); if (!text || !activeGroup) return;
+    setChatInput("");
+    await socialApi("groupChatSend", { groupId: activeGroup.id, text });
+    loadChat(activeGroup.id);
+  }, [chatInput, activeGroup, loadChat]);
+  useEffect(() => {
+    if (screen !== "group" || groupTab !== "chat" || !activeGroup) return;
+    loadChat(activeGroup.id);
+    const id = setInterval(() => loadChat(activeGroup.id), 4000);
+    return () => clearInterval(id);
+  }, [screen, groupTab, activeGroup, loadChat]);
   const [showUsername, setShowUsername] = useState(false);
   const [unameInput, setUnameInput] = useState("");
   const [unameErr, setUnameErr] = useState("");
@@ -5247,14 +5282,32 @@ export default function StudyQuiz() {
       <div className="rv-center-narrow" style={{padding:"18px 16px 40px"}}>
         {groupBusy && <div style={{textAlign:"center",padding:"40px 0"}}><div className="spin-ring" style={{width:34,height:34,borderRadius:"50%",border:"3px solid var(--color-border-tertiary)",borderTopColor:"var(--color-accent)",margin:"0 auto"}}/></div>}
         {activeGroup && (<>
-          <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
             <button onClick={copyInvite} style={{...Sb.btnOutline,flex:1,fontSize:12.5,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="link" size={14}/>{copiedCode?(t.copiedWord||"Copied!"):(t.copyInvite||"Copy invite link")}</button>
             <button onClick={doLeaveGroup} style={{...Sb.btnGhost,fontSize:12.5,color:"#b91c1c"}}>{t.leaveGroup||"Leave"}</button>
           </div>
+          {/* Collective goal: everyone's practice fills it; hitting it rewards every member. */}
+          <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 15px",marginBottom:claimMsg?8:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <span style={{fontSize:13,fontWeight:700,color:"var(--color-text-primary)",display:"inline-flex",alignItems:"center",gap:6}}><Icon name="trophy" size={15} style={{color:"#a3762b"}}/>{(t.groupLevel||"Group level {n}").replace("{n}",activeGroup.level||1)}</span>
+              <span style={{fontSize:11.5,color:"var(--color-text-secondary)",fontFamily:"monospace"}}>{(activeGroup.points||0)-(activeGroup.prevGoal||0)}/{(activeGroup.goal||300)-(activeGroup.prevGoal||0)}</span>
+            </div>
+            <div style={{height:8,borderRadius:5,background:"var(--color-background-secondary)",overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${Math.min(100,Math.max(0,(((activeGroup.points||0)-(activeGroup.prevGoal||0))/Math.max(1,(activeGroup.goal||300)-(activeGroup.prevGoal||0)))*100))}%`,background:"var(--color-accent)",borderRadius:5,transition:"width .4s"}}/>
+            </div>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:7,lineHeight:1.4}}>{t.groupGoalHint||"Everyone's practice on shared material fills this bar. Reach the goal and every member earns power-ups."}</div>
+            {activeGroup.reward && (
+              <button onClick={doClaimReward} style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,background:"#a3762b"}}>
+                <Icon name="gem" size={15}/>{(t.claimGroupReward||"Claim your group reward: +{h} hint, +{f} freeze").replace("{h}",activeGroup.reward.hint||0).replace("{f}",activeGroup.reward.freeze||0)}
+              </button>
+            )}
+          </div>
+          {claimMsg && <div style={{background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"10px 14px",fontSize:12.5,fontWeight:600,color:"var(--color-text-primary)",marginBottom:12,display:"flex",alignItems:"center",gap:8}}><Icon name="gem" size={15} style={{color:"var(--color-accent)"}}/>{claimMsg}</div>}
           <div style={{marginBottom:16}}>
             <Segmented value={groupTab} onChange={(o)=>setGroupTab(o.value)} options={[
               {value:"board",label:t.tabBoard||"Board"},
               {value:"library",label:t.tabLibrary||"Library"},
+              {value:"chat",label:t.tabChat||"Chat"},
               {value:"activity",label:t.tabActivity||"Activity"},
             ]}/>
           </div>
@@ -5286,7 +5339,24 @@ export default function StudyQuiz() {
               <span style={{fontSize:10.5,color:"var(--color-text-tertiary)",flexShrink:0}}>{timeAgo(a.at)}</span>
             </div>
           )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)"}}>{t.groupActivityEmpty||"No activity yet."}</div>)}
-          {social?.friends?.length>0 && (()=>{
+          {groupTab==="chat" && (
+            <div>
+              <div style={{maxHeight:"46vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:8,marginBottom:12,padding:"2px"}}>
+                {chatMsgs.length ? chatMsgs.map(m=>(
+                  <div key={m.id} style={{alignSelf:m.mine?"flex-end":"flex-start",maxWidth:"82%"}}>
+                    {!m.mine && <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",margin:"0 0 2px 10px"}}>{m.by}</div>}
+                    <div style={{background:m.mine?"var(--color-accent)":"var(--color-background-secondary)",color:m.mine?"#fff":"var(--color-text-primary)",borderRadius:14,padding:"8px 12px",fontSize:13.5,lineHeight:1.4,wordBreak:"break-word"}}>{m.text}</div>
+                  </div>
+                )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)",textAlign:"center",padding:"20px 0"}}>{t.chatEmpty||"No messages yet. Say hi and plan your studying."}</div>}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendChat();}} placeholder={t.chatPlaceholder||"Message the group"} maxLength={1000}
+                  style={{flex:1,minWidth:0,borderRadius:999,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 16px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+                <button onClick={sendChat} disabled={!chatInput.trim()} style={{...Sb.btnPrimary,padding:"0 16px",fontSize:13,opacity:chatInput.trim()?1:0.45}}>{t.sendWord||"Send"}</button>
+              </div>
+            </div>
+          )}
+          {groupTab!=="chat" && social?.friends?.length>0 && (()=>{
             const inGroup = new Set(activeGroup.members.map(m=>m.userId));
             const addable = social.friends.filter(f=>!inGroup.has(f.userId));
             if(!addable.length) return null;

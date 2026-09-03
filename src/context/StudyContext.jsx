@@ -343,6 +343,16 @@ export function StudyProvider({ children }) {
     commit((p) => { const w = normWallet(p.wallet); return { ...p, wallet: { ...w, [type]: Math.max(0, w[type] - 1) } }; });
   }, [commit]);
 
+  // Add several power-ups at once (capped), e.g. claiming a study-group reward.
+  const grantPowerups = useCallback((delta) => {
+    const d = delta || {};
+    commit((p) => {
+      const w = normWallet(p.wallet);
+      const add = (k) => Math.min(POWERUP_CAP[k] || 0, w[k] + Math.max(0, Math.floor(Number(d[k]) || 0)));
+      return { ...p, wallet: { hint: add("hint"), freeze: add("freeze"), skip: add("skip") } };
+    });
+  }, [commit]);
+
   // Record per-topic outcomes (seen + correct) from a finished quiz/exam. Powers
   // the mastery view and "drill weak spots". Ignores blank / "general" topics.
   const recordTopics = useCallback((rows) => {
@@ -435,7 +445,7 @@ export function StudyProvider({ children }) {
     cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans, topicStats: data.topicStats, perf: data.perf, bank: data.bank, library: data.library, mockScores: data.mockScores,
     wallet: data.wallet, streakSavers: data.streakSavers, savedProgress: data.savedProgress,
     addMissed, grade, removeCard, clearAll, setExamDate, recordSession, recordTopics, recordPerf,
-    completeActivity, usePowerup,
+    completeActivity, usePowerup, grantPowerups,
     bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc, recordMockScore,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };

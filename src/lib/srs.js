@@ -56,6 +56,6 @@ export function useSRS() {
     // Rewards economy: power-up wallet, streak savers, and the grant/spend API.
     wallet: study?.wallet || { hint: 0, freeze: 0, skip: 0 },
     streakSavers: study?.streakSavers || 0, savedProgress: study?.savedProgress || 0,
-    completeActivity: study?.completeActivity || (() => null), usePowerup: study?.usePowerup || (() => {}),
+    completeActivity: study?.completeActivity || (() => null), usePowerup: study?.usePowerup || (() => {}), grantPowerups: study?.grantPowerups || (() => {}),
   };
 }
