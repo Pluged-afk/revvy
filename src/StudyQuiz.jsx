@@ -35,6 +35,33 @@ const pupName = (t, key) => key === "freeze" ? (t.arenaFreeze || "Freeze") : key
 // Leaderboard is hidden for now (still gated at 100 players server-side too). Flip
 // to true to re-expose the entry points on the arena intro + game-over screens.
 const SHOW_ARENA_LEADERBOARD = false;
+
+// Round initial-letter avatar used across friends + groups (no external image).
+function AvatarInitial({ name, size = 34 }) {
+  return (
+    <span style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-sel-tint)", color: "var(--color-accent)", fontSize: Math.round(size * 0.42), fontWeight: 700 }}>
+      {String(name || "?").charAt(0).toUpperCase()}
+    </span>
+  );
+}
+// A group-activity line in words.
+function activityText(a, t) {
+  if (a.kind === "created") return t.actCreated || "created the group";
+  if (a.kind === "joined") return t.actJoined || "joined the group";
+  if (a.kind === "shared") return `${t.actShared || "shared"} ${a.detail || ""}`.trim();
+  if (a.kind === "quiz") return `${t.actScored || "scored"} ${a.detail || ""}`.trim();
+  return a.detail || a.kind;
+}
+// Compact relative time ("now", "5m", "2h", "3d").
+function timeAgo(at) {
+  const d = new Date(at).getTime();
+  if (isNaN(d)) return "";
+  const s = Math.max(0, Math.floor((Date.now() - d) / 1000));
+  if (s < 60) return "now";
+  const m = Math.floor(s / 60); if (m < 60) return m + "m";
+  const h = Math.floor(m / 60); if (h < 24) return h + "h";
+  return Math.floor(h / 24) + "d";
+}
 // Parse a pasted Quizlet export into flashcards. Quizlet separates term from
 // definition with a Tab (or comma) and cards with a newline (or semicolon); we
 // split on the FIRST separator per row so definitions keep their own commas.
@@ -727,6 +754,17 @@ async function arenaBoardGlobal() {
     if (!res.ok) return null;
     return await res.json().catch(() => null);
   } catch { return null; }
+}
+
+// ── Friends + study groups (client fetch helpers) ──
+// One call for any social action; returns the parsed JSON or {error}.
+async function socialApi(action, payload = {}) {
+  try {
+    const res = await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())}, body: JSON.stringify({ action, ...payload }) });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: j.error || "Something went wrong." };
+    return j;
+  } catch { return { error: "Network error, try again." }; }
 }
 
 // Public-name picker. Shown once after login (skippable) and required before the
@@ -2142,6 +2180,8 @@ export default function StudyQuiz() {
   // The material blocks the current quiz was built from, kept so "Report a
   // problem" (FlagFix) can regenerate a replacement grounded in the same notes.
   const genBlocksRef = useRef(null);
+  const groupQuizRef = useRef(null); // {groupId, title} when the current quiz came from a group's shared material
+  const joinHandledRef = useRef(false); // guard so a ?join= invite link is only acted on once
   const [error,        setError]        = useState("");
   const [drag,         setDrag]         = useState(false);
   const [showProModal, setShowProModal] = useState(false);
@@ -2386,6 +2426,13 @@ export default function StudyQuiz() {
       // Universal streak + rewards: passing earns a power-up, and the questions
       // count toward the next (silent) streak saver. Supersedes recordSession.
       setEarnedReward(srs.completeActivity({ mode: "quiz", correct: answers.filter((a) => a && a.isCorrect).length, total: answers.length }));
+      // If this quiz came from a group's shared material, post the result to the
+      // group's activity feed (best-effort), then clear the marker.
+      if (groupQuizRef.current) {
+        const gq = groupQuizRef.current; groupQuizRef.current = null;
+        const c = answers.filter((a) => a && a.isCorrect).length;
+        socialApi("groupLog", { groupId: gq.groupId, kind: "quiz", detail: `${c}/${answers.length} · ${gq.title}` });
+      }
       srs.recordTopics(quiz.questions.map((q, i) => ({ topic: q.topic, correct: answers[i]?.isCorrect === true })));
       // Adaptive difficulty: log this round only if it was a fresh, difficulty-
       // calibrated set (not a fix-your-misses re-drill or a retry of seen
@@ -3604,6 +3651,122 @@ export default function StudyQuiz() {
   const [arenaBoardData, setArenaBoardData] = useState(null);
   const [arenaBusy, setArenaBusy] = useState(false);
   const [arenaErr, setArenaErr] = useState("");
+  // ── Friends + study groups ──
+  const [social, setSocial] = useState(null);      // {friends, incoming, outgoing, groups}
+  const [socialBusy, setSocialBusy] = useState(false);
+  const [socialErr, setSocialErr] = useState("");
+  const [friendInput, setFriendInput] = useState("");
+  const [friendMsg, setFriendMsg] = useState("");
+  const [groupNameInput, setGroupNameInput] = useState("");
+  const [joinCodeInput, setJoinCodeInput] = useState("");
+  const [activeGroup, setActiveGroup] = useState(null); // loaded group detail
+  const [groupBusy, setGroupBusy] = useState(false);
+  const [groupTab, setGroupTab] = useState("board");    // board | library | activity
+  const [showShare, setShowShare] = useState(false);    // share-to-group picker
+  const [copiedCode, setCopiedCode] = useState(false);
+  const loadSocial = useCallback(async () => {
+    setSocialBusy(true);
+    const r = await socialApi("social");
+    setSocialBusy(false);
+    if (!r.error) setSocial({ friends: r.friends || [], incoming: r.incoming || [], outgoing: r.outgoing || [], groups: r.groups || [] });
+  }, []);
+  const openSocial = useCallback(() => { if (requireLogin()) return; setSocialErr(""); setFriendMsg(""); setScreen("social"); loadSocial(); }, [requireLogin, loadSocial]);
+  const doAddFriend = useCallback(async () => {
+    const name = friendInput.trim(); if (!name || socialBusy) return;
+    setSocialBusy(true); setFriendMsg(""); setSocialErr("");
+    const r = await socialApi("friendAdd", { username: name });
+    setSocialBusy(false);
+    if (r.error) { setSocialErr(r.error); return; }
+    setFriendInput(""); setFriendMsg(r.status === "accepted" ? t.friendAdded || "You're now friends!" : t.friendRequested || "Request sent.");
+    loadSocial();
+  }, [friendInput, socialBusy, loadSocial, t]);
+  const doRespondFriend = useCallback(async (id, accept) => { await socialApi("friendRespond", { id, accept }); loadSocial(); }, [loadSocial]);
+  const doRemoveFriend = useCallback(async (userId) => { await socialApi("friendRemove", { userId }); loadSocial(); }, [loadSocial]);
+  const doCreateGroup = useCallback(async () => {
+    const name = groupNameInput.trim(); if (!name || socialBusy) return;
+    setSocialBusy(true); setSocialErr("");
+    const r = await socialApi("groupCreate", { name });
+    setSocialBusy(false);
+    if (r.error) { setSocialErr(r.error); return; }
+    setGroupNameInput(""); loadSocial();
+  }, [groupNameInput, socialBusy, loadSocial]);
+  const doJoinGroup = useCallback(async () => {
+    const code = joinCodeInput.trim(); if (!code || socialBusy) return;
+    setSocialBusy(true); setSocialErr("");
+    const r = await socialApi("groupJoin", { code });
+    setSocialBusy(false);
+    if (r.error) { setSocialErr(r.error); return; }
+    setJoinCodeInput(""); loadSocial();
+  }, [joinCodeInput, socialBusy, loadSocial]);
+  const openGroup = useCallback(async (groupId) => {
+    setGroupBusy(true); setActiveGroup(null); setGroupTab("board"); setScreen("group");
+    const r = await socialApi("groupGet", { groupId });
+    setGroupBusy(false);
+    if (r.error) { setSocialErr(r.error); setScreen("social"); return; }
+    setActiveGroup(r);
+  }, []);
+  const refreshGroup = useCallback(async () => {
+    if (!activeGroup) return;
+    const r = await socialApi("groupGet", { groupId: activeGroup.id });
+    if (!r.error) setActiveGroup(r);
+  }, [activeGroup]);
+  const doInviteFriend = useCallback(async (userId) => {
+    if (!activeGroup) return;
+    await socialApi("groupInvite", { groupId: activeGroup.id, userId });
+    refreshGroup();
+  }, [activeGroup, refreshGroup]);
+  const doLeaveGroup = useCallback(async () => {
+    if (!activeGroup) return;
+    if (typeof window !== "undefined" && !window.confirm(t.groupLeaveConfirm || "Leave this group?")) return;
+    await socialApi("groupLeave", { groupId: activeGroup.id });
+    setActiveGroup(null); setScreen("social"); loadSocial();
+  }, [activeGroup, loadSocial, t]);
+  const doShareToGroup = useCallback(async (doc) => {
+    if (!activeGroup || !doc) return;
+    setShowShare(false);
+    await socialApi("groupShare", { groupId: activeGroup.id, title: doc.title, subject: doc.subject || "", summary: doc.summary || "" });
+    refreshGroup();
+  }, [activeGroup, refreshGroup]);
+  const copyInvite = useCallback(() => {
+    if (!activeGroup) return;
+    const link = `${typeof window !== "undefined" ? window.location.origin : "https://revyy.app"}/app?join=${activeGroup.code}`;
+    try { navigator.clipboard?.writeText(link); setCopiedCode(true); setTimeout(() => setCopiedCode(false), 1800); } catch { /* ignore */ }
+  }, [activeGroup]);
+  // Generate a quiz from a shared group doc (mirrors reviewLibrary), then log it.
+  const quizGroupDoc = useCallback(async (docId) => {
+    if (requireLogin() || !activeGroup) return;
+    const d = await socialApi("groupDoc", { docId });
+    if (d.error || !d.summary) { setSocialErr(d.error || t.groupNoMaterial || "Nothing to quiz yet."); return; }
+    const n = 10;
+    const consumed = await consumeQuestions(n);
+    if (consumed && consumed.allowed === false) { setError(isPro ? "Daily limit reached." : "Daily limit reached. Watch an ad or upgrade."); setScreen("upload"); return; }
+    const gid = activeGroup.id;
+    setScreen("loading");
+    try {
+      const blocks = [{ type: "text", text: `${d.title}${d.subject ? " ("+d.subject+")" : ""}\n\n${d.summary}` }];
+      let res = null, lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { const r = await callClaude({ blocks, numQ: n, diff, type: "mcq", uiLangName: LANGS[lang]?.name }); if (r?.questions?.length) { res = r; break; } }
+        catch (e) { lastErr = e; }
+      }
+      if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
+      genBlocksRef.current = blocks;
+      groupQuizRef.current = { groupId: gid, title: d.title };
+      setQuiz({ title: `${d.title} · ${t.groupWord || "Group"}`, subject: d.subject || "", questions: res.questions.slice(0, n), type: "mcq", fresh: true, genDiff: diff, groupId: gid });
+      setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
+      setScreen("quiz");
+    } catch (err) { setError(err.message?.includes("parse") ? t.errAiFormat : err.message); setScreen("group"); }
+  }, [requireLogin, activeGroup, consumeQuestions, isPro, diff, lang, t]);
+  // Invite links land at /app?join=CODE: once signed in, join that group and open it.
+  useEffect(() => {
+    if (joinHandledRef.current || !user) return;
+    let code = null;
+    try { code = new URLSearchParams(window.location.search).get("join"); } catch { /* ignore */ }
+    if (!code) return;
+    joinHandledRef.current = true;
+    try { const u = new URL(window.location.href); u.searchParams.delete("join"); window.history.replaceState({}, "", u); } catch { /* ignore */ }
+    (async () => { const r = await socialApi("groupJoin", { code }); if (r && r.id) openGroup(r.id); else openSocial(); })();
+  }, [user, openGroup, openSocial]);
   const [showUsername, setShowUsername] = useState(false);
   const [unameInput, setUnameInput] = useState("");
   const [unameErr, setUnameErr] = useState("");
@@ -3723,6 +3886,15 @@ export default function StudyQuiz() {
       </div>
 
       <div className="rv-home-body" style={{padding:"20px 16px 32px"}}>
+        {/* Friends + study groups entry */}
+        <div onClick={openSocial} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 16px",marginBottom:18,cursor:"pointer"}}>
+          <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="users" size={22}/></span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.socialTitle||"Friends & Groups"}</div>
+            <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.socialSub||"Add friends, form study groups, share material and compare progress."}</div>
+          </div>
+          <span style={{fontSize:17,color:"var(--color-text-tertiary)",flexShrink:0}}>›</span>
+        </div>
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
         <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4f46e5,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 14px rgba(79,70,229,0.2)":"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -4994,6 +5166,162 @@ export default function StudyQuiz() {
       </div>
     );
   }
+
+  // ── FRIENDS + STUDY GROUPS ────────────────────────────────────────
+  if (screen==="social") return (
+    <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      <div style={Sb.topbar} className="rv-topbar">
+        <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
+        <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.socialTitle||"Friends & Groups"}</span><span/>
+      </div>
+      <div className="rv-center-narrow" style={{padding:"20px 16px 40px"}}>
+        {socialErr && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>{socialErr}</div>}
+        {/* Add a friend */}
+        <div style={{...Sb.settingsBox,padding:"14px 16px",marginBottom:16}}>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--color-text-primary)",marginBottom:8}}>{t.addFriend||"Add a friend"}</div>
+          <div style={{display:"flex",gap:8}}>
+            <input value={friendInput} onChange={e=>{setFriendInput(e.target.value);setFriendMsg("");}} placeholder={t.friendUsernamePh||"their username"} onKeyDown={e=>{if(e.key==="Enter")doAddFriend();}}
+              style={{flex:1,minWidth:0,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+            <button onClick={doAddFriend} disabled={socialBusy||!friendInput.trim()} style={{...Sb.btnPrimary,padding:"0 16px",fontSize:13,opacity:(socialBusy||!friendInput.trim())?0.45:1}}>{t.addWord||"Add"}</button>
+          </div>
+          {friendMsg && <div style={{fontSize:11.5,color:"var(--color-text-success)",marginTop:6}}>{friendMsg}</div>}
+        </div>
+        {/* Incoming requests */}
+        {social?.incoming?.length>0 && (
+          <div style={{marginBottom:16}}>
+            <p style={Sb.secLabel}>{t.friendRequests||"Requests"}</p>
+            {social.incoming.map(r=>(
+              <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 12px",marginBottom:8}}>
+                <AvatarInitial name={r.username} size={30}/>
+                <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.username}</span>
+                <button onClick={()=>doRespondFriend(r.id,true)} style={{background:"var(--color-accent)",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.acceptWord||"Accept"}</button>
+                <button onClick={()=>doRespondFriend(r.id,false)} style={{background:"none",color:"var(--color-text-tertiary)",border:"none",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>{t.declineWord||"Decline"}</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Friends */}
+        <p style={Sb.secLabel}>{(t.friendsWord||"Friends")}{social?.friends?.length?` (${social.friends.length})`:""}</p>
+        {social?.friends?.length ? social.friends.map(f=>(
+          <div key={f.userId} style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 12px",marginBottom:8}}>
+            <AvatarInitial name={f.username} size={30}/>
+            <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.username}</span>
+            <button onClick={()=>doRemoveFriend(f.userId)} style={{background:"none",color:"var(--color-text-tertiary)",border:"none",fontSize:12,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:2}}>{t.removeWord||"Remove"}</button>
+          </div>
+        )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)",marginBottom:8}}>{t.noFriends||"No friends yet. Add someone by their username above."}</div>}
+        {/* Groups */}
+        <p style={{...Sb.secLabel,marginTop:20}}>{t.yourGroups||"Your study groups"}</p>
+        {social?.groups?.map(g=>(
+          <div key={g.id} onClick={()=>openGroup(g.id)} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 14px",marginBottom:10,cursor:"pointer"}}>
+            <span style={{width:38,height:38,borderRadius:10,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-sel-tint)",color:"var(--color-accent)"}}><Icon name="layers" size={19}/></span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:13.5,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.name}</div>
+              <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:2}}>{(t.membersCount||"{n} members").replace("{n}",g.members)}{g.isOwner?` · ${t.ownerWord||"owner"}`:""}</div>
+            </div>
+            <span style={{fontSize:17,color:"var(--color-text-tertiary)"}}>›</span>
+          </div>
+        ))}
+        <div style={{display:"flex",gap:8,marginTop:6,marginBottom:8}}>
+          <input value={groupNameInput} onChange={e=>setGroupNameInput(e.target.value)} placeholder={t.newGroupPh||"New group name"} onKeyDown={e=>{if(e.key==="Enter")doCreateGroup();}}
+            style={{flex:1,minWidth:0,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+          <button onClick={doCreateGroup} disabled={socialBusy||!groupNameInput.trim()} style={{...Sb.btnPrimary,padding:"0 16px",fontSize:13,opacity:(socialBusy||!groupNameInput.trim())?0.45:1}}>{t.createWord||"Create"}</button>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <input value={joinCodeInput} onChange={e=>setJoinCodeInput(e.target.value)} placeholder={t.joinCodePh||"Join with a code"} onKeyDown={e=>{if(e.key==="Enter")doJoinGroup();}}
+            style={{flex:1,minWidth:0,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+          <button onClick={doJoinGroup} disabled={socialBusy||!joinCodeInput.trim()} style={{...Sb.btnOutline,padding:"0 16px",fontSize:13,opacity:(socialBusy||!joinCodeInput.trim())?0.45:1}}>{t.joinWord||"Join"}</button>
+        </div>
+      </div>
+      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
+    </div>
+  );
+
+  if (screen==="group") return (
+    <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      <div style={Sb.topbar} className="rv-topbar">
+        <button style={Sb.backBtn} onClick={()=>{setScreen("social");loadSocial();}}>← {t.backWord}</button>
+        <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeGroup?.name||(t.groupWord||"Group")}</span><span/>
+      </div>
+      <div className="rv-center-narrow" style={{padding:"18px 16px 40px"}}>
+        {groupBusy && <div style={{textAlign:"center",padding:"40px 0"}}><div className="spin-ring" style={{width:34,height:34,borderRadius:"50%",border:"3px solid var(--color-border-tertiary)",borderTopColor:"var(--color-accent)",margin:"0 auto"}}/></div>}
+        {activeGroup && (<>
+          <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+            <button onClick={copyInvite} style={{...Sb.btnOutline,flex:1,fontSize:12.5,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="link" size={14}/>{copiedCode?(t.copiedWord||"Copied!"):(t.copyInvite||"Copy invite link")}</button>
+            <button onClick={doLeaveGroup} style={{...Sb.btnGhost,fontSize:12.5,color:"#b91c1c"}}>{t.leaveGroup||"Leave"}</button>
+          </div>
+          <div style={{marginBottom:16}}>
+            <Segmented value={groupTab} onChange={(o)=>setGroupTab(o.value)} options={[
+              {value:"board",label:t.tabBoard||"Board"},
+              {value:"library",label:t.tabLibrary||"Library"},
+              {value:"activity",label:t.tabActivity||"Activity"},
+            ]}/>
+          </div>
+          {groupTab==="board" && activeGroup.members.map((m,i)=>(
+            <div key={m.userId} style={{display:"flex",alignItems:"center",gap:11,background:m.you?"var(--color-sel-tint)":"var(--color-background-primary)",border:"1px solid "+(m.you?"var(--color-accent)":"var(--color-border-secondary)"),borderRadius:12,padding:"11px 13px",marginBottom:8}}>
+              <span style={{width:20,textAlign:"center",fontWeight:800,fontSize:13,color:i===0?"#a3762b":"var(--color-text-tertiary)",fontFamily:"monospace",flexShrink:0}}>{i+1}</span>
+              <AvatarInitial name={m.username} size={30}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.username}{m.you?` · ${t.youWord||"you"}`:""}{m.role==="owner"?" ★":""}</div>
+                <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:1}}>{(t.answeredCount||"{n} answered").replace("{n}",m.answered)} · {m.accuracy}%</div>
+              </div>
+              <div style={{fontSize:15,fontWeight:800,color:"#d97706",fontFamily:"monospace",display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><Icon name="flame" size={13} style={{color:"#f97316"}}/>{m.streak}</div>
+            </div>
+          ))}
+          {groupTab==="library" && (<>
+            <button onClick={()=>setShowShare(true)} style={{...Sb.btnPrimary,width:"100%",marginBottom:12,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="upload" size={15}/>{t.shareToGroup||"Share a study set"}</button>
+            {activeGroup.library.length ? activeGroup.library.map(d=>(
+              <div key={d.id} style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px 13px",marginBottom:8}}>
+                <div style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.title}</div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:1}}>{d.subject?`${d.subject} · `:""}{(t.sharedBy||"by {n}").replace("{n}",d.by)}</div>
+                <button onClick={()=>quizGroupDoc(d.id)} style={{...Sb.btnOutline,width:"100%",marginTop:10,fontSize:12.5,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="bolt" size={14}/>{t.quizThis||"Quiz me on this"}</button>
+              </div>
+            )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)"}}>{t.groupLibEmpty||"No shared material yet. Share a study set so the group can quiz on it."}</div>}
+          </>)}
+          {groupTab==="activity" && (activeGroup.activity.length ? activeGroup.activity.map((a,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 2px",borderBottom:"1px solid var(--color-border-tertiary)"}}>
+              <AvatarInitial name={a.by} size={26}/>
+              <span style={{flex:1,fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.4}}><strong style={{color:"var(--color-text-primary)"}}>{a.by}</strong> {activityText(a,t)}</span>
+              <span style={{fontSize:10.5,color:"var(--color-text-tertiary)",flexShrink:0}}>{timeAgo(a.at)}</span>
+            </div>
+          )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)"}}>{t.groupActivityEmpty||"No activity yet."}</div>)}
+          {social?.friends?.length>0 && (()=>{
+            const inGroup = new Set(activeGroup.members.map(m=>m.userId));
+            const addable = social.friends.filter(f=>!inGroup.has(f.userId));
+            if(!addable.length) return null;
+            return (
+              <div style={{marginTop:18}}>
+                <p style={Sb.secLabel}>{t.inviteFriends||"Add your friends"}</p>
+                {addable.map(f=>(
+                  <div key={f.userId} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 2px"}}>
+                    <AvatarInitial name={f.username} size={28}/>
+                    <span style={{flex:1,fontSize:13,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.username}</span>
+                    <button onClick={()=>doInviteFriend(f.userId)} style={{background:"var(--color-accent)",color:"#fff",border:"none",borderRadius:9,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.addWord||"Add"}</button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </>)}
+      </div>
+      {showShare && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>setShowShare(false)}>
+          <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"22px 18px 30px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box",maxHeight:"80vh",overflowY:"auto"}}>
+            <h3 style={{margin:"0 0 4px",fontSize:18,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.shareToGroup||"Share a study set"}</h3>
+            <p style={{fontSize:12.5,color:"var(--color-text-secondary)",margin:"0 0 14px",lineHeight:1.5}}>{t.shareHint||"Pick a set from your library. The whole group can then quiz on it."}</p>
+            {srs.library?.docs?.length ? srs.library.docs.map(d=>(
+              <button key={d.id} onClick={()=>doShareToGroup(d)} style={{width:"100%",textAlign:"left",background:"var(--color-background-secondary)",border:"1px solid var(--color-border-secondary)",borderRadius:11,padding:"11px 13px",marginBottom:8,cursor:"pointer",fontFamily:"inherit"}}>
+                <div style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)"}}>{d.title}</div>
+                {d.subject&&<div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:1}}>{d.subject}</div>}
+              </button>
+            )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)"}}>{t.libEmptyShare||"Your library is empty. Make a quiz from your notes first, then share it here."}</div>}
+            <button onClick={()=>setShowShare(false)} style={{width:"100%",marginTop:6,background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"8px"}}>{t.cancel||"Cancel"}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   // ── ENDLESS ARENA ─────────────────────────────────────────────────
   if (screen==="arena_intro") {
