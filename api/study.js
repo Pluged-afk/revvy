@@ -158,6 +158,26 @@ function ensureTables() {
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (group_id, clerk_user_id, level)
       )`,
+      // Head-to-head challenges: members answer the SAME fixed question set, then
+      // scores are ranked (solo/1v1/free-for-all) or summed by team (teams).
+      sql`CREATE TABLE IF NOT EXISTS group_challenges (
+        id         BIGSERIAL   PRIMARY KEY,
+        group_id   BIGINT      NOT NULL,
+        created_by TEXT        NOT NULL,
+        title      TEXT        NOT NULL,
+        mode       TEXT        NOT NULL DEFAULT 'solo',
+        questions  JSONB       NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      sql`CREATE TABLE IF NOT EXISTS challenge_scores (
+        challenge_id  BIGINT      NOT NULL,
+        clerk_user_id TEXT        NOT NULL,
+        team          TEXT,
+        score         INT         NOT NULL DEFAULT 0,
+        total         INT         NOT NULL DEFAULT 0,
+        played_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (challenge_id, clerk_user_id)
+      )`,
     ]).then(() => sql`ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS points INT NOT NULL DEFAULT 0`)
       .then(() => sql`ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 1`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
@@ -169,6 +189,7 @@ function ensureTables() {
       .then(() => sql`CREATE INDEX IF NOT EXISTS group_library_grp ON group_library (group_id, created_at DESC)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS group_activity_grp ON group_activity (group_id, at DESC)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS group_messages_grp ON group_messages (group_id, id DESC)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS group_challenges_grp ON group_challenges (group_id, id DESC)`)
       .then(() => true).catch(() => { ensured = null; return false; });
   }
   return ensured;
@@ -786,6 +807,79 @@ async function groupChat(req, res, body, me) {
   return res.status(200).json({ messages });
 }
 
+// ── Head-to-head challenges ──
+async function groupHasMember(gid, me) {
+  return (await sql`SELECT 1 FROM group_members WHERE group_id=${gid} AND clerk_user_id=${me} LIMIT 1`).length > 0;
+}
+// The creator generates the fixed question set client-side (so everyone answers the
+// SAME questions), then stores it here.
+async function challengeCreate(req, res, body, me) {
+  const gid = parseInt(body.groupId, 10);
+  const title = clean(body.title, 120) || "Challenge";
+  const mode = body.mode === "teams" ? "teams" : "solo";
+  const qs = Array.isArray(body.questions) ? body.questions.slice(0, 15).map((q) => ({
+    question: clean(q.question, 600),
+    options: Array.isArray(q.options) ? q.options.slice(0, 6).map((o) => clean(o, 300)) : [],
+    correct: Math.max(0, Math.min(5, parseInt(q.correct, 10) || 0)),
+    explanation: clean(q.explanation, 600),
+  })).filter((q) => q.question && q.options.length >= 2) : [];
+  if (!Number.isInteger(gid) || !qs.length) return res.status(400).json({ error: "Bad request." });
+  if (!(await groupHasMember(gid, me))) return res.status(403).json({ error: "You're not in this group." });
+  const c = (await sql`INSERT INTO group_challenges (group_id, created_by, title, mode, questions) VALUES (${gid}, ${me}, ${title}, ${mode}, ${JSON.stringify(qs)}::jsonb) RETURNING id`)[0];
+  await sql`DELETE FROM group_challenges WHERE group_id=${gid} AND id NOT IN (SELECT id FROM group_challenges WHERE group_id=${gid} ORDER BY id DESC LIMIT 30)`;
+  await sql`INSERT INTO group_activity (group_id, clerk_user_id, kind, detail) VALUES (${gid}, ${me}, 'challenge', ${title})`;
+  return res.status(200).json({ ok: true, id: Number(c.id) });
+}
+async function challengeList(req, res, body, me) {
+  const gid = parseInt(body.groupId, 10);
+  if (!Number.isInteger(gid)) return res.status(400).json({ error: "Bad request." });
+  if (!(await groupHasMember(gid, me))) return res.status(403).json({ error: "You're not in this group." });
+  const rows = await sql`SELECT c.id, c.created_by, c.title, c.mode, c.created_at,
+      (SELECT COUNT(*) FROM challenge_scores s WHERE s.challenge_id=c.id) AS players,
+      (SELECT score FROM challenge_scores s WHERE s.challenge_id=c.id AND s.clerk_user_id=${me}) AS my_score,
+      (SELECT total FROM challenge_scores s WHERE s.challenge_id=c.id AND s.clerk_user_id=${me}) AS my_total
+    FROM group_challenges c WHERE c.group_id=${gid} ORDER BY c.id DESC LIMIT 30`;
+  const names = await usernamesFor([...new Set(rows.map((r) => r.created_by))]);
+  return res.status(200).json({ challenges: rows.map((r) => ({
+    id: Number(r.id), title: r.title, mode: r.mode, by: names[r.created_by] || "student",
+    players: Number(r.players), myScore: r.my_score == null ? null : Number(r.my_score), myTotal: r.my_total == null ? null : Number(r.my_total),
+  })) });
+}
+async function challengeGet(req, res, body, me) {
+  const id = parseInt(body.challengeId, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad request." });
+  const c = (await sql`SELECT id, group_id, title, mode, questions FROM group_challenges WHERE id=${id} LIMIT 1`)[0];
+  if (!c) return res.status(404).json({ error: "Challenge not found." });
+  if (!(await groupHasMember(Number(c.group_id), me))) return res.status(403).json({ error: "You're not in this group." });
+  const scores = await sql`SELECT clerk_user_id, team, score, total FROM challenge_scores WHERE challenge_id=${id}`;
+  const names = await usernamesFor(scores.map((s) => s.clerk_user_id));
+  const mine = scores.find((s) => s.clerk_user_id === me) || null;
+  const results = scores.map((s) => ({ username: names[s.clerk_user_id] || "student", team: s.team, score: Number(s.score), total: Number(s.total), you: s.clerk_user_id === me }))
+    .sort((a, b) => b.score - a.score);
+  let teamTotals = null;
+  if (c.mode === "teams") {
+    teamTotals = { A: { score: 0, members: 0 }, B: { score: 0, members: 0 } };
+    for (const s of scores) { const tm = s.team === "A" || s.team === "B" ? s.team : null; if (tm) { teamTotals[tm].score += Number(s.score); teamTotals[tm].members += 1; } }
+  }
+  return res.status(200).json({
+    id: Number(c.id), groupId: Number(c.group_id), title: c.title, mode: c.mode,
+    questions: c.questions, played: !!mine, myTeam: mine?.team || null, results, teamTotals,
+  });
+}
+async function challengeSubmit(req, res, body, me) {
+  const id = parseInt(body.challengeId, 10);
+  const team = body.team === "A" || body.team === "B" ? body.team : null;
+  const score = Math.max(0, Math.min(1000, parseInt(body.score, 10) || 0));
+  const total = Math.max(0, Math.min(1000, parseInt(body.total, 10) || 0));
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad request." });
+  const c = (await sql`SELECT group_id, mode FROM group_challenges WHERE id=${id} LIMIT 1`)[0];
+  if (!c) return res.status(404).json({ error: "Challenge not found." });
+  if (!(await groupHasMember(Number(c.group_id), me))) return res.status(403).json({ error: "You're not in this group." });
+  const useTeam = c.mode === "teams" ? team : null;
+  await sql`INSERT INTO challenge_scores (challenge_id, clerk_user_id, team, score, total) VALUES (${id}, ${me}, ${useTeam}, ${score}, ${total}) ON CONFLICT DO NOTHING`;
+  return res.status(200).json({ ok: true });
+}
+
 export default async function handler(req, res) {
   try {
     await ensureTables();
@@ -827,6 +921,10 @@ export default async function handler(req, res) {
       if (body?.action === "groupClaim") return groupClaim(req, res, body, userId);
       if (body?.action === "groupChat") return groupChat(req, res, body, userId);
       if (body?.action === "groupChatSend") return groupChatSend(req, res, body, userId);
+      if (body?.action === "challengeCreate") return challengeCreate(req, res, body, userId);
+      if (body?.action === "challengeList") return challengeList(req, res, body, userId);
+      if (body?.action === "challengeGet") return challengeGet(req, res, body, userId);
+      if (body?.action === "challengeSubmit") return challengeSubmit(req, res, body, userId);
 
       // Default: save the user's study blob.
       const data = body?.data;

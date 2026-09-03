@@ -2433,6 +2433,12 @@ export default function StudyQuiz() {
         const c = answers.filter((a) => a && a.isCorrect).length;
         socialApi("groupLog", { groupId: gq.groupId, kind: "quiz", detail: `${c}/${answers.length} · ${gq.title}`, points: c });
       }
+      // A head-to-head challenge: submit this run's score (play-once, server-deduped).
+      if (challengeRef.current) {
+        const cr = challengeRef.current; challengeRef.current = null;
+        const c = answers.filter((a) => a && a.isCorrect).length;
+        socialApi("challengeSubmit", { challengeId: cr.challengeId, team: cr.team, score: c, total: answers.length });
+      }
       srs.recordTopics(quiz.questions.map((q, i) => ({ topic: q.topic, correct: answers[i]?.isCorrect === true })));
       // Adaptive difficulty: log this round only if it was a fresh, difficulty-
       // calibrated set (not a fix-your-misses re-drill or a retry of seen
@@ -3667,6 +3673,13 @@ export default function StudyQuiz() {
   const [chatMsgs, setChatMsgs] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [claimMsg, setClaimMsg] = useState("");         // "Claimed +2 hints..." toast
+  // Head-to-head challenges
+  const [chalList, setChalList] = useState([]);
+  const [activeChallenge, setActiveChallenge] = useState(null); // loaded challenge detail
+  const [challengeBusy, setChallengeBusy] = useState(false);
+  const [showNewChallenge, setShowNewChallenge] = useState(false);
+  const [newChalMode, setNewChalMode] = useState("solo"); // solo | teams
+  const challengeRef = useRef(null); // {challengeId, team, title} for the results submit
   const loadSocial = useCallback(async () => {
     setSocialBusy(true);
     const r = await socialApi("social");
@@ -3802,6 +3815,43 @@ export default function StudyQuiz() {
     const id = setInterval(() => loadChat(activeGroup.id), 4000);
     return () => clearInterval(id);
   }, [screen, groupTab, activeGroup, loadChat]);
+  // ── Head-to-head challenges ──
+  const loadChallenges = useCallback(async (groupId) => {
+    const r = await socialApi("challengeList", { groupId });
+    if (!r.error) setChalList(r.challenges || []);
+  }, []);
+  const openChallenges = useCallback(() => { if (!activeGroup) return; setActiveChallenge(null); setScreen("challenges"); loadChallenges(activeGroup.id); }, [activeGroup, loadChallenges]);
+  const openChallenge = useCallback(async (id) => {
+    setChallengeBusy(true); setActiveChallenge(null);
+    const r = await socialApi("challengeGet", { challengeId: id });
+    setChallengeBusy(false);
+    if (!r.error) setActiveChallenge(r);
+  }, []);
+  const createChallenge = useCallback(async (doc, mode) => {
+    if (!activeGroup || !doc) return;
+    setShowNewChallenge(false); setChallengeBusy(true); setSocialErr("");
+    const d = await socialApi("groupDoc", { docId: doc.id });
+    if (d.error || !d.summary) { setChallengeBusy(false); setSocialErr(d.error || t.groupNoMaterial || "Couldn't load that set."); return; }
+    const consumed = await consumeQuestions(10);
+    if (consumed && consumed.allowed === false) { setChallengeBusy(false); setSocialErr(isPro ? "Daily limit reached." : "Daily limit reached. Watch an ad or upgrade."); return; }
+    try {
+      const blocks = [{ type: "text", text: `${d.title}${d.subject ? " (" + d.subject + ")" : ""}\n\n${d.summary}` }];
+      let res = null;
+      for (let a = 0; a < 3; a++) { try { const r = await callClaude({ blocks, numQ: 10, diff, type: "mcq", uiLangName: LANGS[lang]?.name }); if (r?.questions?.length) { res = r; break; } } catch { /* retry */ } }
+      if (!res?.questions?.length) throw new Error("generation failed");
+      const r2 = await socialApi("challengeCreate", { groupId: activeGroup.id, title: d.title, mode, questions: res.questions });
+      setChallengeBusy(false);
+      if (r2.error) { setSocialErr(r2.error); return; }
+      loadChallenges(activeGroup.id);
+    } catch { setChallengeBusy(false); setSocialErr(t.challengeCreateErr || "Couldn't create the challenge, try again."); }
+  }, [activeGroup, consumeQuestions, isPro, diff, lang, t, loadChallenges]);
+  const playChallenge = useCallback((team) => {
+    if (!activeChallenge?.questions?.length) return;
+    challengeRef.current = { challengeId: activeChallenge.id, team: team || null, title: activeChallenge.title };
+    setQuiz({ title: `${activeChallenge.title} · ${t.challengeWord || "Challenge"}`, subject: "", questions: activeChallenge.questions.map((q) => ({ ...q })), type: "mcq", fresh: false, genDiff: diff, challengeId: activeChallenge.id });
+    setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
+    setScreen("quiz");
+  }, [activeChallenge, diff, t]);
   const [showUsername, setShowUsername] = useState(false);
   const [unameInput, setUnameInput] = useState("");
   const [unameErr, setUnameErr] = useState("");
@@ -4526,6 +4576,11 @@ export default function StudyQuiz() {
             <span style={{flex:1,fontSize:12.5,color:"var(--color-accent)",lineHeight:1.4}}>{(resNudge.dir==="up"?t.nudgeHarder:t.nudgeEasier).replace("{n}",t.diffOpts[resNudge.to])}</span>
             <button onClick={()=>{ pickDiff(resNudge.to); newMat(); }} style={{flexShrink:0,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.useThis}</button>
           </div>
+        )}
+        {quiz.challengeId && (
+          <button onClick={()=>{ const id=quiz.challengeId; setScreen("challenges"); openChallenge(id); }} style={{...Sb.btnPrimary,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:9,background:"#a3762b"}}>
+            <Icon name="trophy" size={17}/>{t.seeStandings||"See the standings"}
+          </button>
         )}
         {missedThisQuiz.length>0 && (
           <button onClick={fixMisses} style={{...Sb.btnPrimary,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:9,background:"linear-gradient(135deg,#15803d,#22c55e)"}}>
@@ -5303,6 +5358,7 @@ export default function StudyQuiz() {
             )}
           </div>
           {claimMsg && <div style={{background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"10px 14px",fontSize:12.5,fontWeight:600,color:"var(--color-text-primary)",marginBottom:12,display:"flex",alignItems:"center",gap:8}}><Icon name="gem" size={15} style={{color:"var(--color-accent)"}}/>{claimMsg}</div>}
+          <button onClick={openChallenges} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="trophy" size={15}/>{t.groupChallenges||"Challenge the group"}</button>
           <div style={{marginBottom:16}}>
             <Segmented value={groupTab} onChange={(o)=>setGroupTab(o.value)} options={[
               {value:"board",label:t.tabBoard||"Board"},
@@ -5387,6 +5443,106 @@ export default function StudyQuiz() {
               </button>
             )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)"}}>{t.libEmptyShare||"Your library is empty. Make a quiz from your notes first, then share it here."}</div>}
             <button onClick={()=>setShowShare(false)} style={{width:"100%",marginTop:6,background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"8px"}}>{t.cancel||"Cancel"}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── GROUP CHALLENGES ──────────────────────────────────────────────
+  if (screen==="challenges") return (
+    <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      <div style={Sb.topbar} className="rv-topbar">
+        <button style={Sb.backBtn} onClick={()=>{ if(activeChallenge){setActiveChallenge(null);} else {setScreen("group");} }}>← {activeChallenge?(t.backWord||"Back"):(activeGroup?.name||t.groupWord||"Group")}</button>
+        <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.groupChallenges||"Challenges"}</span><span/>
+      </div>
+      <div className="rv-center-narrow" style={{padding:"18px 16px 40px"}}>
+        {socialErr && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>{socialErr}</div>}
+        {challengeBusy && <div style={{textAlign:"center",padding:"36px 0"}}><div className="spin-ring" style={{width:34,height:34,borderRadius:"50%",border:"3px solid var(--color-border-tertiary)",borderTopColor:"var(--color-accent)",margin:"0 auto"}}/></div>}
+
+        {/* Detail view */}
+        {!challengeBusy && activeChallenge && (()=>{
+          const ch = activeChallenge;
+          return (<>
+            <h2 style={{...Sb.h2,fontSize:20,marginBottom:4}}>{ch.title}</h2>
+            <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:16}}>{ch.mode==="teams"?(t.chalTeams||"Teams: A vs B"):(t.chalSolo||"Everyone for themselves")} · {(t.membersCount||"{n} members").replace("{n}",ch.results?.length||0).replace("members","played")}</div>
+            {!ch.played ? (
+              ch.mode==="teams" ? (
+                <div style={{display:"flex",gap:10,marginBottom:18}}>
+                  <button onClick={()=>playChallenge("A")} style={{...Sb.btnPrimary,flex:1,fontSize:13}}>{t.playTeamA||"Play for Team A"}</button>
+                  <button onClick={()=>playChallenge("B")} style={{...Sb.btnPrimary,flex:1,fontSize:13,background:"#a3762b"}}>{t.playTeamB||"Play for Team B"}</button>
+                </div>
+              ) : (
+                <button onClick={()=>playChallenge(null)} style={{...Sb.btnPrimary,width:"100%",marginBottom:18,fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="bolt" size={16}/>{t.playChallenge||"Play this challenge"}</button>
+              )
+            ) : <div style={{background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"11px 14px",fontSize:12.5,fontWeight:600,color:"var(--color-accent)",marginBottom:18,textAlign:"center"}}>{t.chalPlayed||"You've played. Here's how everyone did:"}</div>}
+
+            {/* Team totals */}
+            {ch.mode==="teams" && ch.teamTotals && (
+              <div style={{display:"flex",gap:10,marginBottom:16}}>
+                {["A","B"].map(tm=>{
+                  const win = ch.teamTotals.A.score!==ch.teamTotals.B.score && ((tm==="A")===(ch.teamTotals.A.score>ch.teamTotals.B.score));
+                  return (
+                    <div key={tm} style={{flex:1,textAlign:"center",background:win?"var(--color-sel-tint)":"var(--color-background-primary)",border:"1px solid "+(win?"var(--color-accent)":"var(--color-border-secondary)"),borderRadius:14,padding:"14px 8px"}}>
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:tm==="A"?"var(--color-accent)":"#a3762b",textTransform:"uppercase"}}>{(t.teamWord||"Team")} {tm}{win?" 🏆":""}</div>
+                      <div style={{fontSize:26,fontWeight:800,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1.1,marginTop:4}}>{ch.teamTotals[tm].score}</div>
+                      <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{(t.membersCount||"{n} members").replace("{n}",ch.teamTotals[tm].members)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Standings */}
+            <p style={Sb.secLabel}>{t.standings||"Standings"}</p>
+            {ch.results?.length ? ch.results.map((r,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:11,background:r.you?"var(--color-sel-tint)":"var(--color-background-primary)",border:"1px solid "+(r.you?"var(--color-accent)":"var(--color-border-secondary)"),borderRadius:12,padding:"10px 13px",marginBottom:8}}>
+                <span style={{width:20,textAlign:"center",fontWeight:800,fontSize:13,color:i===0?"#a3762b":"var(--color-text-tertiary)",fontFamily:"monospace",flexShrink:0}}>{i+1}</span>
+                <AvatarInitial name={r.username} size={28}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.username}{r.you?` · ${t.youWord||"you"}`:""}{r.team?` · ${(t.teamWord||"Team")} ${r.team}`:""}{i===0?" 👑":""}</div>
+                </div>
+                <div style={{fontSize:14,fontWeight:800,color:"var(--color-text-primary)",fontFamily:"monospace",flexShrink:0}}>{r.score}/{r.total}</div>
+              </div>
+            )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)"}}>{t.chalNobody||"Nobody has played yet. Be the first!"}</div>}
+          </>);
+        })()}
+
+        {/* List view */}
+        {!challengeBusy && !activeChallenge && (<>
+          <button onClick={()=>{setNewChalMode("solo");setShowNewChallenge(true);}} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="spark" size={15}/>{t.newChallenge||"New challenge"}</button>
+          {chalList.length ? chalList.map(c=>(
+            <div key={c.id} onClick={()=>openChallenge(c.id)} style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 14px",marginBottom:10,cursor:"pointer"}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
+                <div style={{fontSize:14,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{c.title}</div>
+                <span style={{flexShrink:0,fontSize:10,fontWeight:700,borderRadius:8,padding:"3px 8px",color:"#fff",background:c.mode==="teams"?"#a3762b":"var(--color-accent)"}}>{c.mode==="teams"?(t.teamsBadge||"TEAMS"):(t.soloBadge||"SOLO")}</span>
+              </div>
+              <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:3}}>{(t.byWord||"by {n}").replace("{n}",c.by)} · {(t.playersCount||"{n} played").replace("{n}",c.players)}{c.myScore!=null?` · ${t.youWord||"you"} ${c.myScore}/${c.myTotal}`:""}</div>
+            </div>
+          )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)"}}>{t.chalListEmpty||"No challenges yet. Create one from a shared study set and see who wins."}</div>}
+        </>)}
+      </div>
+
+      {/* New challenge modal */}
+      {showNewChallenge && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:500,display:"flex",alignItems:"flex-end"}} onClick={()=>setShowNewChallenge(false)}>
+          <div className="slide-up" onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"20px 20px 0 0",padding:"22px 18px 30px",width:"100%",maxWidth:520,margin:"0 auto",boxSizing:"border-box",maxHeight:"84vh",overflowY:"auto"}}>
+            <h3 style={{margin:"0 0 4px",fontSize:18,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{t.newChallenge||"New challenge"}</h3>
+            <p style={{fontSize:12.5,color:"var(--color-text-secondary)",margin:"0 0 12px",lineHeight:1.5}}>{t.newChalHint||"Everyone answers the same questions from a shared set. Pick the format, then the material."}</p>
+            <div style={{marginBottom:14}}>
+              <Segmented value={newChalMode} onChange={(o)=>setNewChalMode(o.value)} options={[
+                {value:"solo",label:t.chalModeSolo||"1v1 / Free-for-all"},
+                {value:"teams",label:t.chalModeTeams||"Teams"},
+              ]}/>
+            </div>
+            <div style={{fontSize:12,fontWeight:700,color:"var(--color-text-secondary)",marginBottom:8}}>{t.pickMaterial||"Pick the material"}</div>
+            {activeGroup?.library?.length ? activeGroup.library.map(d=>(
+              <button key={d.id} onClick={()=>createChallenge(d,newChalMode)} style={{width:"100%",textAlign:"left",background:"var(--color-background-secondary)",border:"1px solid var(--color-border-secondary)",borderRadius:11,padding:"11px 13px",marginBottom:8,cursor:"pointer",fontFamily:"inherit"}}>
+                <div style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)"}}>{d.title}</div>
+                {d.subject&&<div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:1}}>{d.subject}</div>}
+              </button>
+            )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)"}}>{t.chalNeedLib||"Share a study set to the group first, then you can challenge on it."}</div>}
+            <button onClick={()=>setShowNewChallenge(false)} style={{width:"100%",marginTop:6,background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"8px"}}>{t.cancel||"Cancel"}</button>
           </div>
         </div>
       )}
