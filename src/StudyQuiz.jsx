@@ -2433,11 +2433,19 @@ export default function StudyQuiz() {
         const c = answers.filter((a) => a && a.isCorrect).length;
         socialApi("groupLog", { groupId: gq.groupId, kind: "quiz", detail: `${c}/${answers.length} · ${gq.title}`, points: c });
       }
-      // A head-to-head challenge: submit this run's score (play-once, server-deduped).
+      // A head-to-head challenge: submit this run's score (play-once, server-
+      // deduped), feed it into the adaptive engine, and record the win/loss so a
+      // strong record nudges this learner toward harder questions over time.
       if (challengeRef.current) {
         const cr = challengeRef.current; challengeRef.current = null;
-        const c = answers.filter((a) => a && a.isCorrect).length;
-        socialApi("challengeSubmit", { challengeId: cr.challengeId, team: cr.team, score: c, total: answers.length });
+        const c = answers.filter((a) => a && a.isCorrect).length, n = answers.length;
+        // Challenge sets are fixed (fresh:false) so they skip the perf log below;
+        // log them here so competing still teaches the model about the learner.
+        srs.recordPerf({ type: "challenge", diff: quiz.genDiff ?? diff, total: n, correct: c });
+        (async () => {
+          const r = await socialApi("challengeSubmit", { challengeId: cr.challengeId, team: cr.team, score: c, total: n });
+          if (r && r.ok && !r.pending) srs.recordChallengeResult(!!r.won);
+        })();
       }
       srs.recordTopics(quiz.questions.map((q, i) => ({ topic: q.topic, correct: answers[i]?.isCorrect === true })));
       // Adaptive difficulty: log this round only if it was a fresh, difficulty-
@@ -5510,6 +5518,20 @@ export default function StudyQuiz() {
 
         {/* List view */}
         {!challengeBusy && !activeChallenge && (<>
+          {(()=>{
+            const played=srs.stats?.challengePlayed||0, wins=srs.stats?.challengeWins||0;
+            if(!played) return null;
+            const rate=Math.round((wins/played)*100), strong=played>=3&&wins/played>=0.6;
+            return (
+              <div style={{background:strong?"var(--color-sel-tint)":"var(--color-background-primary)",border:"1px solid "+(strong?"var(--color-accent)":"var(--color-border-secondary)"),borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+                  <span style={{fontSize:12,fontWeight:700,letterSpacing:.4,textTransform:"uppercase",color:"var(--color-text-secondary)"}}>{t.chalYourRecord||"Your record"}</span>
+                  <span style={{fontSize:13,fontWeight:800,color:"var(--color-text-primary)",fontFamily:"monospace"}}>{(t.chalRecordLine||"{w} wins / {p} played").replace("{w}",wins).replace("{p}",played)} · {rate}%</span>
+                </div>
+                <div style={{fontSize:11.5,color:strong?"var(--color-accent)":"var(--color-text-tertiary)",marginTop:5,lineHeight:1.4}}>{strong?(t.chalRecordStrong||"You're on a winning streak, so Revyy is serving you harder, smarter questions."):(t.chalRecordHint||"Win more head-to-head and Revyy raises the difficulty of the questions it generates for you.")}</div>
+              </div>
+            );
+          })()}
           <button onClick={()=>{setNewChalMode("solo");setShowNewChallenge(true);}} style={{...Sb.btnPrimary,width:"100%",marginBottom:14,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="spark" size={15}/>{t.newChallenge||"New challenge"}</button>
           {chalList.length ? chalList.map(c=>(
             <div key={c.id} onClick={()=>openChallenge(c.id)} style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 14px",marginBottom:10,cursor:"pointer"}}>

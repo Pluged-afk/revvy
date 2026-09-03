@@ -57,5 +57,8 @@ export function useSRS() {
     wallet: study?.wallet || { hint: 0, freeze: 0, skip: 0 },
     streakSavers: study?.streakSavers || 0, savedProgress: study?.savedProgress || 0,
     completeActivity: study?.completeActivity || (() => null), usePowerup: study?.usePowerup || (() => {}), grantPowerups: study?.grantPowerups || (() => {}),
+    // Head-to-head challenge record + recorder (feeds adaptive difficulty).
+    stats: study?.stats || {},
+    recordChallengeResult: study?.recordChallengeResult || (() => {}),
   };
 }

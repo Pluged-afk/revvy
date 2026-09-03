@@ -80,21 +80,44 @@ const DOWN_AT = 0.5;   // struggling: rebuild momentum
 const MIN_Q = 10;      // questions needed before we trust the signal at all
 const FULL_Q = 20;     // questions for full confidence
 
+// A strong head-to-head challenge record is a peer-relative signal of strength:
+// beating other people on the SAME questions says more than solo accuracy alone.
+// Proven winners (won most of at least a few challenges) get pushed a level
+// harder, so "people who win more get smarter questions".
+const CHAL_MIN = 3;       // challenges played before the record counts
+const CHAL_WIN_AT = 0.6;  // win-rate that earns the bump
+export function isStrongCompetitor(study = {}) {
+  const s = study?.stats || {};
+  const played = Math.max(0, Math.round(Number(s.challengePlayed) || 0));
+  const wins = Math.max(0, Math.round(Number(s.challengeWins) || 0));
+  return played >= CHAL_MIN && wins / played >= CHAL_WIN_AT;
+}
+
 export function recommendDifficulty(study = {}) {
   const perf = study?.perf || {};
   const recent = perf.recent || [];
   const lastDiff = recent.length ? clampDiff(recent[recent.length - 1].diff) : 1;
   const at = recentAccuracyAt(perf, lastDiff);
+  const competitor = isStrongCompetitor(study);
 
   // Cold start or too little data at the working level: hold, but with zero
-  // confidence so the caller leaves the learner's own default untouched.
+  // confidence so the caller leaves the learner's own default untouched. A
+  // proven challenge winner is the exception, that record alone justifies a bump.
   if (!at || at.q < MIN_Q) {
+    if (competitor && lastDiff < DIFF_MAX) {
+      const d = Math.min(DIFF_MAX, lastDiff + 1);
+      return { diff: d, reason: "up", confidence: 0.5, acc: at ? at.acc : null, level: DIFF_NAMES[d] };
+    }
     return { diff: lastDiff, reason: "hold", confidence: 0, acc: at ? at.acc : null, level: DIFF_NAMES[lastDiff] };
   }
 
   let diff = lastDiff, reason = "hold";
   if (at.acc >= UP_AT && lastDiff < DIFF_MAX) { diff = lastDiff + 1; reason = "up"; }
   else if (at.acc < DOWN_AT && lastDiff > DIFF_MIN) { diff = lastDiff - 1; reason = "down"; }
+
+  // Competitor bump: never fights a "down" call (if they're struggling solo,
+  // rebuild first), but otherwise a winning record earns one extra level.
+  if (competitor && reason !== "down" && diff < DIFF_MAX) { diff = Math.min(DIFF_MAX, diff + 1); reason = "up"; }
 
   const confidence = Math.max(0, Math.min(1, at.q / FULL_Q));
   return { diff, reason, confidence, acc: at.acc, level: DIFF_NAMES[diff] };
@@ -151,6 +174,9 @@ export function buildLearnerBrief(study = {}, { max = 4, forDrill = false } = {}
   }
   if (strong.length) {
     lines.push(`- They are already strong on: ${strong.join(", ")}. Where the material covers these, push a little deeper rather than re-testing the basics.`);
+  }
+  if (isStrongCompetitor(study)) {
+    lines.push(`- They consistently win head-to-head challenges against their peers, so bias toward genuinely demanding, stretch-level questions rather than routine recall.`);
   }
   // Only worth sending if it actually says something beyond the header.
   return lines.length > 1 ? lines.join("\n") : "";

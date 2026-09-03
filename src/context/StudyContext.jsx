@@ -29,6 +29,10 @@ function normStats(s) {
   return {
     answered: s.answered || 0, correct: s.correct || 0,
     streak: s.streak || 0, best: s.best || 0, lastActive: s.lastActive || null,
+    // Head-to-head challenge record: feeds the adaptive engine (proven winners
+    // get harder questions) and the challenge screen's "your record" line.
+    challengeWins: Math.max(0, Math.round(Number(s.challengeWins) || 0)),
+    challengePlayed: Math.max(0, Math.round(Number(s.challengePlayed) || 0)),
   };
 }
 function emptyData() {
@@ -142,6 +146,8 @@ function mergeStudy(server, local) {
       best: Math.max(ss.best, ls.best),
       streak: laterActive.streak,
       lastActive: laterActive.lastActive,
+      challengeWins: Math.max(ss.challengeWins, ls.challengeWins),
+      challengePlayed: Math.max(ss.challengePlayed, ls.challengePlayed),
     },
     plans: [...byId.values()],
     topicStats: ts,
@@ -297,6 +303,7 @@ export function StudyProvider({ children }) {
       else if (s.lastActive === yesterdayStr()) streak = s.streak + 1;
       else streak = 1;
       return { ...p, stats: {
+        ...s,
         answered: s.answered + answered, correct: s.correct + correct,
         streak, best: Math.max(s.best || 0, streak), lastActive: today,
       } };
@@ -328,6 +335,7 @@ export function StudyProvider({ children }) {
       return {
         ...p, wallet, streakSavers, savedProgress,
         stats: {
+          ...s,
           answered: isArena ? s.answered : s.answered + total,
           correct: isArena ? s.correct : s.correct + correct,
           streak: st.streak, best: st.best, lastActive: today,
@@ -350,6 +358,17 @@ export function StudyProvider({ children }) {
       const w = normWallet(p.wallet);
       const add = (k) => Math.min(POWERUP_CAP[k] || 0, w[k] + Math.max(0, Math.floor(Number(d[k]) || 0)));
       return { ...p, wallet: { hint: add("hint"), freeze: add("freeze"), skip: add("skip") } };
+    });
+  }, [commit]);
+
+  // Record the outcome of a head-to-head group challenge (won === true when the
+  // player beat at least half of the others). Wins accumulate into the student
+  // model, where a strong record nudges the learner's adaptive difficulty up, so
+  // people who win more get harder ("smarter") questions over time.
+  const recordChallengeResult = useCallback((won) => {
+    commit((p) => {
+      const s = normStats(p.stats);
+      return { ...p, stats: { ...s, challengePlayed: s.challengePlayed + 1, challengeWins: s.challengeWins + (won ? 1 : 0) } };
     });
   }, [commit]);
 
@@ -445,7 +464,7 @@ export function StudyProvider({ children }) {
     cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans, topicStats: data.topicStats, perf: data.perf, bank: data.bank, library: data.library, mockScores: data.mockScores,
     wallet: data.wallet, streakSavers: data.streakSavers, savedProgress: data.savedProgress,
     addMissed, grade, removeCard, clearAll, setExamDate, recordSession, recordTopics, recordPerf,
-    completeActivity, usePowerup, grantPowerups,
+    completeActivity, usePowerup, grantPowerups, recordChallengeResult,
     bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc, recordMockScore,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };

@@ -877,7 +877,19 @@ async function challengeSubmit(req, res, body, me) {
   if (!(await groupHasMember(Number(c.group_id), me))) return res.status(403).json({ error: "You're not in this group." });
   const useTeam = c.mode === "teams" ? team : null;
   await sql`INSERT INTO challenge_scores (challenge_id, clerk_user_id, team, score, total) VALUES (${id}, ${me}, ${useTeam}, ${score}, ${total}) ON CONFLICT DO NOTHING`;
-  return res.status(200).json({ ok: true });
+  // Report how the caller placed against everyone who has played so far, so the
+  // client can update the player's win/loss record (which feeds their adaptive
+  // difficulty). Ranking is by individual score even in team mode, that's the
+  // personal-strength signal. Pending until at least one rival has played.
+  const rows = await sql`SELECT clerk_user_id, score FROM challenge_scores WHERE challenge_id=${id}`;
+  const mine = rows.find((r) => r.clerk_user_id === me);
+  const myScore = mine ? Number(mine.score) : score;
+  const others = rows.filter((r) => r.clerk_user_id !== me);
+  const beat = others.filter((r) => Number(r.score) < myScore).length;
+  const rank = others.filter((r) => Number(r.score) > myScore).length + 1;
+  const pending = others.length === 0;
+  const won = !pending && beat >= Math.ceil(others.length / 2);
+  return res.status(200).json({ ok: true, pending, won, rank, players: rows.length, beat });
 }
 
 export default async function handler(req, res) {
