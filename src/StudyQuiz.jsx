@@ -16,7 +16,7 @@ import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/stude
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
-import { BADGES, BADGE_BY_ID, BADGE_CATEGORIES, evaluateBadges, rankOf, RANKS } from "./lib/badges.js";
+import { BADGES, BADGE_BY_ID, BADGE_CATEGORIES, evaluateBadges, rankOf, RANKS, diffXPFor } from "./lib/badges.js";
 import ArenaGame from "./components/ArenaGame.jsx";
 import Icon from "./components/Icon.jsx";
 
@@ -2458,9 +2458,11 @@ export default function StudyQuiz() {
       // Universal streak + rewards: passing earns a power-up, and the questions
       // count toward the next (silent) streak saver. Supersedes recordSession.
       setEarnedReward(srs.completeActivity({ mode: "quiz", correct: answers.filter((a) => a && a.isCorrect).length, total: answers.length }));
-      // Badge signals: a perfect run and a passed Hard set feed the trophy case.
-      { const c = answers.filter((a) => a && a.isCorrect).length, n = answers.length;
-        srs.syncBadges({ perfect: n >= 4 && c === n, hardPass: (quiz.genDiff ?? diff) === 2 && n > 0 && c / n >= 0.6 }); }
+      // Badge signals + adaptive XP: a perfect run, a passed Hard set, and each
+      // correct answer's difficulty premium (harder sets earn more XP) feed the
+      // trophy case + rank.
+      { const c = answers.filter((a) => a && a.isCorrect).length, n = answers.length, gd = quiz.genDiff ?? diff;
+        srs.syncBadges({ perfect: n >= 4 && c === n, hardPass: gd === 2 && n > 0 && c / n >= 0.6, diffXP: diffXPFor(c, gd) }); }
       // If this quiz came from a group's shared material, post the result to the
       // group's activity feed (best-effort), then clear the marker.
       if (groupQuizRef.current) {
@@ -2501,7 +2503,7 @@ export default function StudyQuiz() {
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
       setEarnedReward(srs.completeActivity({ mode: "exam", correct: examEvals.filter((e) => (e?.score ?? 0) >= 1).length, total: examEvals.length }));
       { const c = examEvals.filter((e) => (e?.score ?? 0) >= 1).length, n = examEvals.length;
-        srs.syncBadges({ perfect: n >= 4 && c === n, hardPass: diff === 2 && n > 0 && c / n >= 0.6 }); }
+        srs.syncBadges({ perfect: n >= 4 && c === n, hardPass: diff === 2 && n > 0 && c / n >= 0.6, diffXP: diffXPFor(c, diff) }); }
       srs.recordTopics(examQs.map((q, i) => ({ topic: q.topic, correct: (examEvals[i]?.score ?? 0) >= 1 })));
       // Personalization for exam mode: feed the exam into the adaptive-difficulty
       // history and bank its well-formed MCQs (leanQ skips written/fill), same as
@@ -5658,6 +5660,7 @@ export default function StudyQuiz() {
                 <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:14,overflow:"hidden"}}><div style={{width:`${Math.round((myRankInfo.toNext||0)*100)}%`,height:"100%",background:r.color}}/></div>
                 <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:6}}>{(t.rankToNext||"{n} XP to {r}").replace("{n}",Math.max(0,myRankInfo.next.min-myRankInfo.xp).toLocaleString()).replace("{r}",nextNm)}</div>
               </>) : <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:12}}>{t.rankMax||"You've reached the top tier. Legendary."}</div>}
+              <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",marginTop:8,display:"inline-flex",alignItems:"center",gap:5}}><span aria-hidden="true">⚡</span>{t.xpAdaptiveHint||"Harder questions earn more XP than easy ones."}</div>
             </div>
           ); })()}
 

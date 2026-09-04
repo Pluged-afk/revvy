@@ -100,6 +100,7 @@ const T_EN = {
   badgeEarned:"Earned", badgeEarnedX:"Earned ×{n}",
   badgeUnlocked:"Badge unlocked!", badgeUnlockedN:"{n} badges unlocked!", badgeView:"View",
   badgesHomeSub:"{n} of {m} badges earned. Level up your rank and pin a flair.",
+  xpAdaptiveHint:"Harder questions earn more XP than easy ones.",
   rank_novice:"Novice", rank_apprentice:"Apprentice", rank_adept:"Adept", rank_scholar:"Scholar",
   rank_sage:"Sage", rank_master:"Master", rank_luminary:"Luminary",
   badgeCat_consistency:"Consistency", badgeCat_volume:"Volume", badgeCat_accuracy:"Accuracy",

@@ -23,17 +23,30 @@ export const RANKS = [
   { key: "luminary",   name: "Luminary",   min: 30000, emoji: "🏆", color: "#a3762b" },
 ];
 
-// Lifetime XP from uniform, honestly-earned signals. Questions answered are the
-// backbone; accuracy, streaks, arena bests, wins and hard passes all add on top.
+// ── Difficulty-adaptive XP ──────────────────────────────────────────────
+// A correct answer is worth more the harder the question. `diffXP` is a
+// lifetime accumulator: on every graded quiz/exam we add each correct answer's
+// premium for that set's difficulty, so grinding easy sets ranks you slowly
+// while clearing hard ones climbs fast. Easy earns no premium (participation +
+// accuracy only), Normal a little, Hard a lot. Purely additive, so it kicks in
+// going forward without disturbing any existing learner's standing.
+export const DIFF_PREMIUM = [0, 0.9, 2.4]; // per correct answer at [easy, normal, hard]
+export function diffXPFor(correct = 0, diff = 1) {
+  const d = Math.max(0, Math.min(2, Math.round(Number(diff) || 0)));
+  return Math.max(0, Math.round(Number(correct) || 0)) * DIFF_PREMIUM[d];
+}
+
+// Lifetime XP from honestly-earned signals. A flat participation + accuracy
+// base, PLUS the difficulty premium (diffXP), streaks, arena bests and wins.
 export function computeXP(ctx) {
   return Math.round(
-    (ctx.answered || 0) +
-    (ctx.correct || 0) * 0.5 +
+    (ctx.answered || 0) +           // participation, difficulty-neutral
+    (ctx.correct || 0) * 0.5 +      // accuracy, difficulty-neutral
+    (ctx.diffXP || 0) +             // adaptive: harder correct answers are worth more
     (ctx.best || 0) * 25 +
-    (ctx.arenaBest || 0) / 8 +
+    (ctx.arenaBest || 0) / 8 +      // arena scoring is itself difficulty-scaled
     (ctx.challengeWins || 0) * 40 +
-    (ctx.perfectQuizzes || 0) * 15 +
-    (ctx.hardPasses || 0) * 10,
+    (ctx.perfectQuizzes || 0) * 15,
   );
 }
 
@@ -56,6 +69,7 @@ export function buildCtx(study = {}) {
     answered, correct,
     accuracy: answered ? correct / answered : 0,
     best: s.best || 0,
+    diffXP: s.diffXP || 0,
     perfectQuizzes: s.perfectQuizzes || 0,
     hardPasses: s.hardPasses || 0,
     arenaBest: s.arenaBest || 0,

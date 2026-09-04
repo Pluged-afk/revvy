@@ -39,6 +39,8 @@ function normStats(s) {
     // above or from mockScores.
     perfectQuizzes: Math.max(0, Math.round(Number(s.perfectQuizzes) || 0)),
     hardPasses: Math.max(0, Math.round(Number(s.hardPasses) || 0)),
+    // Difficulty-adaptive XP accumulator (harder correct answers add more).
+    diffXP: Math.max(0, Math.round((Number(s.diffXP) || 0) * 100) / 100),
     arenaBest: Math.max(0, Math.round(Number(s.arenaBest) || 0)),
     arenaBestRun: Math.max(0, Math.round(Number(s.arenaBestRun) || 0)),
     groupsJoined: Math.max(0, Math.round(Number(s.groupsJoined) || 0)),
@@ -176,6 +178,7 @@ function mergeStudy(server, local) {
       challengePlayed: Math.max(ss.challengePlayed, ls.challengePlayed),
       perfectQuizzes: Math.max(ss.perfectQuizzes, ls.perfectQuizzes),
       hardPasses: Math.max(ss.hardPasses, ls.hardPasses),
+      diffXP: Math.max(ss.diffXP, ls.diffXP),
       arenaBest: Math.max(ss.arenaBest, ls.arenaBest),
       arenaBestRun: Math.max(ss.arenaBestRun, ls.arenaBestRun),
       groupsJoined: Math.max(ss.groupsJoined, ls.groupsJoined),
@@ -436,6 +439,7 @@ export function StudyProvider({ children }) {
         ...s,
         perfectQuizzes: s.perfectQuizzes + (sig.perfect ? 1 : 0),
         hardPasses: s.hardPasses + (sig.hardPass ? 1 : 0),
+        diffXP: Math.round((s.diffXP + Math.max(0, Number(sig.diffXP) || 0)) * 100) / 100,
         arenaBest: Math.max(s.arenaBest, Math.round(Number(sig.arenaScore) || 0)),
         arenaBestRun: Math.max(s.arenaBestRun, Math.round(Number(sig.arenaRun) || 0)),
         groupsJoined: s.groupsJoined + (sig.groupJoin ? 1 : 0),
@@ -445,6 +449,7 @@ export function StudyProvider({ children }) {
       const { earnedIds } = evaluateBadges({ ...p, stats });
       const additions = earnedIds.filter((id) => !already.has(id)).map((id) => ({ id, at: Date.now() }));
       const changed = additions.length > 0 || sig.perfect || sig.hardPass || sig.groupJoin ||
+        (Number(sig.diffXP) || 0) > 0 ||
         (Math.round(Number(sig.arenaScore) || 0) > s.arenaBest) || (Math.round(Number(sig.arenaRun) || 0) > s.arenaBestRun);
       if (!changed) return p;
       return { ...p, stats, badges: { ...b, earned: [...b.earned, ...additions] } };
