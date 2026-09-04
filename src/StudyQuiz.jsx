@@ -1751,6 +1751,73 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 <span style={{fontSize:16,color:"var(--color-text-tertiary)"}}>›</span>
               </button>
             </div>
+            <UsageSection isPro={isPro} usage={usage} s={s} adBusy={adBusy} onWatchAd={onWatchAd} onBuyPack={onBuyPack} packBusy={packBusy} startCheckout={startCheckout} onOpenPacks={()=>setShowPacks(true)}/>
+            <SectionLabel label={s.secSubscription}/>
+            <div style={{margin:"4px 18px 6px",padding:"14px 16px",borderRadius:12,
+              border:isPro?"1px solid #86efac":"0.5px solid var(--color-border-tertiary)",
+              background:isPro?"var(--color-background-success)":"var(--color-background-secondary)"}}>
+              {isPro ? (
+                <>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
+                    <span style={{fontSize:15,fontWeight:700,color:"var(--color-text-primary)",display:"inline-flex",alignItems:"center",gap:6}}><Icon name="spark" size={15} style={{color:"var(--color-accent)"}}/>Revyy Pro</span>
+                    <span style={{fontSize:10,fontWeight:700,background:"#dcfce7",color:"#15803d",border:"0.5px solid #86efac",borderRadius:8,padding:"3px 9px"}}>{s.proActive}</span>
+                  </div>
+                  <div style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.7}}>
+                    {subPlan && <div>{s.planWord}: <strong style={{color:"var(--color-text-primary)"}}>{subPlan==="yearly"?`${t.planYearly} · €39.99/yr`:`${t.planMonthly} · €4.99/mo`}</strong></div>}
+                    {periodEnd && !cancelAtPeriodEnd && <div>{s.nextBilling}: <strong style={{color:"var(--color-text-primary)"}}>{fmtDate(periodEnd)}</strong></div>}
+                  </div>
+                  {cancelAtPeriodEnd && periodEnd && (
+                    <div style={{marginTop:10,background:"#fffbeb",border:"0.5px solid #fcd34d",borderRadius:10,padding:"9px 12px",fontSize:12,color:"#92400e",lineHeight:1.5}}>
+                      {s.accessUntil} <strong>{fmtDate(periodEnd)}</strong>.
+                    </div>
+                  )}
+                  <button onClick={doManage} disabled={!!portalBusy}
+                    style={{width:"100%",marginTop:12,background:"var(--color-background-primary)",
+                      border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
+                      fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:portalBusy?"default":"pointer",fontFamily:"inherit",opacity:portalBusy?0.6:1}}>
+                    {portalBusy==="manage" ? s.opening : <span style={{display:"inline-flex",alignItems:"center",gap:7,justifyContent:"center"}}><Icon name="card" size={15}/>{t.manageSubscription}</span>}
+                  </button>
+                  {!cancelAtPeriodEnd && (
+                    <button onClick={doCancel} disabled={!!portalBusy}
+                      style={{width:"100%",marginTop:8,background:"none",
+                        border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
+                        fontSize:13,fontWeight:500,color:"#dc2626",cursor:portalBusy?"default":"pointer",fontFamily:"inherit",opacity:portalBusy?0.6:1}}>
+                      {portalBusy==="cancel" ? s.opening : s.cancelSub}
+                    </button>
+                  )}
+                  {portalErr && <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"8px 11px",fontSize:12,lineHeight:1.4}}>{portalErr}</div>}
+                  <button onClick={doRefreshSub} disabled={checkingSub}
+                    style={{width:"100%",marginTop:8,background:"none",border:"none",
+                      fontSize:12,fontWeight:500,color:"var(--color-text-tertiary)",cursor:checkingSub?"default":"pointer",fontFamily:"inherit"}}>
+                    {checkingSub ? "Checking…" : <span style={{display:"inline-flex",alignItems:"center",gap:6,justifyContent:"center"}}><Icon name="repeat" size={13}/>Refresh subscription status</span>}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
+                    <span style={{fontSize:15,fontWeight:700,color:"var(--color-text-primary)"}}>{s.freePlan}</span>
+                    <span style={{fontSize:10,fontWeight:700,background:"var(--color-background-tertiary)",color:"var(--color-text-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:8,padding:"3px 9px"}}>{s.freeBadge}</span>
+                  </div>
+                  <ul style={{margin:"0 0 2px",padding:0,listStyle:"none",fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.9}}>
+                    <li>· {FREE_DAILY} {s.freeLimQuizzes}</li>
+                    <li>· {s.freeLimMcq}</li>
+                    <li>· {s.freeLimAds}</li>
+                  </ul>
+                  <button onClick={()=>{setCoErr("");setShowUpgrade(true);}}
+                    style={{width:"100%",marginTop:10,background:"#4f46e5",color:"#fff",
+                      border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,
+                      cursor:"pointer",fontFamily:"'Fraunces',Georgia,serif",boxShadow:"0 2px 12px #4f46e544"}}>
+                    {t.upgradeToPro} →
+                  </button>
+                  <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"9px 0 0",lineHeight:1.5}}>{t.cancelAnytime}</p>
+                  <button onClick={doRefreshSub} disabled={checkingSub}
+                    style={{width:"100%",marginTop:8,background:"none",border:"none",
+                      fontSize:12,fontWeight:500,color:"var(--color-text-tertiary)",cursor:checkingSub?"default":"pointer",fontFamily:"inherit"}}>
+                    {checkingSub ? "Checking…" : <span style={{display:"inline-flex",alignItems:"center",gap:6,justifyContent:"center"}}><Icon name="repeat" size={13}/>Already paid? Refresh status</span>}
+                  </button>
+                </>
+              )}
+            </div>
             <SectionLabel label={s.secSecurity||"LOGIN & SECURITY"}/>
             <div style={{padding:"4px 18px 6px",display:"flex",flexDirection:"column",gap:9}}>
               <button onClick={()=>{ try { clerk.openUserProfile(); } catch { /* Clerk not ready */ } }}
@@ -1848,75 +1915,6 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           </button>
 
           {signedIn ? (<>
-          <UsageSection isPro={isPro} usage={usage} s={s} adBusy={adBusy} onWatchAd={onWatchAd} onBuyPack={onBuyPack} packBusy={packBusy} startCheckout={startCheckout} onOpenPacks={()=>setShowPacks(true)}/>
-
-          <SectionLabel label={s.secSubscription}/>
-          <div style={{margin:"4px 18px 6px",padding:"14px 16px",borderRadius:12,
-            border:isPro?"1px solid #86efac":"0.5px solid var(--color-border-tertiary)",
-            background:isPro?"var(--color-background-success)":"var(--color-background-secondary)"}}>
-            {isPro ? (
-              <>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
-                  <span style={{fontSize:15,fontWeight:700,color:"var(--color-text-primary)",display:"inline-flex",alignItems:"center",gap:6}}><Icon name="spark" size={15} style={{color:"var(--color-accent)"}}/>Revyy Pro</span>
-                  <span style={{fontSize:10,fontWeight:700,background:"#dcfce7",color:"#15803d",border:"0.5px solid #86efac",borderRadius:8,padding:"3px 9px"}}>{s.proActive}</span>
-                </div>
-                <div style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.7}}>
-                  {subPlan && <div>{s.planWord}: <strong style={{color:"var(--color-text-primary)"}}>{subPlan==="yearly"?`${t.planYearly} · €39.99/yr`:`${t.planMonthly} · €4.99/mo`}</strong></div>}
-                  {periodEnd && !cancelAtPeriodEnd && <div>{s.nextBilling}: <strong style={{color:"var(--color-text-primary)"}}>{fmtDate(periodEnd)}</strong></div>}
-                </div>
-                {cancelAtPeriodEnd && periodEnd && (
-                  <div style={{marginTop:10,background:"#fffbeb",border:"0.5px solid #fcd34d",borderRadius:10,padding:"9px 12px",fontSize:12,color:"#92400e",lineHeight:1.5}}>
-                    {s.accessUntil} <strong>{fmtDate(periodEnd)}</strong>.
-                  </div>
-                )}
-                <button onClick={doManage} disabled={!!portalBusy}
-                  style={{width:"100%",marginTop:12,background:"var(--color-background-primary)",
-                    border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
-                    fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:portalBusy?"default":"pointer",fontFamily:"inherit",opacity:portalBusy?0.6:1}}>
-                  {portalBusy==="manage" ? s.opening : <span style={{display:"inline-flex",alignItems:"center",gap:7,justifyContent:"center"}}><Icon name="card" size={15}/>{t.manageSubscription}</span>}
-                </button>
-                {!cancelAtPeriodEnd && (
-                  <button onClick={doCancel} disabled={!!portalBusy}
-                    style={{width:"100%",marginTop:8,background:"none",
-                      border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
-                      fontSize:13,fontWeight:500,color:"#dc2626",cursor:portalBusy?"default":"pointer",fontFamily:"inherit",opacity:portalBusy?0.6:1}}>
-                    {portalBusy==="cancel" ? s.opening : s.cancelSub}
-                  </button>
-                )}
-                {portalErr && <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:10,padding:"8px 11px",fontSize:12,lineHeight:1.4}}>{portalErr}</div>}
-                <button onClick={doRefreshSub} disabled={checkingSub}
-                  style={{width:"100%",marginTop:8,background:"none",border:"none",
-                    fontSize:12,fontWeight:500,color:"var(--color-text-tertiary)",cursor:checkingSub?"default":"pointer",fontFamily:"inherit"}}>
-                  {checkingSub ? "Checking…" : <span style={{display:"inline-flex",alignItems:"center",gap:6,justifyContent:"center"}}><Icon name="repeat" size={13}/>Refresh subscription status</span>}
-                </button>
-              </>
-            ) : (
-              <>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
-                  <span style={{fontSize:15,fontWeight:700,color:"var(--color-text-primary)"}}>{s.freePlan}</span>
-                  <span style={{fontSize:10,fontWeight:700,background:"var(--color-background-tertiary)",color:"var(--color-text-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:8,padding:"3px 9px"}}>{s.freeBadge}</span>
-                </div>
-                <ul style={{margin:"0 0 2px",padding:0,listStyle:"none",fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.9}}>
-                  <li>· {FREE_DAILY} {s.freeLimQuizzes}</li>
-                  <li>· {s.freeLimMcq}</li>
-                  <li>· {s.freeLimAds}</li>
-                </ul>
-                <button onClick={()=>{setCoErr("");setShowUpgrade(true);}}
-                  style={{width:"100%",marginTop:10,background:"#4f46e5",color:"#fff",
-                    border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,
-                    cursor:"pointer",fontFamily:"'Fraunces',Georgia,serif",boxShadow:"0 2px 12px #4f46e544"}}>
-                  {t.upgradeToPro} →
-                </button>
-                <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",margin:"9px 0 0",lineHeight:1.5}}>{t.cancelAnytime}</p>
-                <button onClick={doRefreshSub} disabled={checkingSub}
-                  style={{width:"100%",marginTop:8,background:"none",border:"none",
-                    fontSize:12,fontWeight:500,color:"var(--color-text-tertiary)",cursor:checkingSub?"default":"pointer",fontFamily:"inherit"}}>
-                  {checkingSub ? "Checking…" : <span style={{display:"inline-flex",alignItems:"center",gap:6,justifyContent:"center"}}><Icon name="repeat" size={13}/>Already paid? Refresh status</span>}
-                </button>
-              </>
-            )}
-          </div>
-
           {/* Danger Zone */}
           <div style={{margin:"14px 18px 22px",padding:"16px",borderRadius:12,
             border:"1.5px solid #ef4444",background:"rgba(239,68,68,0.07)"}}>
