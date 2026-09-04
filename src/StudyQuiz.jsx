@@ -69,6 +69,22 @@ function GroupAvatar({ name, size = 40 }) {
     </span>
   );
 }
+// A streak flame that gets HOTTER as the count grows: bigger glow, a warmer
+// colour (amber -> orange -> red), and a livelier flicker. The number rides
+// alongside so a glance reads both the streak and its intensity.
+function StreakFlame({ count = 0, size = 22, showZero = false }) {
+  const n = Math.max(0, Math.round(count));
+  if (!n && !showZero) return null;
+  const heat = Math.min(1, n / 30);
+  const glow = 3 + Math.round(heat * 15);
+  const color = n >= 30 ? "#ef4444" : n >= 14 ? "#f97316" : n >= 7 ? "#fb923c" : "#f59e0b";
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <span aria-hidden="true" className={n >= 7 ? "rv-flame rv-flame-hot" : "rv-flame"} style={{ fontSize: size, lineHeight: 1, filter: `drop-shadow(0 0 ${glow}px ${color}${n >= 7 ? "cc" : "88"})` }}>🔥</span>
+      <span style={{ fontWeight: 800, fontFamily: "monospace", color, fontSize: Math.round(size * 0.72) }}>{n}</span>
+    </span>
+  );
+}
 // A rank tier pill (the public "status"), self-contained so it reads on any
 // background. Hidden for a missing/negative tier.
 function RankPill({ index, t, small = false }) {
@@ -279,6 +295,12 @@ const SoundEngine = (() => {
     pass:      ()=>{ tone(523,'sine',0.18,0.18); tone(659,'sine',0.20,0.18,0.14); },
     fail:      ()=>tone(280,'sine',0.25,0.15),
     celebrate: ()=>[[523,0],[659,.08],[784,.16],[1047,.26],[784,.42],[1047,.52],[1319,.62]].forEach(([f,d])=>tone(f,'sine',0.18,0.22,d)),
+    // A bright sparkle when a badge unlocks.
+    unlock:    ()=>[[659,0],[880,.08],[1175,.17],[1568,.28]].forEach(([f,d])=>tone(f,'triangle',0.17,0.20,d)),
+    // A triumphant fanfare when the learner's rank tier goes up.
+    rankUp:    ()=>[[523,0],[659,.1],[784,.2],[1047,.32],[1319,.46],[1568,.60]].forEach(([f,d])=>tone(f,'triangle',0.22,0.24,d)),
+    // A rising "streak" flare that gets hotter (higher, brighter) with the count.
+    streak:    (lvl=1)=>{ const n=Math.min(Math.max(lvl,1),30); const base=380+n*22; tone(base,'sine',0.09,0.16); tone(base*1.33,'sine',0.11,0.15,0.06); tone(base*1.66,'triangle',0.12,0.13,0.12); },
     setVolume:(v)=>{ if(master) master.gain.value = Math.max(0,Math.min(1,v/100)); },
     setEnabled:(v)=>{ enabled = !!v; },
   };
@@ -1705,7 +1727,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
             <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:10}}>{t.progressTitle}</div>
             <div style={{display:"flex",gap:8}}>
               {[
-                { v: <span style={{display:"inline-flex",alignItems:"center",gap:5,justifyContent:"center"}}><Icon name="flame" size={16} stroke={1.8} style={{color:"#f97316"}}/>{acctStats.streak}</span>, l: t.dayStreak },
+                { v: <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center"}}><StreakFlame count={acctStats.streak} size={17} showZero/></span>, l: t.dayStreak },
                 { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : "0%", l: t.accuracyLbl },
                 { v: acctSrs.totalCount, l: t.inReviewLbl },
               ].map(({ v, l }, i) => (
@@ -3773,6 +3795,12 @@ export default function StudyQuiz() {
   // Badges / trophy case
   const [badgeToast, setBadgeToast] = useState(null); // [ids] freshly unlocked, for the toast
   const badgeSyncedRef = useRef(false);
+  // Celebration effects (confetti burst + rank-up toast + streak-advance sound).
+  const [burstConfetti, setBurstConfetti] = useState(false);
+  const [rankToast, setRankToast] = useState(null);   // a RANKS entry when the tier goes up
+  const prevRankRef = useRef(null);
+  const prevStreakRef = useRef(null);
+  const fireBurst = useCallback(() => { setBurstConfetti(true); setTimeout(() => setBurstConfetti(false), 3800); }, []);
   // Which collapsible home cards are expanded (default collapsed to a tidy header).
   const [openCard, setOpenCard] = useState({});
   const toggleCard = useCallback((k) => setOpenCard((o) => ({ ...o, [k]: !o[k] })), []);
@@ -4058,10 +4086,18 @@ export default function StudyQuiz() {
     const seen = new Set(srs.badges?.seen || []);
     const fresh = (srs.badges?.earned || []).filter((e) => !seen.has(e.id)).map((e) => e.id);
     if (!fresh.length) return;
-    const id = setTimeout(() => { setBadgeToast(fresh); srs.markBadgesSeen(fresh); }, 450);
+    const id = setTimeout(() => { setBadgeToast(fresh); srs.markBadgesSeen(fresh); SoundEngine.unlock(); fireBurst(); }, 450);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [earnedCount]);
+  // Streak getting hotter: a rising flare (pitch scales with the count) the
+  // moment the streak extends. Silent on first load.
+  useEffect(() => {
+    const s = stats.streak || 0;
+    if (prevStreakRef.current == null) { prevStreakRef.current = s; return; }
+    if (s > prevStreakRef.current) SoundEngine.streak(s);
+    prevStreakRef.current = s;
+  }, [stats.streak]);
   // Auto-dismiss the badge toast.
   useEffect(() => {
     if (!badgeToast) return;
@@ -4074,16 +4110,34 @@ export default function StudyQuiz() {
   const badgeEval = useMemo(() => evaluateBadges({ stats: srs.stats, mockScores: srs.mockScores, badges: srs.badges }), [srs.stats, srs.mockScores, srs.badges]);
   const earnedBadgeCount = badgeEval.earnedIds.length;
   const myXP = myRankInfo.xp;
+  // Rank-up celebration: fanfare + confetti + a toast when the tier climbs.
+  useEffect(() => {
+    const r = myRankInfo.index;
+    if (prevRankRef.current == null) { prevRankRef.current = r; return; } // don't fire on first load
+    if (r > prevRankRef.current) { SoundEngine.rankUp(); fireBurst(); setRankToast(RANKS[r]); setTimeout(() => setRankToast(null), 5000); }
+    prevRankRef.current = r;
+  }, [myRankInfo.index, fireBurst]);
   // Shared "badge unlocked" toast, dropped into the finish screens + home.
   const badgeToastEl = badgeToast && badgeToast.length ? (
     <div style={{position:"fixed",left:0,right:0,bottom:20,zIndex:900,display:"flex",justifyContent:"center",pointerEvents:"none",padding:"0 14px"}}>
-      <div style={{background:"var(--color-text-primary)",color:"var(--color-background-primary)",borderRadius:14,padding:"11px 14px",boxShadow:"0 12px 32px rgba(15,23,42,0.30)",display:"flex",alignItems:"center",gap:11,maxWidth:380,pointerEvents:"auto"}}>
+      <div className="rv-badge-pop" style={{background:"var(--color-text-primary)",color:"var(--color-background-primary)",borderRadius:14,padding:"11px 14px",boxShadow:"0 12px 32px rgba(15,23,42,0.30)",display:"flex",alignItems:"center",gap:11,maxWidth:380,pointerEvents:"auto"}}>
         <span style={{fontSize:25,lineHeight:1}} aria-hidden="true">{BADGE_BY_ID[badgeToast[0]]?.emoji||"🏅"}</span>
         <div style={{minWidth:0,flex:1}}>
           <div style={{fontSize:12.5,fontWeight:800}}>{badgeToast.length>1?(t.badgeUnlockedN||"{n} badges unlocked!").replace("{n}",badgeToast.length):(t.badgeUnlocked||"Badge unlocked!")}</div>
           <div style={{fontSize:12,opacity:0.85,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{badgeToast.map((id)=>(t["badge_"+id]||BADGE_BY_ID[id]?.name||id)).join(", ")}</div>
         </div>
         <button onClick={()=>{setScreen("badges");setBadgeToast(null);}} style={{fontSize:11.5,fontWeight:700,border:"none",background:"var(--color-accent)",color:"#fff",borderRadius:20,padding:"5px 11px",cursor:"pointer",flexShrink:0}}>{t.badgeView||"View"}</button>
+      </div>
+    </div>
+  ) : null;
+  // Rank-up banner: a centred burst when the learner reaches a new tier.
+  const rankToastEl = rankToast ? (
+    <div style={{position:"fixed",inset:0,zIndex:905,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",padding:16}}>
+      <div className="rv-rank-burst" onClick={()=>{setRankToast(null);setScreen("badges");}} style={{pointerEvents:"auto",cursor:"pointer",textAlign:"center",background:"var(--color-background-primary)",border:`2px solid ${rankToast.color}`,borderRadius:20,padding:"22px 26px",boxShadow:`0 18px 50px ${rankToast.color}55`,maxWidth:320}}>
+        <div style={{fontSize:46,lineHeight:1,marginBottom:6}} aria-hidden="true">{rankToast.emoji}</div>
+        <div style={{fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.rankUpLabel||"Rank up!"}</div>
+        <div style={{fontSize:24,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:rankToast.color,margin:"2px 0 4px"}}>{(t["rank_"+rankToast.key])||rankToast.name}</div>
+        <div style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{t.rankUpSub||"You've leveled up. Keep climbing."}</div>
       </div>
     </div>
   ) : null;
@@ -4136,7 +4190,7 @@ export default function StudyQuiz() {
   if (screen==="home") return (
     <div style={Sb.root}><style>{CSS}</style>
       <ActivatingOverlay show={activating}/>
-      {badgeToastEl}
+      {badgeToastEl}{rankToastEl}{burstConfetti&&<Confetti/>}
       {joinPreviewEl}
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
@@ -4772,7 +4826,7 @@ export default function StudyQuiz() {
   // ── RESULTS ──────────────────────────────────────────────────────
   if (screen==="results" && quiz) return (
     <div style={Sb.root}><style>{CSS}</style>
-      {badgeToastEl}
+      {badgeToastEl}{rankToastEl}{burstConfetti&&<Confetti/>}
       <AdBanners isPro={isPro} bottom={false}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
       <div style={{background:"#312e81",padding:"36px 20px 28px",textAlign:"center"}}>
@@ -4781,6 +4835,7 @@ export default function StudyQuiz() {
         <div style={{fontSize:46,fontWeight:800,color:"#fff",letterSpacing:-1,fontFamily:"'Fraunces',Georgia,serif"}}>{pct}%</div>
         <div style={{fontSize:14,color:"rgba(255,255,255,0.7)",marginTop:4}}>{score} {t.outOf} {quiz.questions.length}</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,justifyContent:"center",marginTop:16}}>{answers.map((a,i)=><span key={i} style={{width:14,height:14,borderRadius:4,background:a.isCorrect?"#4ade80":"#f87171"}}/>)}</div>
+        {stats.streak>0 && <div style={{marginTop:16,display:"flex",justifyContent:"center"}}><span style={{display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.13)",borderRadius:999,padding:"6px 15px"}}><StreakFlame count={stats.streak} size={19}/><span style={{fontSize:12.5,color:"rgba(255,255,255,0.88)",fontWeight:600}}>{t.dayStreakLabel||"day streak"}</span></span></div>}
       </div>
       <div className="rv-center" style={{padding:"20px 16px"}}>
         {earnedReward && (
@@ -5211,7 +5266,7 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {badgeToastEl}
+      {badgeToastEl}{rankToastEl}{burstConfetti&&<Confetti/>}
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
         {showConfetti&&<Confetti/>}
         <div style={{background:theme.bg,padding:"40px 20px 32px",textAlign:"center"}}>
@@ -5995,7 +6050,7 @@ export default function StudyQuiz() {
     const r = arenaResult;
     return (
       <div style={Sb.root}><style>{CSS}</style>
-        {badgeToastEl}
+        {badgeToastEl}{rankToastEl}{burstConfetti&&<Confetti/>}
         <AdBanners isPro={isPro}/>
         <div style={{background:"#312e81",padding:"36px 20px 28px",textAlign:"center"}}>
           {r.isBest && <div style={{fontSize:12,fontWeight:800,letterSpacing:1,color:"#fcd34d",textTransform:"uppercase",marginBottom:6}}>{t.arenaNewBest}</div>}
@@ -6391,6 +6446,14 @@ const CSS = `
   @keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
   @keyframes spin{to{transform:rotate(360deg)}}
   .spin-ring{animation:spin 0.9s linear infinite}
+  @keyframes flameFlicker{0%,100%{transform:scale(1) rotate(-2deg)}50%{transform:scale(1.06) rotate(2deg)}}
+  @keyframes flameFlickerHot{0%,100%{transform:scale(1) rotate(-3deg)}25%{transform:scale(1.1) rotate(2deg)}50%{transform:scale(0.96) rotate(-2deg)}75%{transform:scale(1.12) rotate(3deg)}}
+  .rv-flame{display:inline-block;transform-origin:center bottom;animation:flameFlicker 1.6s ease-in-out infinite}
+  .rv-flame-hot{animation:flameFlickerHot 0.85s ease-in-out infinite}
+  @keyframes badgePop{0%{transform:scale(0.7);opacity:0}55%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+  .rv-badge-pop{animation:badgePop 0.42s cubic-bezier(.34,1.56,.64,1) both}
+  @keyframes rankBurst{0%{transform:scale(0.6);opacity:0}50%{transform:scale(1.12);opacity:1}100%{transform:scale(1);opacity:1}}
+  .rv-rank-burst{animation:rankBurst 0.5s cubic-bezier(.34,1.56,.64,1) both}
   .step{animation:fadeIn 0.4s ease forwards;opacity:0}
   .step-0{animation-delay:0.3s}.step-1{animation-delay:0.8s}.step-2{animation-delay:1.3s}.step-3{animation-delay:1.8s}
   .exam-type-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(67,56,202,0.18)!important;border-color:#4f46e5!important;background:var(--color-hover-tint)!important}
