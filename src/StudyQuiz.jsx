@@ -45,6 +45,16 @@ function AvatarInitial({ name, size = 34 }) {
     </span>
   );
 }
+// A colored icon "medallion": a tinted circle with the icon in its accent
+// color. Gives each home card a distinct, lively identity instead of a row of
+// flat monochrome line icons. The tint reads in both light and dark themes.
+function Medallion({ color = "#4f46e5", size = 38, children }) {
+  return (
+    <span style={{ flexShrink: 0, width: size, height: size, borderRadius: 12, background: color + "1f", color, display: "inline-flex", alignItems: "center", justifyContent: "center" }} aria-hidden="true">
+      {children}
+    </span>
+  );
+}
 // A rank tier pill (the public "status"), self-contained so it reads on any
 // background. Hidden for a missing/negative tier.
 function RankPill({ index, t, small = false }) {
@@ -4089,7 +4099,7 @@ export default function StudyQuiz() {
       <div className="rv-home-body" style={{padding:"20px 16px 32px"}}>
         {/* Friends + study groups entry */}
         <div onClick={openSocial} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 16px",marginBottom:18,cursor:"pointer"}}>
-          <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="users" size={22}/></span>
+          <Medallion color="#0d9488"><Icon name="users" size={20}/></Medallion>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.socialTitle||"Friends & Groups"}</div>
             <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.socialSub||"Add friends, form study groups, share material and compare progress."}</div>
@@ -4098,7 +4108,7 @@ export default function StudyQuiz() {
         </div>
         {/* Badges & rank entry */}
         <div onClick={()=>setScreen("badges")} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 16px",marginBottom:18,cursor:"pointer"}}>
-          <span style={{flexShrink:0,width:34,height:34,borderRadius:"50%",background:(RANKS[myRankInfo.index]?.color||"#888")+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:19}} aria-hidden="true">{RANKS[myRankInfo.index]?.emoji}</span>
+          <Medallion color={RANKS[myRankInfo.index]?.color||"#4f46e5"}><span style={{fontSize:19}}>{RANKS[myRankInfo.index]?.emoji}</span></Medallion>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)",display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>{t.badgesTitle||"Badges & rank"} <RankPill index={myRankInfo.index} t={t} small/></div>
             <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{(t.badgesHomeSub||"{n} of {m} badges earned. Level up your rank and pin a flair.").replace("{n}",earnedBadgeCount).replace("{m}",BADGES.length)}</div>
@@ -4108,7 +4118,7 @@ export default function StudyQuiz() {
         </div>
         {/* Global leaderboard entry (best of the best, by rank) */}
         <div onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 16px",marginBottom:18,cursor:"pointer"}}>
-          <span style={{flexShrink:0,width:34,height:34,borderRadius:"50%",background:"#a3762b22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}} aria-hidden="true">🏆</span>
+          <Medallion color="#b45309"><span style={{fontSize:18}}>🏆</span></Medallion>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.globalBoardTitle||"Global leaderboard"}</div>
             <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.globalBoardCard||"The top 100 learners by rank, across every mode. The best of the best."}</div>
@@ -4118,7 +4128,7 @@ export default function StudyQuiz() {
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
         <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4f46e5,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 14px rgba(79,70,229,0.2)":"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <span style={{flexShrink:0,display:"flex",color:srs.dueCount>0?"#fff":"var(--color-accent)"}}><Icon name="repeat" size={23}/></span>
+            {srs.dueCount>0 ? <span style={{flexShrink:0,display:"flex",color:"#fff"}}><Icon name="repeat" size={23}/></span> : <Medallion color="#4f46e5"><Icon name="repeat" size={20}/></Medallion>}
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:14,color:srs.dueCount>0?"#fff":"var(--color-text-primary)"}}>{t.srsTitle}</div>
               <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:srs.dueCount>0?"rgba(255,255,255,0.85)":"var(--color-text-secondary)"}}>
@@ -4148,7 +4158,7 @@ export default function StudyQuiz() {
         {mastery.length>0 && (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-              <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="chart" size={21}/></span>
+              <Medallion color="#2563eb" size={36}><Icon name="chart" size={19}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.masteryTitle}</div>
                 <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.masterySub}</div>
@@ -4176,7 +4186,7 @@ export default function StudyQuiz() {
         {librarySize(srs.library)>0 && (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-              <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="layers" size={21}/></span>
+              <Medallion color="#0f9d5a" size={36}><Icon name="layers" size={19}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.libraryTitle}</div>
                 <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.librarySets.replace("{n}",librarySize(srs.library)).replace("{s}",librarySize(srs.library)>1?"s":"")}</div>
@@ -4202,7 +4212,7 @@ export default function StudyQuiz() {
         {challenges.length>0 && (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-              <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="trophy" size={21}/></span>
+              <Medallion color="#d97706" size={36}><Icon name="trophy" size={19}/></Medallion>
               <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.challengeActivity}</div>
             </div>
             {challenges.slice(0,4).map((c)=>{
@@ -4232,7 +4242,7 @@ export default function StudyQuiz() {
         {!homePlan ? (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name="compass" size={23}/></span>
+              <Medallion color="#7c3aed"><Icon name="compass" size={20}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.coachTitle}</div>
                 <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.coachTagline}</div>
@@ -4851,7 +4861,7 @@ export default function StudyQuiz() {
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:22}}>
           {[{id:"mcq",icon:"list",title:t.fullMCQ,desc:t.fullMCQDesc},{id:"written",icon:"pencil",title:t.fullWritten,desc:t.fullWrittenDesc},{id:"custom",icon:"sliders",title:t.customMix,desc:t.customMixDesc}].filter(m=>isPro||m.id!=="custom").map(m=>(
             <div key={m.id} onClick={()=>setExamMode(m.id)} className="exam-type-card" style={{display:"flex",alignItems:"center",gap:14,borderRadius:12,padding:"14px 16px",cursor:"pointer",border:"1.5px solid "+(examMode===m.id?"#4f46e5":"var(--color-border-tertiary)"),background:examMode===m.id?"var(--color-sel-tint)":"var(--color-background-primary)",transition:"all 0.18s",boxShadow:examMode===m.id?"0 4px 16px #4f46e533":"none"}}>
-              <span style={{flexShrink:0,display:"flex",color:"var(--color-accent)"}}><Icon name={m.icon} size={24} stroke={1.6}/></span>
+              <Medallion color="#4f46e5" size={40}><Icon name={m.icon} size={21} stroke={1.7}/></Medallion>
               <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{m.title}</div><div style={{fontSize:12,color:"var(--color-text-secondary)",marginTop:2}}>{m.desc}</div></div>
               {examMode===m.id&&<span style={{color:"var(--color-accent)",fontWeight:700,fontSize:18}}>✓</span>}
             </div>
