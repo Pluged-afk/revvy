@@ -468,11 +468,13 @@ async function ensureUsernameCol() {
   try {
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username TEXT`;
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower ON profiles (lower(username)) WHERE username IS NOT NULL`;
-    // Public flair mirror: the badge the user pinned + their rank tier (0..6),
-    // computed client-side and stored here so leaderboards show it cheaply.
-    // rank NULL or -1 means the user hid their public rank/flair.
+    // Public flair mirror: the badge the user pinned + their rank tier (0..6) +
+    // lifetime XP, computed client-side and stored here so leaderboards show it
+    // cheaply. rank NULL or -1 (and xp NULL) means the user hid their status.
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS equipped_badge TEXT`;
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS rank INT`;
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS xp INT`;
+    await sql`CREATE INDEX IF NOT EXISTS profiles_xp ON profiles (xp DESC) WHERE xp IS NOT NULL`;
     unameReady = true;
   } catch (e) { console.error("[arena] username col:", e.message); }
 }
@@ -592,12 +594,38 @@ async function setBadge(req, res, body, me) {
   if (equipped && !/^[a-z0-9_]{1,40}$/.test(equipped)) equipped = null;
   let rank = parseInt(body.rank, 10);
   rank = Number.isInteger(rank) ? Math.max(-1, Math.min(20, rank)) : null;
+  // Lifetime XP powers the global leaderboard's fine ordering. A hidden user
+  // (rank < 0) is stored with NULL xp so they drop off the public board.
+  let xp = parseInt(body.xp, 10);
+  xp = (Number.isInteger(xp) && xp >= 0 && rank != null && rank >= 0) ? Math.min(xp, 100000000) : null;
   await ensureUsernameCol();
   try {
     await sql`INSERT INTO profiles (id, clerk_user_id) VALUES (${me}, ${me}) ON CONFLICT (id) DO NOTHING`;
-    await sql`UPDATE profiles SET equipped_badge = ${equipped}, rank = ${rank} WHERE clerk_user_id = ${me} OR id = ${me}`;
+    await sql`UPDATE profiles SET equipped_badge = ${equipped}, rank = ${rank}, xp = ${xp} WHERE clerk_user_id = ${me} OR id = ${me}`;
     return res.status(200).json({ ok: true });
   } catch (e) { console.error("[study] setBadge:", e.message); return res.status(500).json({ error: "Could not save." }); }
+}
+
+// The GLOBAL leaderboard: the top 100 learners by lifetime XP (the "best of the
+// best" across every mode), independent of the Endless Arena's high-score board.
+// Hidden users (NULL xp) are excluded. Also returns the caller's own standing.
+async function globalBoard(req, res, me) {
+  await ensureUsernameCol();
+  const top = await sql`
+    SELECT COALESCE(clerk_user_id, id) AS uid, username, equipped_badge, rank, xp
+    FROM profiles WHERE xp IS NOT NULL AND xp > 0 AND username IS NOT NULL
+    ORDER BY xp DESC, username ASC LIMIT 100`;
+  const players = (await sql`SELECT COUNT(*)::int AS n FROM profiles WHERE xp IS NOT NULL AND xp > 0 AND username IS NOT NULL`)[0]?.n || 0;
+  const mine = (await sql`SELECT username, equipped_badge, rank, xp FROM profiles WHERE clerk_user_id = ${me} OR id = ${me} LIMIT 1`)[0] || null;
+  let you = null;
+  if (mine && mine.xp != null && mine.xp > 0) {
+    const ahead = (await sql`SELECT COUNT(*)::int AS n FROM profiles WHERE xp IS NOT NULL AND username IS NOT NULL AND (xp > ${mine.xp} OR (xp = ${mine.xp} AND username < ${mine.username || ""}))`)[0]?.n || 0;
+    you = { pos: ahead + 1, xp: Number(mine.xp), tier: publicRank(mine), badge: publicBadge(mine), name: mine.username || null };
+  }
+  return res.status(200).json({
+    players, you,
+    top: top.map((r) => ({ name: r.username || "player", xp: Number(r.xp), tier: publicRank(r), badge: publicBadge(r), you: r.uid === me })),
+  });
 }
 
 async function friendAdd(req, res, body, me) {
@@ -954,6 +982,7 @@ export default async function handler(req, res) {
       if (body?.action === "arenaSubmit") return arenaSubmit(req, res, body, userId);
       if (body?.action === "arenaBoard") return arenaBoard(req, res, userId);
       if (body?.action === "setBadge") return setBadge(req, res, body, userId);
+      if (body?.action === "globalBoard") return globalBoard(req, res, userId);
       // Friends + study groups
       if (body?.action === "social") return socialOverview(req, res, userId);
       if (body?.action === "friendAdd") return friendAdd(req, res, body, userId);

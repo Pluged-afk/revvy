@@ -104,6 +104,12 @@ const T_EN = {
   rank_sage:"Sage", rank_master:"Master", rank_luminary:"Luminary",
   badgeCat_consistency:"Consistency", badgeCat_volume:"Volume", badgeCat_accuracy:"Accuracy",
   badgeCat_difficulty:"Difficulty", badgeCat_exams:"Exams", badgeCat_arena:"Endless Arena", badgeCat_challenges:"Challenges",
+  // Global leaderboard
+  globalBoardTitle:"Global leaderboard", globalBoardHead:"Best of the best",
+  globalBoardSub:"The top 100 learners by rank across every mode.", globalPlayers:"{n} ranked",
+  globalYouPos:"You're #{n}", globalEmpty:"No one is ranked yet. Be the first to make the board.",
+  globalBoardCard:"The top 100 learners by rank, across every mode. The best of the best.",
+  globalBoardSee:"See the global leaderboard",
   seeStandings:"See the standings", challengeCreateErr:"Couldn't create the challenge, try again.",
   arenaBoardLegend:"Player · questions · freeze / hint / skip used", arenaEntry:"Endless Arena", arenaEntrySub:"Ranked general-knowledge. One life, chase a high score.",
   unameTitle:"Pick a username", unameSub:"This is your public name on the leaderboard. You can change it later in settings.",

@@ -1571,7 +1571,7 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
   );
 }
 
-function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, t }) {
+function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, onOpenBadges = () => {}, t }) {
   const s = t.set || {};
   const { user, username, saveUsername, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
   // Public display name editor (the account name shown everywhere).
@@ -1721,6 +1721,11 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                   </div>
                 )}
               </div>
+              {/* Badges & rank shortcut */}
+              <button onClick={()=>onOpenBadges()} style={{marginTop:12,width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)",background:"var(--color-background-primary)",cursor:"pointer",fontFamily:"inherit"}}>
+                <span style={{fontSize:12.5,color:"var(--color-text-primary)",fontWeight:600,display:"inline-flex",alignItems:"center",gap:7}}><span aria-hidden="true">🏅</span>{t.badgesTitle||"Badges & rank"}</span>
+                <span style={{fontSize:16,color:"var(--color-text-tertiary)"}}>›</span>
+              </button>
             </div>
           </>)}
 
@@ -3697,6 +3702,9 @@ export default function StudyQuiz() {
   const [arenaBoardData, setArenaBoardData] = useState(null);
   const [arenaBusy, setArenaBusy] = useState(false);
   const [arenaErr, setArenaErr] = useState("");
+  // Global "best of the best" leaderboard (top 100 by lifetime XP/rank).
+  const [globalBoardData, setGlobalBoardData] = useState(null);
+  const [globalBusy, setGlobalBusy] = useState(false);
   // ── Friends + study groups ──
   const [social, setSocial] = useState(null);      // {friends, incoming, outgoing, groups}
   const [socialBusy, setSocialBusy] = useState(false);
@@ -3964,6 +3972,11 @@ export default function StudyQuiz() {
     const b = await arenaBoardGlobal();
     setArenaBusy(false); setArenaBoardData(b);
   }, []);
+  const openGlobalBoard = useCallback(async () => {
+    setGlobalBusy(true); setGlobalBoardData(null); setScreen("global_board");
+    const b = await socialApi("globalBoard");
+    setGlobalBusy(false); setGlobalBoardData(b && !b.error ? b : { players: 0, top: [], you: null });
+  }, []);
 
   // ── Badges wiring ────────────────────────────────────────────────────
   // Retroactively grant any badges the learner already qualifies for (existing
@@ -3996,6 +4009,7 @@ export default function StudyQuiz() {
   const myRankInfo = useMemo(() => rankOf({ stats: srs.stats }), [srs.stats]);
   const badgeEval = useMemo(() => evaluateBadges({ stats: srs.stats, mockScores: srs.mockScores, badges: srs.badges }), [srs.stats, srs.mockScores, srs.badges]);
   const earnedBadgeCount = badgeEval.earnedIds.length;
+  const myXP = myRankInfo.xp;
   // Shared "badge unlocked" toast, dropped into the finish screens + home.
   const badgeToastEl = badgeToast && badgeToast.length ? (
     <div style={{position:"fixed",left:0,right:0,bottom:20,zIndex:900,display:"flex",justifyContent:"center",pointerEvents:"none",padding:"0 14px"}}>
@@ -4014,10 +4028,10 @@ export default function StudyQuiz() {
   const flairPublic = srs.badges?.public !== false;
   useEffect(() => {
     if (!user) return;
-    const payload = flairPublic ? { equipped: flairEquipped || null, rank: flairRank } : { equipped: null, rank: -1 };
+    const payload = flairPublic ? { equipped: flairEquipped || null, rank: flairRank, xp: myXP } : { equipped: null, rank: -1, xp: -1 };
     const id = setTimeout(() => { socialApi("setBadge", payload); }, 700);
     return () => clearTimeout(id);
-  }, [user, flairRank, flairEquipped, flairPublic]);
+  }, [user, flairRank, flairEquipped, flairPublic, myXP]);
 
   const enableReminders = async () => { try { if (typeof Notification!=="undefined") { const p = await Notification.requestPermission(); setNotifPerm(p); } } catch { /* ignore */ } };
   // Tick a coached day off (once) when its quiz/exam results appear.
@@ -4088,6 +4102,15 @@ export default function StudyQuiz() {
             <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{(t.badgesHomeSub||"{n} of {m} badges earned. Level up your rank and pin a flair.").replace("{n}",earnedBadgeCount).replace("{m}",BADGES.length)}</div>
           </div>
           {flairEquipped && <BadgeGlyph id={flairEquipped} size={20} t={t}/>}
+          <span style={{fontSize:17,color:"var(--color-text-tertiary)",flexShrink:0}}>›</span>
+        </div>
+        {/* Global leaderboard entry (best of the best, by rank) */}
+        <div onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 16px",marginBottom:18,cursor:"pointer"}}>
+          <span style={{flexShrink:0,width:34,height:34,borderRadius:"50%",background:"#a3762b22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}} aria-hidden="true">🏆</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.globalBoardTitle||"Global leaderboard"}</div>
+            <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.globalBoardCard||"The top 100 learners by rank, across every mode. The best of the best."}</div>
+          </div>
           <span style={{fontSize:17,color:"var(--color-text-tertiary)",flexShrink:0}}>›</span>
         </div>
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
@@ -4283,7 +4306,7 @@ export default function StudyQuiz() {
         </div>
       </div>
       {showProModal && <ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
-      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
+      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} t={t}/>}
       <ResumeModal info={examResume} onResume={resumeExam} onDiscard={discardResume} fmtClock={fmtClock}/>
     </div>
   );
@@ -4546,7 +4569,7 @@ export default function StudyQuiz() {
         </div>
       )}
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} t={t}/>}
     </div>
   );
 
@@ -4583,7 +4606,7 @@ export default function StudyQuiz() {
         <button onClick={openSettings} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{position:"fixed",left:12,bottom:58,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(15,23,42,0.13)"}}><Icon name="gear" size={17}/></button>
         <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(15,23,42,0.13)"}}><Icon name="chat" size={17}/></button>
         {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
-        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
+        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} t={t}/>}
       </div>
     );
     return (
@@ -4641,7 +4664,7 @@ export default function StudyQuiz() {
         <button onClick={openSettings} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{position:"fixed",left:12,bottom:58,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(15,23,42,0.13)"}}><Icon name="gear" size={17}/></button>
         <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(15,23,42,0.13)"}}><Icon name="chat" size={17}/></button>
         {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
-        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
+        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} t={t}/>}
       </div>
     );
   }
@@ -4972,7 +4995,7 @@ export default function StudyQuiz() {
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#312e81,#4f46e5)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} t={t}/>}
     </div>
   );
 
@@ -5435,7 +5458,7 @@ export default function StudyQuiz() {
           <button onClick={doJoinGroup} disabled={socialBusy||!joinCodeInput.trim()} style={{...Sb.btnOutline,padding:"0 16px",fontSize:13,opacity:(socialBusy||!joinCodeInput.trim())?0.45:1}}>{t.joinWord||"Join"}</button>
         </div>
       </div>
-      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>}
+      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} t={t}/>}
     </div>
   );
 
@@ -5565,6 +5588,48 @@ export default function StudyQuiz() {
   );
 
   // ── GROUP CHALLENGES ──────────────────────────────────────────────
+  if (screen==="global_board") return (
+    <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      <div style={Sb.topbar} className="rv-topbar">
+        <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.backWord||"Back"}</button>
+        <span style={Sb.brand}>{t.globalBoardTitle||"Global leaderboard"}</span><span/>
+      </div>
+      <div className="rv-center-narrow" style={{padding:"18px 16px 40px"}}>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:22,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>🏆 {t.globalBoardHead||"Best of the best"}</div>
+          <div style={{fontSize:12.5,color:"var(--color-text-secondary)",marginTop:3,lineHeight:1.5}}>{t.globalBoardSub||"The top 100 learners by rank across every mode."}{globalBoardData?.players?` · ${(t.globalPlayers||"{n} ranked").replace("{n}",globalBoardData.players.toLocaleString())}`:""}</div>
+        </div>
+        {globalBusy && <div style={{textAlign:"center",padding:"36px 0"}}><div className="spin-ring" style={{width:34,height:34,borderRadius:"50%",border:"3px solid var(--color-border-tertiary)",borderTopColor:"var(--color-accent)",margin:"0 auto"}}/></div>}
+        {!globalBusy && globalBoardData && (<>
+          {globalBoardData.you && (
+            <div style={{background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"12px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+              <span style={{fontWeight:700,fontSize:14,display:"inline-flex",alignItems:"center",gap:8,minWidth:0}}>{(t.globalYouPos||"You're #{n}").replace("{n}",(globalBoardData.you.pos||0).toLocaleString())} <RankPill index={globalBoardData.you.tier} t={t} small/></span>
+              <span style={{fontFamily:"monospace",fontWeight:700,color:"var(--color-accent)",flexShrink:0}}>{(globalBoardData.you.xp||0).toLocaleString()} XP</span>
+            </div>
+          )}
+          {globalBoardData.top?.length ? (
+            <div style={{border:"1px solid var(--color-border-secondary)",borderRadius:14,overflow:"hidden",background:"var(--color-background-primary)"}}>
+              {globalBoardData.top.map((row,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"32px 1fr auto",gap:10,alignItems:"center",padding:"11px 13px",background:row.you?"var(--color-sel-tint)":"transparent",borderBottom:i<globalBoardData.top.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
+                  <span style={{fontFamily:"monospace",fontWeight:800,fontSize:14,textAlign:"center",color:i===0?"#d97706":i===1?"#94a3b8":i===2?"#b45309":"var(--color-text-tertiary)"}}>{i+1}</span>
+                  <div style={{minWidth:0,display:"flex",alignItems:"center",gap:9}}>
+                    <AvatarInitial name={row.name} size={28}/>
+                    <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                      <span style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}{row.you?` · ${t.youWord||"you"}`:""}{i===0?" 👑":""}</span>
+                      <Flair rank={row.tier} badge={row.badge} t={t} small/>
+                    </div>
+                  </div>
+                  <span style={{fontFamily:"monospace",fontWeight:700,fontSize:14}}>{(row.xp||0).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          ) : <div style={{textAlign:"center",padding:"30px 0",fontSize:13,color:"var(--color-text-tertiary)"}}>{t.globalEmpty||"No one is ranked yet. Be the first to make the board."}</div>}
+        </>)}
+      </div>
+    </div>
+  );
+
   if (screen==="badges") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
@@ -5595,6 +5660,9 @@ export default function StudyQuiz() {
               </>) : <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:12}}>{t.rankMax||"You've reached the top tier. Legendary."}</div>}
             </div>
           ); })()}
+
+        {/* Link to the global leaderboard */}
+        <button onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:"transparent",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 14px",marginBottom:16,fontSize:13,fontWeight:700,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}><span aria-hidden="true">🏆</span>{t.globalBoardSee||"See the global leaderboard"}</button>
 
         {/* Public toggle + earned count */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px 14px",marginBottom:8}}>
