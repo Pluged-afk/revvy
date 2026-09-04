@@ -446,6 +446,9 @@ async function mockDraw(req, res, body) {
 // Scoring/difficulty helpers MIRROR src/lib/arena.js; inlined so the serverless
 // bundle needs no cross-directory import. Keep the two in sync.
 const ARENA_GATE = 100, ADIFF_MIN = 1, ADIFF_MAX = 5, ACLOSE_BONUS = 2.0;
+// The global leaderboard stays hidden until this many learners are ranked, so it
+// only appears once there are enough to make a real "top 100". Tune freely.
+const GLOBAL_GATE = 50;
 const aclamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 const aCombo = (s) => aclamp(1 + Math.floor(Math.max(0, s) / 3) * 0.5, 1, 5);
 const aBasePts = (d) => Math.round(20 * aclamp(d, ADIFF_MIN, ADIFF_MAX));
@@ -611,10 +614,6 @@ async function setBadge(req, res, body, me) {
 // Hidden users (NULL xp) are excluded. Also returns the caller's own standing.
 async function globalBoard(req, res, me) {
   await ensureUsernameCol();
-  const top = await sql`
-    SELECT COALESCE(clerk_user_id, id) AS uid, username, equipped_badge, rank, xp
-    FROM profiles WHERE xp IS NOT NULL AND xp > 0 AND username IS NOT NULL
-    ORDER BY xp DESC, username ASC LIMIT 100`;
   const players = (await sql`SELECT COUNT(*)::int AS n FROM profiles WHERE xp IS NOT NULL AND xp > 0 AND username IS NOT NULL`)[0]?.n || 0;
   const mine = (await sql`SELECT username, equipped_badge, rank, xp FROM profiles WHERE clerk_user_id = ${me} OR id = ${me} LIMIT 1`)[0] || null;
   let you = null;
@@ -622,8 +621,14 @@ async function globalBoard(req, res, me) {
     const ahead = (await sql`SELECT COUNT(*)::int AS n FROM profiles WHERE xp IS NOT NULL AND username IS NOT NULL AND (xp > ${mine.xp} OR (xp = ${mine.xp} AND username < ${mine.username || ""}))`)[0]?.n || 0;
     you = { pos: ahead + 1, xp: Number(mine.xp), tier: publicRank(mine), badge: publicBadge(mine), name: mine.username || null };
   }
+  // Gate: hidden until enough learners are ranked to be a real board.
+  if (players < GLOBAL_GATE) return res.status(200).json({ locked: true, players, need: GLOBAL_GATE, you });
+  const top = await sql`
+    SELECT COALESCE(clerk_user_id, id) AS uid, username, equipped_badge, rank, xp
+    FROM profiles WHERE xp IS NOT NULL AND xp > 0 AND username IS NOT NULL
+    ORDER BY xp DESC, username ASC LIMIT 100`;
   return res.status(200).json({
-    players, you,
+    locked: false, players, you,
     top: top.map((r) => ({ name: r.username || "player", xp: Number(r.xp), tier: publicRank(r), badge: publicBadge(r), you: r.uid === me })),
   });
 }

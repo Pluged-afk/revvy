@@ -80,6 +80,9 @@ export function buildCtx(study = {}) {
     mockCount: Object.keys(m).length,
     satComposite: m.sat?.best?.composite || 0,
     actComposite: m.act?.best?.composite || 0,
+    subjectCounts: (s.subjectCounts && typeof s.subjectCounts === "object") ? s.subjectCounts : {},
+    // How many distinct subjects the learner has meaningfully studied (>=20 Qs).
+    domainCount: Object.values((s.subjectCounts && typeof s.subjectCounts === "object") ? s.subjectCounts : {}).filter((v) => (Number(v) || 0) >= 20).length,
   };
 }
 
@@ -121,10 +124,37 @@ export const BADGES = [
   { id: "winner",     cat: "challenges", emoji: "🥇", name: "Winner",     desc: "Win a group challenge",    value: (c) => c.challengeWins, target: 1 },
   { id: "undefeated", cat: "challenges", emoji: "🛡️", name: "Undefeated", desc: "Win 10 group challenges",  value: (c) => c.challengeWins, target: 10 },
   { id: "team_player",cat: "challenges", emoji: "🤝", name: "Team Player",desc: "Join a study group",       value: (c) => c.groupsJoined, target: 1 },
+  // Subjects — earned by what you actually study (classified from each set's
+  // subject + topics). "A lot of math questions" makes you a Mathematician, etc.
+  { id: "mathematician", cat: "subjects", emoji: "➗", name: "Mathematician", desc: "Answer 60 math questions",     value: (c) => c.subjectCounts.math || 0, target: 60 },
+  { id: "scientist",     cat: "subjects", emoji: "🔬", name: "Scientist",     desc: "Answer 60 science questions",  value: (c) => c.subjectCounts.science || 0, target: 60 },
+  { id: "historian",     cat: "subjects", emoji: "🏛️", name: "Historian",     desc: "Answer 60 history questions",  value: (c) => c.subjectCounts.history || 0, target: 60 },
+  { id: "wordsmith",     cat: "subjects", emoji: "✍️", name: "Wordsmith",     desc: "Answer 60 language questions", value: (c) => c.subjectCounts.language || 0, target: 60 },
+  { id: "geographer",    cat: "subjects", emoji: "🗺️", name: "Geographer",    desc: "Answer 60 geography questions",value: (c) => c.subjectCounts.geography || 0, target: 60 },
+  { id: "economist",     cat: "subjects", emoji: "📈", name: "Economist",     desc: "Answer 60 business questions", value: (c) => c.subjectCounts.business || 0, target: 60 },
+  { id: "polymath",      cat: "subjects", emoji: "🧩", name: "Polymath",      desc: "Study 4 different subjects",   value: (c) => c.domainCount, target: 4 },
+  // Meta — the ultimate: earn every other badge in the case.
+  { id: "the_full_set",  cat: "meta", emoji: "🏵️", name: "The Full Set", desc: "Earn every other badge", meta: true },
 ];
 
 export const BADGE_BY_ID = Object.fromEntries(BADGES.map((b) => [b.id, b]));
-export const BADGE_CATEGORIES = ["consistency", "volume", "accuracy", "difficulty", "exams", "arena", "challenges"];
+export const BADGE_CATEGORIES = ["consistency", "volume", "accuracy", "difficulty", "exams", "arena", "challenges", "subjects", "meta"];
+
+// Classify a set's subject/topic text into a broad domain for the subject
+// badges. Keyword match, first hit wins; returns null when nothing matches.
+export const SUBJECT_DOMAINS = {
+  math: ["math", "algebra", "calculus", "geometr", "trigonometr", "arithmetic", "equation", "statistic", "probability", "fraction", "polynomial", "derivative", "integral", "theorem"],
+  science: ["biolog", "chemistr", "physic", "science", "cell", "atom", "molecul", "organism", "reaction", "photosynth", "ecosystem", "genetic", "enzyme", "electron", "quantum", "anatomy", "astronom"],
+  history: ["history", "histor", "war", "revolution", "ancient", "empire", "dynasty", "civiliz", "treaty", "medieval", "colonial", "pharaoh", "renaissance"],
+  language: ["grammar", "literatur", "vocabular", "essay", "poem", "poetry", "novel", "language", "syntax", "rhetoric", "linguistic", "shakespeare", "adjective", "sentence"],
+  geography: ["geograph", "capital", "continent", "country", "countries", "river", "mountain", "climate", "ocean", "terrain"],
+  business: ["econom", "business", "market", "finance", "account", "supply", "demand", "profit", "trade", "management", "marketing", "investment"],
+};
+export function classifyDomain(text) {
+  const s = String(text || "").toLowerCase();
+  for (const [dom, kws] of Object.entries(SUBJECT_DOMAINS)) if (kws.some((k) => s.includes(k))) return dom;
+  return null;
+}
 
 // Evaluate every badge against a study blob. Returns, per badge id, the current
 // value, its target, an earned flag, a 0..100 progress percent, and an optional
@@ -132,11 +162,19 @@ export const BADGE_CATEGORIES = ["consistency", "volume", "accuracy", "difficult
 export function evaluateBadges(study = {}) {
   const c = buildCtx(study);
   const progress = {}; const earnedIds = [];
-  for (const b of BADGES) {
+  const regular = BADGES.filter((b) => !b.meta);
+  for (const b of regular) {
     const value = Math.max(0, Math.round(b.value(c)));
     const earned = value >= b.target;
     const pct = Math.max(0, Math.min(100, Math.round((value / b.target) * 100)));
     progress[b.id] = { value, target: b.target, earned, pct, count: b.count ? Math.max(0, Math.round(b.count(c))) : null };
+    if (earned) earnedIds.push(b.id);
+  }
+  // Meta badges: earned once every non-meta badge is earned (the completionist).
+  const done = earnedIds.length, total = regular.length;
+  for (const b of BADGES.filter((x) => x.meta)) {
+    const earned = done >= total;
+    progress[b.id] = { value: done, target: total, earned, pct: Math.round((done / total) * 100), count: null };
     if (earned) earnedIds.push(b.id);
   }
   return { progress, earnedIds, ctx: c };

@@ -16,7 +16,7 @@ import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/stude
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
-import { BADGES, BADGE_BY_ID, BADGE_CATEGORIES, evaluateBadges, rankOf, RANKS, diffXPFor } from "./lib/badges.js";
+import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import ArenaGame from "./components/ArenaGame.jsx";
 import Icon from "./components/Icon.jsx";
 
@@ -2472,7 +2472,8 @@ export default function StudyQuiz() {
       // correct answer's difficulty premium (harder sets earn more XP) feed the
       // trophy case + rank.
       { const c = answers.filter((a) => a && a.isCorrect).length, n = answers.length, gd = quiz.genDiff ?? diff;
-        srs.syncBadges({ perfect: n >= 4 && c === n, hardPass: gd === 2 && n > 0 && c / n >= 0.6, diffXP: diffXPFor(c, gd) }); }
+        const dom = classifyDomain(`${quiz.subject || ""} ${quiz.title || ""} ${quiz.questions.map((q) => q.topic).join(" ")}`);
+        srs.syncBadges({ perfect: n >= 4 && c === n, hardPass: gd === 2 && n > 0 && c / n >= 0.6, diffXP: diffXPFor(c, gd), subjectDomain: dom, subjectAdd: n }); }
       // If this quiz came from a group's shared material, post the result to the
       // group's activity feed (best-effort), then clear the marker.
       if (groupQuizRef.current) {
@@ -2513,7 +2514,8 @@ export default function StudyQuiz() {
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
       setEarnedReward(srs.completeActivity({ mode: "exam", correct: examEvals.filter((e) => (e?.score ?? 0) >= 1).length, total: examEvals.length }));
       { const c = examEvals.filter((e) => (e?.score ?? 0) >= 1).length, n = examEvals.length;
-        srs.syncBadges({ perfect: n >= 4 && c === n, hardPass: diff === 2 && n > 0 && c / n >= 0.6, diffXP: diffXPFor(c, diff) }); }
+        const dom = classifyDomain(`${quiz?.subject || ""} ${examQs.map((q) => q.topic).join(" ")}`);
+        srs.syncBadges({ perfect: n >= 4 && c === n, hardPass: diff === 2 && n > 0 && c / n >= 0.6, diffXP: diffXPFor(c, diff), subjectDomain: dom, subjectAdd: n }); }
       srs.recordTopics(examQs.map((q, i) => ({ topic: q.topic, correct: (examEvals[i]?.score ?? 0) >= 1 })));
       // Personalization for exam mode: feed the exam into the adaptive-difficulty
       // history and bank its well-formed MCQs (leanQ skips written/fill), same as
@@ -3720,6 +3722,7 @@ export default function StudyQuiz() {
   // ── Friends + study groups ──
   const [social, setSocial] = useState(null);      // {friends, incoming, outgoing, groups}
   const [socialBusy, setSocialBusy] = useState(false);
+  const [socialTab, setSocialTab] = useState("friends"); // friends | groups
   const [socialErr, setSocialErr] = useState("");
   const [friendInput, setFriendInput] = useState("");
   const [friendMsg, setFriendMsg] = useState("");
@@ -5417,6 +5420,14 @@ export default function StudyQuiz() {
       </div>
       <div className="rv-center-narrow" style={{padding:"20px 16px 40px"}}>
         {socialErr && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>{socialErr}</div>}
+        {/* Friends | Groups tabs */}
+        <div style={{marginBottom:16}}>
+          <Segmented value={socialTab} onChange={(o)=>setSocialTab(o.value)} options={[
+            {value:"friends",label:(t.socialTabFriends||"Friends")+(social?.friends?.length?` (${social.friends.length})`:"")},
+            {value:"groups",label:(t.socialTabGroups||"Groups")+(social?.groups?.length?` (${social.groups.length})`:"")},
+          ]}/>
+        </div>
+        {socialTab==="friends" && (<>
         {/* Add a friend */}
         <div style={{...Sb.settingsBox,padding:"14px 16px",marginBottom:16}}>
           <div style={{fontSize:13,fontWeight:700,color:"var(--color-text-primary)",marginBottom:8}}>{t.addFriend||"Add a friend"}</div>
@@ -5450,8 +5461,10 @@ export default function StudyQuiz() {
             <button onClick={()=>doRemoveFriend(f.userId)} style={{background:"none",color:"var(--color-text-tertiary)",border:"none",fontSize:12,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:2}}>{t.removeWord||"Remove"}</button>
           </div>
         )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)",marginBottom:8}}>{t.noFriends||"No friends yet. Add someone by their username above."}</div>}
+        </>)}
+        {socialTab==="groups" && (<>
         {/* Groups */}
-        <p style={{...Sb.secLabel,marginTop:20}}>{t.yourGroups||"Your study groups"}</p>
+        <p style={{...Sb.secLabel,marginTop:2}}>{t.yourGroups||"Your study groups"}</p>
         {social?.groups?.map(g=>(
           <div key={g.id} onClick={()=>openGroup(g.id)} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 14px",marginBottom:10,cursor:"pointer"}}>
             <span style={{width:38,height:38,borderRadius:10,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-sel-tint)",color:"var(--color-accent)"}}><Icon name="layers" size={19}/></span>
@@ -5472,6 +5485,7 @@ export default function StudyQuiz() {
             style={{flex:1,minWidth:0,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
           <button onClick={doJoinGroup} disabled={socialBusy||!joinCodeInput.trim()} style={{...Sb.btnOutline,padding:"0 16px",fontSize:13,opacity:(socialBusy||!joinCodeInput.trim())?0.45:1}}>{t.joinWord||"Join"}</button>
         </div>
+        </>)}
       </div>
       {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} t={t}/>}
     </div>
@@ -5616,7 +5630,19 @@ export default function StudyQuiz() {
           <div style={{fontSize:12.5,color:"var(--color-text-secondary)",marginTop:3,lineHeight:1.5}}>{t.globalBoardSub||"The top 100 learners by rank across every mode."}{globalBoardData?.players?` · ${(t.globalPlayers||"{n} ranked").replace("{n}",globalBoardData.players.toLocaleString())}`:""}</div>
         </div>
         {globalBusy && <div style={{textAlign:"center",padding:"36px 0"}}><div className="spin-ring" style={{width:34,height:34,borderRadius:"50%",border:"3px solid var(--color-border-tertiary)",borderTopColor:"var(--color-accent)",margin:"0 auto"}}/></div>}
-        {!globalBusy && globalBoardData && (<>
+        {!globalBusy && globalBoardData && globalBoardData.locked && (
+          <div style={{textAlign:"center",padding:"26px 18px",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:16}}>
+            <div style={{display:"flex",justifyContent:"center",color:"var(--color-text-tertiary)",marginBottom:12}}><Icon name="lock" size={28}/></div>
+            <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif"}}>{t.globalLockedTitle||"The board opens soon"}</h3>
+            <p style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5,maxWidth:330,margin:"0 auto 16px"}}>{(t.globalLockedSub||"The global leaderboard unlocks once {need} learners are ranked. {have} so far, keep climbing.").replace("{need}",globalBoardData.need).replace("{have}",globalBoardData.players)}</p>
+            <div style={{height:8,borderRadius:4,background:"var(--color-background-secondary)",overflow:"hidden",maxWidth:260,margin:"0 auto"}}>
+              <div style={{height:"100%",width:`${Math.min(100,(globalBoardData.players/(globalBoardData.need||1))*100)}%`,background:"var(--color-accent)",borderRadius:4}}/>
+            </div>
+            <div style={{fontSize:12,fontFamily:"monospace",color:"var(--color-text-tertiary)",marginTop:8}}>{globalBoardData.players} / {globalBoardData.need}</div>
+            {globalBoardData.you && <div style={{marginTop:18,fontSize:13,color:"var(--color-text-secondary)",display:"inline-flex",alignItems:"center",gap:8}}>{(t.globalYouPos||"You're #{n}").replace("{n}",(globalBoardData.you.pos||0).toLocaleString())} · {(globalBoardData.you.xp||0).toLocaleString()} XP <RankPill index={globalBoardData.you.tier} t={t} small/></div>}
+          </div>
+        )}
+        {!globalBusy && globalBoardData && !globalBoardData.locked && (<>
           {globalBoardData.you && (
             <div style={{background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"12px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
               <span style={{fontWeight:700,fontSize:14,display:"inline-flex",alignItems:"center",gap:8,minWidth:0}}>{(t.globalYouPos||"You're #{n}").replace("{n}",(globalBoardData.you.pos||0).toLocaleString())} <RankPill index={globalBoardData.you.tier} t={t} small/></span>
@@ -5687,34 +5713,30 @@ export default function StudyQuiz() {
         </div>
         <div style={{fontSize:11.5,color:"var(--color-text-tertiary)",marginBottom:16}}>{t.badgesEquipHint||"Tap an earned badge to pin it next to your name."}</div>
 
-        {/* Categories */}
-        {BADGE_CATEGORIES.map(cat=>(
-          <div key={cat} style={{marginBottom:18}}>
-            <p style={Sb.secLabel}>{t["badgeCat_"+cat]||cat}</p>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}}>
-              {BADGES.filter(b=>b.cat===cat).map(b=>{
-                const p = badgeEval.progress[b.id]||{value:0,target:b.target,earned:false,pct:0,count:null};
-                const equipped = flairEquipped===b.id;
-                const nm=(t["badge_"+b.id])||b.name, desc=(t["badgeDesc_"+b.id])||b.desc;
-                return (
-                  <div key={b.id} onClick={p.earned?()=>srs.equipBadge(equipped?null:b.id):undefined}
-                    style={{background:"var(--color-background-primary)",border:"1px "+(equipped?"solid var(--color-accent)":p.earned?"solid var(--color-border-secondary)":"dashed var(--color-border-tertiary)"),borderRadius:12,padding:"13px 12px",textAlign:"center",cursor:p.earned?"pointer":"default",opacity:p.earned?1:0.72,position:"relative"}}>
-                    {equipped && <span style={{position:"absolute",top:7,right:9,fontSize:9.5,fontWeight:800,color:"var(--color-accent)",textTransform:"uppercase",letterSpacing:.4}}>{t.badgePinned||"Pinned"}</span>}
-                    <div style={{fontSize:26,lineHeight:1,marginBottom:6}} aria-hidden="true">{p.earned?b.emoji:"🔒"}</div>
-                    <div style={{fontSize:13,fontWeight:700,color:p.earned?"var(--color-text-primary)":"var(--color-text-secondary)"}}>{nm}</div>
-                    <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2,lineHeight:1.35}}>{desc}</div>
-                    {p.earned ? (
-                      <div style={{fontSize:10.5,fontWeight:700,color:"var(--color-accent)",marginTop:7}}>{p.count&&p.count>1?(t.badgeEarnedX||"Earned ×{n}").replace("{n}",p.count):(t.badgeEarned||"Earned")}</div>
-                    ) : (<>
-                      <div style={{height:5,background:"var(--color-border-tertiary)",borderRadius:3,marginTop:8,overflow:"hidden"}}><div style={{width:`${p.pct}%`,height:"100%",background:"var(--color-accent)"}}/></div>
-                      <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:4}}>{p.value.toLocaleString()} / {p.target.toLocaleString()}</div>
-                    </>)}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        {/* All badges in one continuous grid (earned first for a fuller look) */}
+        <p style={Sb.secLabel}>{t.allBadges||"All badges"}</p>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}}>
+          {[...BADGES].sort((a,b)=>(badgeEval.progress[b.id]?.earned?1:0)-(badgeEval.progress[a.id]?.earned?1:0)).map(b=>{
+            const p = badgeEval.progress[b.id]||{value:0,target:b.target||1,earned:false,pct:0,count:null};
+            const equipped = flairEquipped===b.id;
+            const nm=(t["badge_"+b.id])||b.name, desc=(t["badgeDesc_"+b.id])||b.desc;
+            return (
+              <div key={b.id} onClick={p.earned?()=>srs.equipBadge(equipped?null:b.id):undefined}
+                style={{background:"var(--color-background-primary)",border:"1px "+(equipped?"solid var(--color-accent)":p.earned?"solid var(--color-border-secondary)":"dashed var(--color-border-tertiary)"),borderRadius:12,padding:"13px 12px",textAlign:"center",cursor:p.earned?"pointer":"default",opacity:p.earned?1:0.72,position:"relative"}}>
+                {equipped && <span style={{position:"absolute",top:7,right:9,fontSize:9.5,fontWeight:800,color:"var(--color-accent)",textTransform:"uppercase",letterSpacing:.4}}>{t.badgePinned||"Pinned"}</span>}
+                <div style={{fontSize:26,lineHeight:1,marginBottom:6}} aria-hidden="true">{p.earned?b.emoji:"🔒"}</div>
+                <div style={{fontSize:13,fontWeight:700,color:p.earned?"var(--color-text-primary)":"var(--color-text-secondary)"}}>{nm}</div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2,lineHeight:1.35}}>{desc}</div>
+                {p.earned ? (
+                  <div style={{fontSize:10.5,fontWeight:700,color:"var(--color-accent)",marginTop:7}}>{p.count&&p.count>1?(t.badgeEarnedX||"Earned ×{n}").replace("{n}",p.count):(t.badgeEarned||"Earned")}</div>
+                ) : (<>
+                  <div style={{height:5,background:"var(--color-border-tertiary)",borderRadius:3,marginTop:8,overflow:"hidden"}}><div style={{width:`${p.pct}%`,height:"100%",background:"var(--color-accent)"}}/></div>
+                  <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:4}}>{p.value.toLocaleString()} / {p.target.toLocaleString()}</div>
+                </>)}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

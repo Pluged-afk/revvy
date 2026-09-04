@@ -44,7 +44,16 @@ function normStats(s) {
     arenaBest: Math.max(0, Math.round(Number(s.arenaBest) || 0)),
     arenaBestRun: Math.max(0, Math.round(Number(s.arenaBestRun) || 0)),
     groupsJoined: Math.max(0, Math.round(Number(s.groupsJoined) || 0)),
+    // Per-subject question counts (math/science/…), for the subject badges.
+    subjectCounts: normSubjects(s.subjectCounts),
   };
+}
+// Clean the {domain: count} subject map (used by the material-based badges).
+function normSubjects(m) {
+  m = (m && typeof m === "object") ? m : {};
+  const out = {};
+  for (const [k, v] of Object.entries(m)) { const n = Math.max(0, Math.round(Number(v) || 0)); if (n > 0) out[k] = n; }
+  return out;
 }
 // The trophy-case record kept in the blob: which badges are earned (id + when),
 // which one is pinned as public flair, which unlocks have been toasted, and
@@ -182,6 +191,7 @@ function mergeStudy(server, local) {
       arenaBest: Math.max(ss.arenaBest, ls.arenaBest),
       arenaBestRun: Math.max(ss.arenaBestRun, ls.arenaBestRun),
       groupsJoined: Math.max(ss.groupsJoined, ls.groupsJoined),
+      subjectCounts: (() => { const out = { ...ss.subjectCounts }; for (const [k, v] of Object.entries(ls.subjectCounts)) out[k] = Math.max(out[k] || 0, v); return out; })(),
     },
     plans: [...byId.values()],
     topicStats: ts,
@@ -443,13 +453,16 @@ export function StudyProvider({ children }) {
         arenaBest: Math.max(s.arenaBest, Math.round(Number(sig.arenaScore) || 0)),
         arenaBestRun: Math.max(s.arenaBestRun, Math.round(Number(sig.arenaRun) || 0)),
         groupsJoined: s.groupsJoined + (sig.groupJoin ? 1 : 0),
+        subjectCounts: (sig.subjectDomain && sig.subjectAdd > 0)
+          ? { ...s.subjectCounts, [sig.subjectDomain]: (s.subjectCounts[sig.subjectDomain] || 0) + Math.round(sig.subjectAdd) }
+          : s.subjectCounts,
       };
       const b = normBadges(p.badges);
       const already = new Set(b.earned.map((e) => e.id));
       const { earnedIds } = evaluateBadges({ ...p, stats });
       const additions = earnedIds.filter((id) => !already.has(id)).map((id) => ({ id, at: Date.now() }));
       const changed = additions.length > 0 || sig.perfect || sig.hardPass || sig.groupJoin ||
-        (Number(sig.diffXP) || 0) > 0 ||
+        (Number(sig.diffXP) || 0) > 0 || (sig.subjectDomain && sig.subjectAdd > 0) ||
         (Math.round(Number(sig.arenaScore) || 0) > s.arenaBest) || (Math.round(Number(sig.arenaRun) || 0) > s.arenaBestRun);
       if (!changed) return p;
       return { ...p, stats, badges: { ...b, earned: [...b.earned, ...additions] } };
