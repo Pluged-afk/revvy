@@ -55,6 +55,19 @@ function Medallion({ color = "#4f46e5", size = 38, children }) {
     </span>
   );
 }
+// A group's "pic": a colored rounded-square monogram, hue derived from the name
+// so every group looks distinct without needing an uploaded image.
+function GroupAvatar({ name, size = 40 }) {
+  const colors = ["#4f46e5", "#0d9488", "#b45309", "#7c3aed", "#2563eb", "#0f9d5a", "#d4537e", "#d97706"];
+  const s = String(name || "?"); let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  const c = colors[h % colors.length];
+  return (
+    <span aria-hidden="true" style={{ width: size, height: size, borderRadius: Math.round(size * 0.3), flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: c + "22", color: c, fontWeight: 800, fontSize: Math.round(size * 0.42) }}>
+      {s.charAt(0).toUpperCase()}
+    </span>
+  );
+}
 // A rank tier pill (the public "status"), self-contained so it reads on any
 // background. Hidden for a missing/negative tier.
 function RankPill({ index, t, small = false }) {
@@ -3723,6 +3736,7 @@ export default function StudyQuiz() {
   const [social, setSocial] = useState(null);      // {friends, incoming, outgoing, groups}
   const [socialBusy, setSocialBusy] = useState(false);
   const [socialTab, setSocialTab] = useState("friends"); // friends | groups
+  const [joinPreview, setJoinPreview] = useState(null); // {code,name,members,already,id} from a shared invite link
   const [socialErr, setSocialErr] = useState("");
   const [friendInput, setFriendInput] = useState("");
   const [friendMsg, setFriendMsg] = useState("");
@@ -3746,6 +3760,9 @@ export default function StudyQuiz() {
   // Badges / trophy case
   const [badgeToast, setBadgeToast] = useState(null); // [ids] freshly unlocked, for the toast
   const badgeSyncedRef = useRef(false);
+  // Which collapsible home cards are expanded (default collapsed to a tidy header).
+  const [openCard, setOpenCard] = useState({});
+  const toggleCard = useCallback((k) => setOpenCard((o) => ({ ...o, [k]: !o[k] })), []);
   const loadSocial = useCallback(async () => {
     setSocialBusy(true);
     const r = await socialApi("social");
@@ -3847,8 +3864,16 @@ export default function StudyQuiz() {
     if (!code) return;
     joinHandledRef.current = true;
     try { const u = new URL(window.location.href); u.searchParams.delete("join"); window.history.replaceState({}, "", u); } catch { /* ignore */ }
-    (async () => { const r = await socialApi("groupJoin", { code }); if (r && r.id) { srs.syncBadges({ groupJoin: true }); openGroup(r.id); } else openSocial(); })();
-  }, [user, openGroup, openSocial, srs]);
+    // Preview the group first so the person can see it and confirm, rather than
+    // being dropped straight in.
+    (async () => { const r = await socialApi("groupPreview", { code }); if (r && r.id) setJoinPreview(r); else openSocial(); })();
+  }, [user, openSocial]);
+  const confirmJoinGroup = useCallback(async () => {
+    if (!joinPreview) return;
+    const r = await socialApi("groupJoin", { code: joinPreview.code });
+    setJoinPreview(null);
+    if (r && r.id) { srs.syncBadges({ groupJoin: true }); openGroup(r.id); } else openSocial();
+  }, [joinPreview, openGroup, openSocial, srs]);
   // Claim the group's collective reward into the personal power-up wallet.
   const doClaimReward = useCallback(async () => {
     if (!activeGroup) return;
@@ -4038,6 +4063,21 @@ export default function StudyQuiz() {
       </div>
     </div>
   ) : null;
+  // Shared group-invite confirmation (from a /app?join=CODE link).
+  const joinPreviewEl = joinPreview ? (
+    <div style={{position:"fixed",inset:0,zIndex:920,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"var(--color-background-primary)",borderRadius:18,padding:"22px 20px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:"0 20px 50px rgba(0,0,0,0.45)"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><GroupAvatar name={joinPreview.name} size={56}/></div>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.groupInviteLabel||"Group invite"}</div>
+        <div style={{fontSize:20,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)",margin:"3px 0 4px",wordBreak:"break-word"}}>{joinPreview.name}</div>
+        <div style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:18}}>{(t.membersCount||"{n} members").replace("{n}",joinPreview.members)}{joinPreview.already?` · ${t.alreadyMember||"you're already in"}`:""}</div>
+        {joinPreview.already
+          ? <button onClick={()=>{const id=joinPreview.id;setJoinPreview(null);openGroup(id);}} style={{...Sb.btnPrimary,width:"100%",fontSize:14}}>{t.openGroupWord||"Open group"}</button>
+          : <button onClick={confirmJoinGroup} style={{...Sb.btnPrimary,width:"100%",fontSize:14}}>{t.joinGroupConfirm||"Join this group"}</button>}
+        <button onClick={()=>{setJoinPreview(null);openSocial();}} style={{...Sb.btnGhost,width:"100%",marginTop:8,fontSize:13}}>{t.cancelWord||"Cancel"}</button>
+      </div>
+    </div>
+  ) : null;
   const flairRank = myRankInfo.index;
   const flairEquipped = srs.badges?.equipped || "";
   const flairPublic = srs.badges?.public !== false;
@@ -4068,6 +4108,7 @@ export default function StudyQuiz() {
     <div style={Sb.root}><style>{CSS}</style>
       <ActivatingOverlay show={activating}/>
       {badgeToastEl}
+      {joinPreviewEl}
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
       <div style={Sb.hero}>
@@ -4160,13 +4201,15 @@ export default function StudyQuiz() {
             one-tap drill on the weakest topics (no upload needed). */}
         {mastery.length>0 && (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <div onClick={()=>toggleCard("mastery")} style={{display:"flex",alignItems:"center",gap:10,marginBottom:openCard.mastery?12:0,cursor:"pointer"}}>
               <Medallion color="#2563eb" size={36}><Icon name="chart" size={19}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.masteryTitle}</div>
                 <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.masterySub}</div>
               </div>
+              <span style={{flexShrink:0,color:"var(--color-text-tertiary)",display:"flex",transition:"transform .2s",transform:openCard.mastery?"rotate(-90deg)":"rotate(90deg)"}}><Icon name="chevron" size={16}/></span>
             </div>
+            {openCard.mastery && (<>
             {mastery.slice(0,4).map((tp,i)=>{
               const col = tp.mastery>=70?"#16a34a":tp.mastery>=40?"#f59e0b":"#dc2626";
               return (
@@ -4182,19 +4225,22 @@ export default function StudyQuiz() {
               );
             })}
             {mastery.some(t=>t.weak) && <button onClick={drillWeakSpots} style={{...Sb.btnPrimary,width:"100%",marginTop:6,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="target" size={15}/>{t.drillWeak}</button>}
+            </>)}
           </div>
         )}
         {/* Phase 3: study library, a memory of everything uploaded (summaries
             only), with a one-tap cumulative "quiz me on everything" review. */}
         {librarySize(srs.library)>0 && (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <div onClick={()=>toggleCard("library")} style={{display:"flex",alignItems:"center",gap:10,marginBottom:openCard.library?12:0,cursor:"pointer"}}>
               <Medallion color="#0f9d5a" size={36}><Icon name="layers" size={19}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.libraryTitle}</div>
                 <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.librarySets.replace("{n}",librarySize(srs.library)).replace("{s}",librarySize(srs.library)>1?"s":"")}</div>
               </div>
+              <span style={{flexShrink:0,color:"var(--color-text-tertiary)",display:"flex",transition:"transform .2s",transform:openCard.library?"rotate(-90deg)":"rotate(90deg)"}}><Icon name="chevron" size={16}/></span>
             </div>
+            {openCard.library && (<>
             <div style={{marginBottom:10}}>
               {srs.library.docs.slice(0,5).map((d)=>(
                 <div key={d.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
@@ -4208,17 +4254,19 @@ export default function StudyQuiz() {
               {librarySize(srs.library)>5 && <div style={{fontSize:11,color:"var(--color-text-tertiary)",paddingTop:7,borderTop:"0.5px solid var(--color-border-tertiary)"}}>{t.libraryMore.replace("{n}",librarySize(srs.library)-5)}</div>}
             </div>
             <button onClick={reviewLibrary} style={{...Sb.btnPrimary,width:"100%",marginTop:2,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="layers" size={15}/>{t.libraryReview}</button>
+            </>)}
           </div>
         )}
         {/* #8: challenge activity, who took the quizzes this user shared, and
             whether they beat the sender's score, to keep the rivalry going. */}
         {challenges.length>0 && (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <div onClick={()=>toggleCard("chalAct")} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
               <Medallion color="#d97706" size={36}><Icon name="trophy" size={19}/></Medallion>
-              <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.challengeActivity}</div>
+              <div style={{flex:1,minWidth:0,fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.challengeActivity}</div>
+              <span style={{flexShrink:0,color:"var(--color-text-tertiary)",display:"flex",transition:"transform .2s",transform:openCard.chalAct?"rotate(-90deg)":"rotate(90deg)"}}><Icon name="chevron" size={16}/></span>
             </div>
-            {challenges.slice(0,4).map((c)=>{
+            {openCard.chalAct && <div style={{marginTop:12}}>{challenges.slice(0,4).map((c)=>{
               const oPct = (c.ownerTotal>0) ? c.ownerScore/c.ownerTotal : null;
               return (
                 <div key={c.id} style={{padding:"8px 0",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
@@ -4238,7 +4286,7 @@ export default function StudyQuiz() {
                   })}
                 </div>
               );
-            })}
+            })}</div>}
           </div>
         )}
         {/* AI Study Coach, day-by-day exam plan */}
@@ -5467,7 +5515,7 @@ export default function StudyQuiz() {
         <p style={{...Sb.secLabel,marginTop:2}}>{t.yourGroups||"Your study groups"}</p>
         {social?.groups?.map(g=>(
           <div key={g.id} onClick={()=>openGroup(g.id)} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 14px",marginBottom:10,cursor:"pointer"}}>
-            <span style={{width:38,height:38,borderRadius:10,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-sel-tint)",color:"var(--color-accent)"}}><Icon name="layers" size={19}/></span>
+            <GroupAvatar name={g.name} size={38}/>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:13.5,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.name}</div>
               <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:2}}>{(t.membersCount||"{n} members").replace("{n}",g.members)}{g.isOwner?` · ${t.ownerWord||"owner"}`:""}</div>

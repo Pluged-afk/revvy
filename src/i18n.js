@@ -116,6 +116,8 @@ const T_EN = {
   globalLockedTitle:"The board opens soon",
   globalLockedSub:"The global leaderboard unlocks once {need} learners are ranked. {have} so far, keep climbing.",
   socialTabFriends:"Friends", socialTabGroups:"Groups",
+  groupInviteLabel:"Group invite", joinGroupConfirm:"Join this group", openGroupWord:"Open group",
+  alreadyMember:"you're already in", cancelWord:"Cancel",
   seeStandings:"See the standings", challengeCreateErr:"Couldn't create the challenge, try again.",
   arenaBoardLegend:"Player · questions · freeze / hint / skip used", arenaEntry:"Endless Arena", arenaEntrySub:"Ranked general-knowledge. One life, chase a high score.",
   unameTitle:"Pick a username", unameSub:"This is your public name on the leaderboard. You can change it later in settings.",

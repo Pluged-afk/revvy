@@ -448,7 +448,7 @@ async function mockDraw(req, res, body) {
 const ARENA_GATE = 100, ADIFF_MIN = 1, ADIFF_MAX = 5, ACLOSE_BONUS = 2.0;
 // The global leaderboard stays hidden until this many learners are ranked, so it
 // only appears once there are enough to make a real "top 100". Tune freely.
-const GLOBAL_GATE = 50;
+const GLOBAL_GATE = 75;
 const aclamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 const aCombo = (s) => aclamp(1 + Math.floor(Math.max(0, s) / 3) * 0.5, 1, 5);
 const aBasePts = (d) => Math.round(20 * aclamp(d, ADIFF_MIN, ADIFF_MAX));
@@ -711,6 +711,17 @@ async function groupJoin(req, res, body, me) {
   const ins = await sql`INSERT INTO group_members (group_id, clerk_user_id) VALUES (${g.id}, ${me}) ON CONFLICT DO NOTHING RETURNING group_id`;
   if (ins.length) await sql`INSERT INTO group_activity (group_id, clerk_user_id, kind) VALUES (${g.id}, ${me}, 'joined')`;
   return res.status(200).json({ ok: true, id: Number(g.id) });
+}
+
+// Preview a group by its invite code WITHOUT joining, so a shared link can show
+// the name + member count and let the person confirm before they join.
+async function groupPreview(req, res, body, me) {
+  const code = clean(body.code, 20);
+  const g = (await sql`SELECT id, name FROM study_groups WHERE invite_code=${code} LIMIT 1`)[0];
+  if (!g) return res.status(404).json({ error: "That invite code is not valid." });
+  const members = Number((await sql`SELECT COUNT(*) AS n FROM group_members WHERE group_id=${g.id}`)[0]?.n || 0);
+  const already = (await sql`SELECT 1 FROM group_members WHERE group_id=${g.id} AND clerk_user_id=${me} LIMIT 1`).length > 0;
+  return res.status(200).json({ id: Number(g.id), name: g.name, members, already, code });
 }
 
 async function groupInvite(req, res, body, me) {
@@ -995,6 +1006,7 @@ export default async function handler(req, res) {
       if (body?.action === "friendRemove") return friendRemove(req, res, body, userId);
       if (body?.action === "groupCreate") return groupCreate(req, res, body, userId);
       if (body?.action === "groupJoin") return groupJoin(req, res, body, userId);
+      if (body?.action === "groupPreview") return groupPreview(req, res, body, userId);
       if (body?.action === "groupInvite") return groupInvite(req, res, body, userId);
       if (body?.action === "groupLeave") return groupLeave(req, res, body, userId);
       if (body?.action === "groupGet") return groupGet(req, res, body, userId);
