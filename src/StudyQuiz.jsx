@@ -17,6 +17,7 @@ import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionB
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
 import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
+import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
 import ArenaGame from "./components/ArenaGame.jsx";
 import Icon from "./components/Icon.jsx";
 
@@ -2427,9 +2428,26 @@ export default function StudyQuiz() {
     const when = new Date(); when.setHours(h||18, m||0, 0, 0);
     const delay = when.getTime() - Date.now();
     if (delay<=0 || delay>12*3600000) return;
-    const id = setTimeout(()=>{ try { new Notification("Revyy · Study Coach", { body:`Time to study: ${day.label}` }); } catch { /* ignore */ } }, delay);
+    const id = setTimeout(()=>{ notify("Revyy · Study Coach", `${t.notifStudyTime||"Time to study"}: ${day.label}`, { tag:"revyy-plan" }); }, delay);
     return ()=>clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [homePlan]);
+  // Register the worker up front when reminders are already on, and fire a
+  // once-a-day nudge on open: streak about to break, else reviews due. These
+  // are local (they fire while the browser has Revyy open); closed-app daily
+  // push needs Web Push (VAPID + a backend), which the worker is ready for.
+  useEffect(() => {
+    if (typeof Notification==="undefined" || Notification.permission!=="granted") return;
+    ensureSW();
+    const yst = (()=>{ const d=new Date(); d.setDate(d.getDate()-1); return d.toLocaleDateString("en-CA"); })();
+    const streakAtRisk = stats.streak>0 && stats.lastActive===yst;
+    if (streakAtRisk) {
+      notifyOncePerDay("streak", t.notifStreakTitle||"Keep your streak alive", (t.notifStreakBody||"Your {n}-day streak breaks tonight. A quick review keeps it going.").replace("{n}",stats.streak), { tag:"revyy-streak" });
+    } else if (srs.dueCount>0) {
+      notifyOncePerDay("due", t.notifDueTitle||"Reviews are ready", (t.notifDueBody||"You have {n} question{s} due for review.").replace("{n}",srs.dueCount).replace("{s}",srs.dueCount>1?"s":""), { tag:"revyy-due" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats.streak, stats.lastActive, srs.dueCount]);
 
   const [reviewQueue, setReviewQueue] = useState([]); // card ids for this session
   const [reviewPos,   setReviewPos]   = useState(0);
@@ -4088,7 +4106,12 @@ export default function StudyQuiz() {
     return () => clearTimeout(id);
   }, [user, flairRank, flairEquipped, flairPublic, myXP]);
 
-  const enableReminders = async () => { try { if (typeof Notification!=="undefined") { const p = await Notification.requestPermission(); setNotifPerm(p); } } catch { /* ignore */ } };
+  const enableReminders = async () => {
+    const p = await enableNotifications();
+    setNotifPerm(p);
+    // Immediate confirmation so the user sees notifications actually work.
+    if (p === "granted") notify(t.notifOnTitle||"Reminders on", t.notifOnBody||"We'll nudge you to keep your streak and review what's due.");
+  };
   // Tick a coached day off (once) when its quiz/exam results appear.
   useEffect(() => {
     if (!planSession) return;
