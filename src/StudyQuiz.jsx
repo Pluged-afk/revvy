@@ -1751,6 +1751,17 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 <span style={{fontSize:16,color:"var(--color-text-tertiary)"}}>›</span>
               </button>
             </div>
+            <SectionLabel label={s.secSecurity||"LOGIN & SECURITY"}/>
+            <div style={{padding:"4px 18px 6px",display:"flex",flexDirection:"column",gap:9}}>
+              <button onClick={()=>{ try { clerk.openUserProfile(); } catch { /* Clerk not ready */ } }}
+                style={{width:"100%",background:"var(--color-background-secondary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
+                <span style={{display:"inline-flex",alignItems:"center",gap:8,justifyContent:"center"}}><Icon name="lock" size={15}/>Manage login &amp; security</span>
+              </button>
+              <button onClick={onSignOut}
+                style={{width:"100%",background:"var(--color-background-secondary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
+                ↩ {s.signOut}
+              </button>
+            </div>
           </>)}
 
           <SectionLabel label={s.secAppearance}/>
@@ -1904,22 +1915,6 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 </button>
               </>
             )}
-          </div>
-
-          <SectionLabel label={s.secSecurity||"LOGIN & SECURITY"}/>
-          <div style={{padding:"4px 18px 6px",display:"flex",flexDirection:"column",gap:9}}>
-            <button onClick={()=>{ try { clerk.openUserProfile(); } catch { /* Clerk not ready */ } }}
-              style={{width:"100%",background:"var(--color-background-secondary)",
-                border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
-                fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
-              <span style={{display:"inline-flex",alignItems:"center",gap:8,justifyContent:"center"}}><Icon name="lock" size={15}/>Manage login &amp; security</span>
-            </button>
-            <button onClick={onSignOut}
-              style={{width:"100%",background:"var(--color-background-secondary)",
-                border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px",
-                fontSize:13,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
-              ↩ {s.signOut}
-            </button>
           </div>
 
           {/* Danger Zone */}
@@ -3750,6 +3745,8 @@ export default function StudyQuiz() {
   // Global "best of the best" leaderboard (top 100 by lifetime XP/rank).
   const [globalBoardData, setGlobalBoardData] = useState(null);
   const [globalBusy, setGlobalBusy] = useState(false);
+  const [globalUnlocked, setGlobalUnlocked] = useState(false); // hide the home tile until the board fills
+  const globalCheckedRef = useRef(false);
   // ── Friends + study groups ──
   const [social, setSocial] = useState(null);      // {friends, incoming, outgoing, groups}
   const [socialBusy, setSocialBusy] = useState(false);
@@ -4044,6 +4041,17 @@ export default function StudyQuiz() {
     badgeSyncedRef.current = true;
     srs.syncBadges();
   }, [srs]);
+  // Background check (once, when signed in): only surface the Global leaderboard
+  // entry after enough learners are ranked to fill it. When locked, the server
+  // returns just counts (cheap); when unlocked we cache the board too.
+  useEffect(() => {
+    if (!user || globalCheckedRef.current) return;
+    globalCheckedRef.current = true;
+    (async () => {
+      const b = await socialApi("globalBoard");
+      if (b && !b.error && !b.locked) { setGlobalUnlocked(true); setGlobalBoardData(b); }
+    })();
+  }, [user]);
   // Fire an unlock toast for any earned-but-not-yet-toasted badge, then mark it
   // seen so it never repeats. Deferred out of the effect body so it doesn't
   // cascade renders; keyed on the earned count so it only runs on real changes.
@@ -4136,26 +4144,32 @@ export default function StudyQuiz() {
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
-          <button onClick={()=>navigate("/")} title={t.mainSite} className="rv-hero-back" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.78)",fontFamily:"inherit",padding:0,fontWeight:500,marginBottom:18,display:"inline-flex",alignItems:"center",gap:5}}>← {t.mainSite}</button>
-          <div className="rv-hero-bar">
-            <span style={{...Sb.brand,color:"#fff"}}><Logo/>{t.appName}
-              {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
-              <DevBadge/></span>
+          <div className="rv-hero-top">
+            <button onClick={()=>navigate("/")} title={t.mainSite} className="rv-hero-back" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.78)",fontFamily:"inherit",padding:0,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}>← {t.mainSite}</button>
             <div className="rv-hero-tools">
               {user ? (
                 <button onClick={()=>openSettings()} title={t.accountLbl} aria-label={t.accountLbl}
-                  style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(255,255,255,0.14)",border:"1px solid rgba(255,255,255,0.28)",borderRadius:999,padding:"4px 12px 4px 4px",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
-                  <span style={{position:"relative",width:28,height:28,borderRadius:"50%",overflow:"hidden",flexShrink:0,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff"}}>
+                  style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                  <span style={{position:"relative",width:30,height:30,borderRadius:"50%",overflow:"hidden",flexShrink:0,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff"}}>
                     {(username||user.email||"?").charAt(0).toUpperCase()}
                     {user.image && <img src={user.image} alt="" onError={(e)=>e.currentTarget.remove()} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>}
                   </span>
-                  <span style={{fontSize:13,fontWeight:600,color:"#fff",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{username||user.email?.split("@")[0]||t.accountLbl}</span>
+                  <span style={{fontSize:14,fontWeight:600,color:"#fff",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{username||user.email?.split("@")[0]||t.accountLbl}</span>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:15,lineHeight:1,flexShrink:0}} title={(t["rank_"+(RANKS[myRankInfo.index]?.key)])||RANKS[myRankInfo.index]?.name} aria-hidden="true">
+                    <span>{RANKS[myRankInfo.index]?.emoji}</span>
+                    {flairEquipped && <BadgeGlyph id={flairEquipped} size={16} t={t}/>}
+                  </span>
                 </button>
               ) : (
                 <button onClick={()=>navigate("/login")} style={{background:"rgba(255,255,255,0.16)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,fontSize:12,fontWeight:600,padding:"7px 14px",cursor:"pointer",fontFamily:"inherit"}}>{t.logIn}</button>
               )}
               <ThemeSwitch isDark={isDarkTheme} onToggle={toggleTheme} onDark />
             </div>
+          </div>
+          <div className="rv-hero-bar">
+            <span style={{...Sb.brand,color:"#fff"}}><Logo/>{t.appName}
+              {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
+              <DevBadge/></span>
           </div>
           <h1 className="rv-hero-head" style={Sb.h1}>{t.tagline}</h1>
           <p className="rv-hero-sub" style={{fontSize:14,color:"#c7d2fe",lineHeight:1.6,margin:0,maxWidth:300}}>{t.sub}</p>
@@ -4184,6 +4198,7 @@ export default function StudyQuiz() {
               <div style={{...Sb.navTileSub,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><RankPill index={myRankInfo.index} t={t} small/> {earnedBadgeCount}/{BADGES.length}</div>
             </div>
           </div>
+          {globalUnlocked && (
           <div onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={Sb.navTile}>
             <Medallion color="#b45309"><span style={{fontSize:18}}>🏆</span></Medallion>
             <div style={{minWidth:0}}>
@@ -4191,6 +4206,7 @@ export default function StudyQuiz() {
               <div style={Sb.navTileSub}>{t.globalTileSub||"Top 100 by rank, best of the best"}</div>
             </div>
           </div>
+          )}
         </div>
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
         <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4f46e5,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 14px rgba(79,70,229,0.2)":"none"}}>
@@ -5772,7 +5788,7 @@ export default function StudyQuiz() {
           ); })()}
 
         {/* Link to the global leaderboard */}
-        <button onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:"transparent",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 14px",marginBottom:16,fontSize:13,fontWeight:700,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}><span aria-hidden="true">🏆</span>{t.globalBoardSee||"See the global leaderboard"}</button>
+        {globalUnlocked && <button onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:"transparent",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 14px",marginBottom:16,fontSize:13,fontWeight:700,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}><span aria-hidden="true">🏆</span>{t.globalBoardSee||"See the global leaderboard"}</button>}
 
         {/* Public toggle + earned count */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px 14px",marginBottom:8}}>
@@ -6395,6 +6411,7 @@ const CSS = `
   ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--color-border-primary);border-radius:5px;border:2px solid transparent;background-clip:content-box}::-webkit-scrollbar-thumb:hover{background:var(--color-text-tertiary);background-clip:content-box}::-webkit-scrollbar-track{background:transparent}
 
   /* Hero (mobile base, stacks: back, brand bar, headline, sub, CTA) */
+  .rv-hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;}
   .rv-hero-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;}
   .rv-hero-tools{display:flex;align-items:center;gap:10px;}
   .rv-hero-sub{margin-top:14px!important;}
@@ -6413,7 +6430,7 @@ const CSS = `
       grid-template-areas:"back back" "bar head" "sub cta";
       column-gap:48px;row-gap:14px;align-items:start;
     }
-    .rv-hero-back{grid-area:back;margin-bottom:0!important;}
+    .rv-hero-top{grid-area:back;margin-bottom:0;}
     .rv-hero-bar{grid-area:bar;}
     .rv-hero-head{grid-area:head;align-self:center;font-size:30px!important;margin:0!important;}
     .rv-hero-sub{grid-area:sub;align-self:end;}
