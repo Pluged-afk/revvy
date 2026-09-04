@@ -4,6 +4,7 @@ import { makePerfEntry } from "../lib/studentModel.js";
 import { normBank, bankAddItems, bankRejectQ, bankMarkUsed, bankMerge } from "../lib/questionBank.js";
 import { normLibrary, libraryAddDoc, libraryRemove, libraryMerge } from "../lib/studyLibrary.js";
 import { normWallet, walletAdd, addSaverProgress, tickStreak, arenaEarn, passEarn, POWERUP_CAP, SAVER_CAP } from "../lib/rewards.js";
+import { evaluateBadges } from "../lib/badges.js";
 
 // ── Server-synced study data ──────────────────────────────────────────
 // Single source of truth for the spaced-repetition deck, lifetime stats +
@@ -33,10 +34,35 @@ function normStats(s) {
     // get harder questions) and the challenge screen's "your record" line.
     challengeWins: Math.max(0, Math.round(Number(s.challengeWins) || 0)),
     challengePlayed: Math.max(0, Math.round(Number(s.challengePlayed) || 0)),
+    // Badge signals (see src/lib/badges.js): counters the achievement engine
+    // reads. Everything else a badge needs is already derivable from the fields
+    // above or from mockScores.
+    perfectQuizzes: Math.max(0, Math.round(Number(s.perfectQuizzes) || 0)),
+    hardPasses: Math.max(0, Math.round(Number(s.hardPasses) || 0)),
+    arenaBest: Math.max(0, Math.round(Number(s.arenaBest) || 0)),
+    arenaBestRun: Math.max(0, Math.round(Number(s.arenaBestRun) || 0)),
+    groupsJoined: Math.max(0, Math.round(Number(s.groupsJoined) || 0)),
+  };
+}
+// The trophy-case record kept in the blob: which badges are earned (id + when),
+// which one is pinned as public flair, which unlocks have been toasted, and
+// whether the learner shows their rank/flair publicly (on by default).
+function normBadges(b) {
+  b = b || {};
+  const earned = Array.isArray(b.earned)
+    ? b.earned.filter((e) => e && e.id).map((e) => ({ id: String(e.id), at: Number(e.at) || Date.now() }))
+    : [];
+  const seen = new Map();
+  for (const e of earned) seen.set(e.id, e); // de-dupe by id, keep earliest
+  return {
+    earned: [...seen.values()],
+    equipped: b.equipped ? String(b.equipped) : null,
+    seen: Array.isArray(b.seen) ? b.seen.map(String) : [],
+    public: b.public !== false, // default on
   };
 }
 function emptyData() {
-  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, updatedAt: 0 };
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), updatedAt: 0 };
 }
 const asTopicStats = (t) => (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
 
@@ -148,6 +174,11 @@ function mergeStudy(server, local) {
       lastActive: laterActive.lastActive,
       challengeWins: Math.max(ss.challengeWins, ls.challengeWins),
       challengePlayed: Math.max(ss.challengePlayed, ls.challengePlayed),
+      perfectQuizzes: Math.max(ss.perfectQuizzes, ls.perfectQuizzes),
+      hardPasses: Math.max(ss.hardPasses, ls.hardPasses),
+      arenaBest: Math.max(ss.arenaBest, ls.arenaBest),
+      arenaBestRun: Math.max(ss.arenaBestRun, ls.arenaBestRun),
+      groupsJoined: Math.max(ss.groupsJoined, ls.groupsJoined),
     },
     plans: [...byId.values()],
     topicStats: ts,
@@ -160,6 +191,7 @@ function mergeStudy(server, local) {
     wallet: (() => { const a = normWallet(server.wallet), b = normWallet(local.wallet); return { hint: Math.max(a.hint, b.hint), freeze: Math.max(a.freeze, b.freeze), skip: Math.max(a.skip, b.skip) }; })(),
     streakSavers: Math.max(0, Math.min(SAVER_CAP, Math.max(Number(server.streakSavers) || 0, Number(local.streakSavers) || 0))),
     savedProgress: Math.max(0, Number(server.savedProgress) || 0, Number(local.savedProgress) || 0),
+    badges: mergeBadges(server.badges, local.badges),
     updatedAt: Date.now(),
   };
 }
@@ -177,6 +209,24 @@ function mergeMockScores(a, b) {
     out[k] = { best: bestOf(ex.best, v.best), last: lastOf(ex.last, v.last), count: Math.max(ex.count || 0, v.count || 0) };
   }
   return out;
+}
+
+// Merge the trophy case across devices: union earned badges (keep the earliest
+// unlock time), union the "already toasted" set, keep the most recent equipped
+// choice, and keep public display on unless BOTH sides turned it off.
+function mergeBadges(a, b) {
+  const A = normBadges(a), B = normBadges(b);
+  const byId = new Map();
+  for (const e of [...A.earned, ...B.earned]) {
+    const ex = byId.get(e.id);
+    if (!ex || e.at < ex.at) byId.set(e.id, e);
+  }
+  return {
+    earned: [...byId.values()],
+    equipped: B.equipped || A.equipped || null,
+    seen: [...new Set([...A.seen, ...B.seen])],
+    public: A.public !== false && B.public !== false,
+  };
 }
 
 // SM-2-flavoured scheduling for a graded card.
@@ -372,6 +422,57 @@ export function StudyProvider({ children }) {
     });
   }, [commit]);
 
+  // ── Badges / trophy case ───────────────────────────────────────────────
+  // Fold any transient signals from a finished activity into the badge counters
+  // and re-evaluate the whole trophy case, appending anything newly earned. Done
+  // in ONE commit so it always reads a consistent, current blob. The unlock
+  // toast is driven separately by watching badges.earned vs badges.seen, so this
+  // needs no return value. Call with no args to retroactively grant badges the
+  // learner already qualifies for (e.g. after sign-in merges in server history).
+  const syncBadges = useCallback((sig = {}) => {
+    commit((p) => {
+      const s = normStats(p.stats);
+      const stats = {
+        ...s,
+        perfectQuizzes: s.perfectQuizzes + (sig.perfect ? 1 : 0),
+        hardPasses: s.hardPasses + (sig.hardPass ? 1 : 0),
+        arenaBest: Math.max(s.arenaBest, Math.round(Number(sig.arenaScore) || 0)),
+        arenaBestRun: Math.max(s.arenaBestRun, Math.round(Number(sig.arenaRun) || 0)),
+        groupsJoined: s.groupsJoined + (sig.groupJoin ? 1 : 0),
+      };
+      const b = normBadges(p.badges);
+      const already = new Set(b.earned.map((e) => e.id));
+      const { earnedIds } = evaluateBadges({ ...p, stats });
+      const additions = earnedIds.filter((id) => !already.has(id)).map((id) => ({ id, at: Date.now() }));
+      const changed = additions.length > 0 || sig.perfect || sig.hardPass || sig.groupJoin ||
+        (Math.round(Number(sig.arenaScore) || 0) > s.arenaBest) || (Math.round(Number(sig.arenaRun) || 0) > s.arenaBestRun);
+      if (!changed) return p;
+      return { ...p, stats, badges: { ...b, earned: [...b.earned, ...additions] } };
+    });
+  }, [commit]);
+
+  // Pin one earned badge as public flair (null unequips). Only accepts a badge
+  // the learner has actually earned.
+  const equipBadge = useCallback((id) => {
+    commit((p) => {
+      const b = normBadges(p.badges);
+      if (id && !b.earned.some((e) => e.id === id)) return p;
+      return { ...p, badges: { ...b, equipped: id || null } };
+    });
+  }, [commit]);
+
+  // Toggle whether rank + flair show on public leaderboards (default on).
+  const setBadgesPublic = useCallback((on) => {
+    commit((p) => { const b = normBadges(p.badges); return { ...p, badges: { ...b, public: !!on } }; });
+  }, [commit]);
+
+  // Mark unlock toasts as shown so they never re-fire (persisted in the blob).
+  const markBadgesSeen = useCallback((ids) => {
+    const add = (ids || []).map(String);
+    if (!add.length) return;
+    commit((p) => { const b = normBadges(p.badges); return { ...p, badges: { ...b, seen: [...new Set([...b.seen, ...add])] } }; });
+  }, [commit]);
+
   // Record per-topic outcomes (seen + correct) from a finished quiz/exam. Powers
   // the mastery view and "drill weak spots". Ignores blank / "general" topics.
   const recordTopics = useCallback((rows) => {
@@ -462,9 +563,10 @@ export function StudyProvider({ children }) {
 
   const value = {
     cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans, topicStats: data.topicStats, perf: data.perf, bank: data.bank, library: data.library, mockScores: data.mockScores,
-    wallet: data.wallet, streakSavers: data.streakSavers, savedProgress: data.savedProgress,
+    wallet: data.wallet, streakSavers: data.streakSavers, savedProgress: data.savedProgress, badges: data.badges,
     addMissed, grade, removeCard, clearAll, setExamDate, recordSession, recordTopics, recordPerf,
     completeActivity, usePowerup, grantPowerups, recordChallengeResult,
+    syncBadges, equipBadge, setBadgesPublic, markBadgesSeen,
     bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc, recordMockScore,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };

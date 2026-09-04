@@ -468,6 +468,11 @@ async function ensureUsernameCol() {
   try {
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username TEXT`;
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower ON profiles (lower(username)) WHERE username IS NOT NULL`;
+    // Public flair mirror: the badge the user pinned + their rank tier (0..6),
+    // computed client-side and stored here so leaderboards show it cheaply.
+    // rank NULL or -1 means the user hid their public rank/flair.
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS equipped_badge TEXT`;
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS rank INT`;
     unameReady = true;
   } catch (e) { console.error("[arena] username col:", e.message); }
 }
@@ -546,12 +551,12 @@ async function arenaBoard(req, res, userId) {
   const you = mine ? { rank, score: mine.best_score, questions: mine.questions, freeze: mine.freeze_used, hint: mine.hint_used, skip: mine.skip_used } : null;
   if (!unlocked) return res.status(200).json({ locked: true, players, need: ARENA_GATE, you });
   const top = await sql`
-    SELECT a.best_score, a.questions, a.freeze_used, a.hint_used, a.skip_used, p.username
+    SELECT a.best_score, a.questions, a.freeze_used, a.hint_used, a.skip_used, p.username, p.equipped_badge, p.rank
     FROM arena_score a LEFT JOIN profiles p ON p.clerk_user_id = a.clerk_user_id
     ORDER BY a.best_score DESC, a.updated_at ASC LIMIT 100`;
   return res.status(200).json({
     locked: false, players, you,
-    top: top.map((r) => ({ name: r.username || "player", score: r.best_score, questions: r.questions, freeze: r.freeze_used, hint: r.hint_used, skip: r.skip_used })),
+    top: top.map((r) => ({ name: r.username || "player", score: r.best_score, questions: r.questions, freeze: r.freeze_used, hint: r.hint_used, skip: r.skip_used, badge: publicBadge(r), rank: publicRank(r) })),
   });
 }
 
@@ -566,6 +571,33 @@ async function usernamesFor(ids) {
   const out = {};
   for (const r of rows) if (r.uid) out[r.uid] = r.username || null;
   return out;
+}
+// Public flair helpers: a rank of null or < 0 means the user hid their status,
+// so both rank and badge are suppressed. rank 0 (Novice) is a real, shown tier.
+function publicRank(r) { const n = r && r.rank; return (n == null || Number(n) < 0) ? null : Number(n); }
+function publicBadge(r) { return publicRank(r) == null ? null : (r.equipped_badge || null); }
+// Map clerk ids -> their public {badge, rank} for leaderboards/standings.
+async function flairFor(ids) {
+  if (!ids.length) return {};
+  const rows = await sql`SELECT COALESCE(clerk_user_id, id) AS uid, equipped_badge, rank FROM profiles
+                         WHERE clerk_user_id = ANY(${ids}::text[]) OR id = ANY(${ids}::text[])`;
+  const out = {};
+  for (const r of rows) if (r.uid) out[r.uid] = { badge: publicBadge(r), rank: publicRank(r) };
+  return out;
+}
+// POST action=setBadge: mirror the caller's equipped badge + rank tier onto their
+// public profile (token-verified). rank = -1 hides their status on leaderboards.
+async function setBadge(req, res, body, me) {
+  let equipped = body.equipped == null ? null : String(body.equipped).slice(0, 40);
+  if (equipped && !/^[a-z0-9_]{1,40}$/.test(equipped)) equipped = null;
+  let rank = parseInt(body.rank, 10);
+  rank = Number.isInteger(rank) ? Math.max(-1, Math.min(20, rank)) : null;
+  await ensureUsernameCol();
+  try {
+    await sql`INSERT INTO profiles (id, clerk_user_id) VALUES (${me}, ${me}) ON CONFLICT (id) DO NOTHING`;
+    await sql`UPDATE profiles SET equipped_badge = ${equipped}, rank = ${rank} WHERE clerk_user_id = ${me} OR id = ${me}`;
+    return res.status(200).json({ ok: true });
+  } catch (e) { console.error("[study] setBadge:", e.message); return res.status(500).json({ error: "Could not save." }); }
 }
 
 async function friendAdd(req, res, body, me) {
@@ -691,13 +723,15 @@ async function groupGet(req, res, body, me) {
   if (!mem.some((m) => m.clerk_user_id === me)) return res.status(403).json({ error: "You're not in this group." });
   const ids = mem.map((m) => m.clerk_user_id);
   const names = await usernamesFor(ids);
+  const flair = await flairFor(ids);
   const statRows = await sql`SELECT clerk_user_id, data->'stats' AS stats FROM study_data WHERE clerk_user_id = ANY(${ids}::text[])`;
   const statMap = Object.fromEntries(statRows.map((r) => [r.clerk_user_id, r.stats || {}]));
   const members = mem.map((m) => {
     const s = statMap[m.clerk_user_id] || {};
     const answered = Number(s.answered) || 0, correct = Number(s.correct) || 0;
     return { userId: m.clerk_user_id, username: names[m.clerk_user_id] || "student", role: m.role,
-      streak: Number(s.streak) || 0, answered, accuracy: answered ? Math.round((correct / answered) * 100) : 0, you: m.clerk_user_id === me };
+      streak: Number(s.streak) || 0, answered, accuracy: answered ? Math.round((correct / answered) * 100) : 0, you: m.clerk_user_id === me,
+      badge: flair[m.clerk_user_id]?.badge || null, rank: flair[m.clerk_user_id]?.rank ?? null };
   }).sort((a, b) => b.streak - a.streak || b.answered - a.answered);
   const library = (await sql`SELECT id, clerk_user_id, title, subject FROM group_library WHERE group_id=${gid} ORDER BY created_at DESC LIMIT 60`)
     .map((d) => ({ id: Number(d.id), by: names[d.clerk_user_id] || "student", title: d.title, subject: d.subject }));
@@ -853,8 +887,10 @@ async function challengeGet(req, res, body, me) {
   if (!(await groupHasMember(Number(c.group_id), me))) return res.status(403).json({ error: "You're not in this group." });
   const scores = await sql`SELECT clerk_user_id, team, score, total FROM challenge_scores WHERE challenge_id=${id}`;
   const names = await usernamesFor(scores.map((s) => s.clerk_user_id));
+  const flair = await flairFor(scores.map((s) => s.clerk_user_id));
   const mine = scores.find((s) => s.clerk_user_id === me) || null;
-  const results = scores.map((s) => ({ username: names[s.clerk_user_id] || "student", team: s.team, score: Number(s.score), total: Number(s.total), you: s.clerk_user_id === me }))
+  const results = scores.map((s) => ({ username: names[s.clerk_user_id] || "student", team: s.team, score: Number(s.score), total: Number(s.total), you: s.clerk_user_id === me,
+      badge: flair[s.clerk_user_id]?.badge || null, rank: flair[s.clerk_user_id]?.rank ?? null }))
     .sort((a, b) => b.score - a.score);
   let teamTotals = null;
   if (c.mode === "teams") {
@@ -917,6 +953,7 @@ export default async function handler(req, res) {
       if (body?.action === "arenaDraw") return arenaDraw(req, res, body);
       if (body?.action === "arenaSubmit") return arenaSubmit(req, res, body, userId);
       if (body?.action === "arenaBoard") return arenaBoard(req, res, userId);
+      if (body?.action === "setBadge") return setBadge(req, res, body, userId);
       // Friends + study groups
       if (body?.action === "social") return socialOverview(req, res, userId);
       if (body?.action === "friendAdd") return friendAdd(req, res, body, userId);

@@ -60,5 +60,11 @@ export function useSRS() {
     // Head-to-head challenge record + recorder (feeds adaptive difficulty).
     stats: study?.stats || {},
     recordChallengeResult: study?.recordChallengeResult || (() => {}),
+    // Badges / trophy case + public flair.
+    badges: study?.badges || { earned: [], equipped: null, seen: [], public: true },
+    syncBadges: study?.syncBadges || (() => {}),
+    equipBadge: study?.equipBadge || (() => {}),
+    setBadgesPublic: study?.setBadgesPublic || (() => {}),
+    markBadgesSeen: study?.markBadgesSeen || (() => {}),
   };
 }

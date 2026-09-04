@@ -16,6 +16,7 @@ import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/stude
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
+import { BADGES, BADGE_BY_ID, BADGE_CATEGORIES, evaluateBadges, rankOf, RANKS } from "./lib/badges.js";
 import ArenaGame from "./components/ArenaGame.jsx";
 import Icon from "./components/Icon.jsx";
 
@@ -41,6 +42,32 @@ function AvatarInitial({ name, size = 34 }) {
   return (
     <span style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-sel-tint)", color: "var(--color-accent)", fontSize: Math.round(size * 0.42), fontWeight: 700 }}>
       {String(name || "?").charAt(0).toUpperCase()}
+    </span>
+  );
+}
+// A rank tier pill (the public "status"), self-contained so it reads on any
+// background. Hidden for a missing/negative tier.
+function RankPill({ index, t, small = false }) {
+  if (index == null || index < 0 || !RANKS[index]) return null;
+  const r = RANKS[index];
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: r.color + "22", color: r.color, fontSize: small ? 10 : 11, fontWeight: 800, padding: small ? "1px 7px" : "2px 9px", borderRadius: 20, whiteSpace: "nowrap", lineHeight: 1.4 }}>
+      <span aria-hidden="true">{r.emoji}</span>{(t && t["rank_" + r.key]) || r.name}
+    </span>
+  );
+}
+// The equipped-badge glyph, with the badge's localized name as a tooltip.
+function BadgeGlyph({ id, size = 15, t }) {
+  const b = BADGE_BY_ID[id]; if (!b) return null;
+  return <span title={(t && t["badge_" + id]) || b.name} aria-hidden="true" style={{ fontSize: size, lineHeight: 1 }}>{b.emoji}</span>;
+}
+// Rank pill + equipped badge glyph, shown next to a public username.
+function Flair({ rank, badge, t, small }) {
+  if ((rank == null || rank < 0) && !badge) return null;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+      <RankPill index={rank} t={t} small={small} />
+      {badge && <BadgeGlyph id={badge} size={small ? 14 : 15} t={t} />}
     </span>
   );
 }
@@ -2426,6 +2453,9 @@ export default function StudyQuiz() {
       // Universal streak + rewards: passing earns a power-up, and the questions
       // count toward the next (silent) streak saver. Supersedes recordSession.
       setEarnedReward(srs.completeActivity({ mode: "quiz", correct: answers.filter((a) => a && a.isCorrect).length, total: answers.length }));
+      // Badge signals: a perfect run and a passed Hard set feed the trophy case.
+      { const c = answers.filter((a) => a && a.isCorrect).length, n = answers.length;
+        srs.syncBadges({ perfect: n >= 4 && c === n, hardPass: (quiz.genDiff ?? diff) === 2 && n > 0 && c / n >= 0.6 }); }
       // If this quiz came from a group's shared material, post the result to the
       // group's activity feed (best-effort), then clear the marker.
       if (groupQuizRef.current) {
@@ -2465,6 +2495,8 @@ export default function StudyQuiz() {
       const missed = examQs.filter((_, i) => (examEvals[i]?.score ?? 0) < 1).map(toCard);
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
       setEarnedReward(srs.completeActivity({ mode: "exam", correct: examEvals.filter((e) => (e?.score ?? 0) >= 1).length, total: examEvals.length }));
+      { const c = examEvals.filter((e) => (e?.score ?? 0) >= 1).length, n = examEvals.length;
+        srs.syncBadges({ perfect: n >= 4 && c === n, hardPass: diff === 2 && n > 0 && c / n >= 0.6 }); }
       srs.recordTopics(examQs.map((q, i) => ({ topic: q.topic, correct: (examEvals[i]?.score ?? 0) >= 1 })));
       // Personalization for exam mode: feed the exam into the adaptive-difficulty
       // history and bank its well-formed MCQs (leanQ skips written/fill), same as
@@ -3688,6 +3720,9 @@ export default function StudyQuiz() {
   const [showNewChallenge, setShowNewChallenge] = useState(false);
   const [newChalMode, setNewChalMode] = useState("solo"); // solo | teams
   const challengeRef = useRef(null); // {challengeId, team, title} for the results submit
+  // Badges / trophy case
+  const [badgeToast, setBadgeToast] = useState(null); // [ids] freshly unlocked, for the toast
+  const badgeSyncedRef = useRef(false);
   const loadSocial = useCallback(async () => {
     setSocialBusy(true);
     const r = await socialApi("social");
@@ -3712,16 +3747,16 @@ export default function StudyQuiz() {
     const r = await socialApi("groupCreate", { name });
     setSocialBusy(false);
     if (r.error) { setSocialErr(r.error); return; }
-    setGroupNameInput(""); loadSocial();
-  }, [groupNameInput, socialBusy, loadSocial]);
+    setGroupNameInput(""); srs.syncBadges({ groupJoin: true }); loadSocial();
+  }, [groupNameInput, socialBusy, loadSocial, srs]);
   const doJoinGroup = useCallback(async () => {
     const code = joinCodeInput.trim(); if (!code || socialBusy) return;
     setSocialBusy(true); setSocialErr("");
     const r = await socialApi("groupJoin", { code });
     setSocialBusy(false);
     if (r.error) { setSocialErr(r.error); return; }
-    setJoinCodeInput(""); loadSocial();
-  }, [joinCodeInput, socialBusy, loadSocial]);
+    setJoinCodeInput(""); srs.syncBadges({ groupJoin: true }); loadSocial();
+  }, [joinCodeInput, socialBusy, loadSocial, srs]);
   const openGroup = useCallback(async (groupId) => {
     setGroupBusy(true); setActiveGroup(null); setGroupTab("board"); setScreen("group");
     const r = await socialApi("groupGet", { groupId });
@@ -3789,8 +3824,8 @@ export default function StudyQuiz() {
     if (!code) return;
     joinHandledRef.current = true;
     try { const u = new URL(window.location.href); u.searchParams.delete("join"); window.history.replaceState({}, "", u); } catch { /* ignore */ }
-    (async () => { const r = await socialApi("groupJoin", { code }); if (r && r.id) openGroup(r.id); else openSocial(); })();
-  }, [user, openGroup, openSocial]);
+    (async () => { const r = await socialApi("groupJoin", { code }); if (r && r.id) { srs.syncBadges({ groupJoin: true }); openGroup(r.id); } else openSocial(); })();
+  }, [user, openGroup, openSocial, srs]);
   // Claim the group's collective reward into the personal power-up wallet.
   const doClaimReward = useCallback(async () => {
     if (!activeGroup) return;
@@ -3920,6 +3955,8 @@ export default function StudyQuiz() {
     // Grant the run's reward from the AUTHORITATIVE score, and keep the streak
     // alive (endless counts toward the universal streak, not toward savers).
     const earned = srs.completeActivity({ mode: "arena", score: finalScore });
+    // Badge signals: track your best arena score + longest run for the arena badges.
+    srs.syncBadges({ arenaScore: finalScore, arenaRun: result.questions || 0 });
     setArenaResult({ ...result, score: finalScore, best: (r && r.best) ?? result.score, isBest: !!(r && r.isBest), pending: false, earned });
   }, [srs]);
   const openArenaBoard = useCallback(async () => {
@@ -3927,6 +3964,60 @@ export default function StudyQuiz() {
     const b = await arenaBoardGlobal();
     setArenaBusy(false); setArenaBoardData(b);
   }, []);
+
+  // ── Badges wiring ────────────────────────────────────────────────────
+  // Retroactively grant any badges the learner already qualifies for (existing
+  // accounts whose history predates this feature), once, after the blob is live.
+  useEffect(() => {
+    if (badgeSyncedRef.current || srs.stats?.answered == null) return;
+    badgeSyncedRef.current = true;
+    srs.syncBadges();
+  }, [srs]);
+  // Fire an unlock toast for any earned-but-not-yet-toasted badge, then mark it
+  // seen so it never repeats. Deferred out of the effect body so it doesn't
+  // cascade renders; keyed on the earned count so it only runs on real changes.
+  const earnedCount = (srs.badges?.earned || []).length;
+  useEffect(() => {
+    const seen = new Set(srs.badges?.seen || []);
+    const fresh = (srs.badges?.earned || []).filter((e) => !seen.has(e.id)).map((e) => e.id);
+    if (!fresh.length) return;
+    const id = setTimeout(() => { setBadgeToast(fresh); srs.markBadgesSeen(fresh); }, 450);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [earnedCount]);
+  // Auto-dismiss the badge toast.
+  useEffect(() => {
+    if (!badgeToast) return;
+    const id = setTimeout(() => setBadgeToast(null), 4200);
+    return () => clearTimeout(id);
+  }, [badgeToast]);
+  // Mirror the learner's rank + equipped flair onto their public profile so the
+  // arena and group leaderboards can show it cheaply. rank = -1 means hidden.
+  const myRankInfo = useMemo(() => rankOf({ stats: srs.stats }), [srs.stats]);
+  const badgeEval = useMemo(() => evaluateBadges({ stats: srs.stats, mockScores: srs.mockScores, badges: srs.badges }), [srs.stats, srs.mockScores, srs.badges]);
+  const earnedBadgeCount = badgeEval.earnedIds.length;
+  // Shared "badge unlocked" toast, dropped into the finish screens + home.
+  const badgeToastEl = badgeToast && badgeToast.length ? (
+    <div style={{position:"fixed",left:0,right:0,bottom:20,zIndex:900,display:"flex",justifyContent:"center",pointerEvents:"none",padding:"0 14px"}}>
+      <div style={{background:"var(--color-text-primary)",color:"var(--color-background-primary)",borderRadius:14,padding:"11px 14px",boxShadow:"0 12px 32px rgba(15,23,42,0.30)",display:"flex",alignItems:"center",gap:11,maxWidth:380,pointerEvents:"auto"}}>
+        <span style={{fontSize:25,lineHeight:1}} aria-hidden="true">{BADGE_BY_ID[badgeToast[0]]?.emoji||"🏅"}</span>
+        <div style={{minWidth:0,flex:1}}>
+          <div style={{fontSize:12.5,fontWeight:800}}>{badgeToast.length>1?(t.badgeUnlockedN||"{n} badges unlocked!").replace("{n}",badgeToast.length):(t.badgeUnlocked||"Badge unlocked!")}</div>
+          <div style={{fontSize:12,opacity:0.85,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{badgeToast.map((id)=>(t["badge_"+id]||BADGE_BY_ID[id]?.name||id)).join(", ")}</div>
+        </div>
+        <button onClick={()=>{setScreen("badges");setBadgeToast(null);}} style={{fontSize:11.5,fontWeight:700,border:"none",background:"var(--color-accent)",color:"#fff",borderRadius:20,padding:"5px 11px",cursor:"pointer",flexShrink:0}}>{t.badgeView||"View"}</button>
+      </div>
+    </div>
+  ) : null;
+  const flairRank = myRankInfo.index;
+  const flairEquipped = srs.badges?.equipped || "";
+  const flairPublic = srs.badges?.public !== false;
+  useEffect(() => {
+    if (!user) return;
+    const payload = flairPublic ? { equipped: flairEquipped || null, rank: flairRank } : { equipped: null, rank: -1 };
+    const id = setTimeout(() => { socialApi("setBadge", payload); }, 700);
+    return () => clearTimeout(id);
+  }, [user, flairRank, flairEquipped, flairPublic]);
 
   const enableReminders = async () => { try { if (typeof Notification!=="undefined") { const p = await Notification.requestPermission(); setNotifPerm(p); } } catch { /* ignore */ } };
   // Tick a coached day off (once) when its quiz/exam results appear.
@@ -3947,6 +4038,7 @@ export default function StudyQuiz() {
   if (screen==="home") return (
     <div style={Sb.root}><style>{CSS}</style>
       <ActivatingOverlay show={activating}/>
+      {badgeToastEl}
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
       <div style={Sb.hero}>
@@ -3986,6 +4078,16 @@ export default function StudyQuiz() {
             <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.socialTitle||"Friends & Groups"}</div>
             <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.socialSub||"Add friends, form study groups, share material and compare progress."}</div>
           </div>
+          <span style={{fontSize:17,color:"var(--color-text-tertiary)",flexShrink:0}}>›</span>
+        </div>
+        {/* Badges & rank entry */}
+        <div onClick={()=>setScreen("badges")} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 16px",marginBottom:18,cursor:"pointer"}}>
+          <span style={{flexShrink:0,width:34,height:34,borderRadius:"50%",background:(RANKS[myRankInfo.index]?.color||"#888")+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:19}} aria-hidden="true">{RANKS[myRankInfo.index]?.emoji}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)",display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>{t.badgesTitle||"Badges & rank"} <RankPill index={myRankInfo.index} t={t} small/></div>
+            <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{(t.badgesHomeSub||"{n} of {m} badges earned. Level up your rank and pin a flair.").replace("{n}",earnedBadgeCount).replace("{m}",BADGES.length)}</div>
+          </div>
+          {flairEquipped && <BadgeGlyph id={flairEquipped} size={20} t={t}/>}
           <span style={{fontSize:17,color:"var(--color-text-tertiary)",flexShrink:0}}>›</span>
         </div>
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
@@ -4547,6 +4649,7 @@ export default function StudyQuiz() {
   // ── RESULTS ──────────────────────────────────────────────────────
   if (screen==="results" && quiz) return (
     <div style={Sb.root}><style>{CSS}</style>
+      {badgeToastEl}
       <AdBanners isPro={isPro} bottom={false}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
       <div style={{background:"#312e81",padding:"36px 20px 28px",textAlign:"center"}}>
@@ -4985,6 +5088,7 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
+      {badgeToastEl}
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
         {showConfetti&&<Confetti/>}
         <div style={{background:theme.bg,padding:"40px 20px 32px",textAlign:"center"}}>
@@ -5380,7 +5484,10 @@ export default function StudyQuiz() {
               <span style={{width:20,textAlign:"center",fontWeight:800,fontSize:13,color:i===0?"#a3762b":"var(--color-text-tertiary)",fontFamily:"monospace",flexShrink:0}}>{i+1}</span>
               <AvatarInitial name={m.username} size={30}/>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.username}{m.you?` · ${t.youWord||"you"}`:""}{m.role==="owner"?" ★":""}</div>
+                <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                  <span style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.username}{m.you?` · ${t.youWord||"you"}`:""}{m.role==="owner"?" ★":""}</span>
+                  <Flair rank={m.rank} badge={m.badge} t={t} small/>
+                </div>
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:1}}>{(t.answeredCount||"{n} answered").replace("{n}",m.answered)} · {m.accuracy}%</div>
               </div>
               <div style={{fontSize:15,fontWeight:800,color:"#d97706",fontFamily:"monospace",display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><Icon name="flame" size={13} style={{color:"#f97316"}}/>{m.streak}</div>
@@ -5458,6 +5565,76 @@ export default function StudyQuiz() {
   );
 
   // ── GROUP CHALLENGES ──────────────────────────────────────────────
+  if (screen==="badges") return (
+    <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      <div style={Sb.topbar} className="rv-topbar">
+        <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.backWord||"Back"}</button>
+        <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.badgesTitle||"Badges & rank"}</span><span/>
+      </div>
+      <div className="rv-center-narrow" style={{padding:"18px 16px 44px"}}>
+        {/* Rank header */}
+        {(()=>{ const r=RANKS[myRankInfo.index]; const nm=(t["rank_"+r.key])||r.name;
+          const nextNm=myRankInfo.next?((t["rank_"+myRankInfo.next.key])||myRankInfo.next.name):null;
+          return (
+            <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:16,padding:"16px 16px 18px",marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:52,height:52,borderRadius:"50%",background:r.color+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0}} aria-hidden="true">{r.emoji}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.yourRank||"Your rank"}</div>
+                  <div style={{fontSize:20,fontWeight:800,color:r.color,fontFamily:"'Fraunces',Georgia,serif"}}>{nm}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:"var(--color-text-primary)"}}>{myRankInfo.xp.toLocaleString()}</div>
+                  <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>XP</div>
+                </div>
+              </div>
+              {nextNm ? (<>
+                <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:14,overflow:"hidden"}}><div style={{width:`${Math.round((myRankInfo.toNext||0)*100)}%`,height:"100%",background:r.color}}/></div>
+                <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:6}}>{(t.rankToNext||"{n} XP to {r}").replace("{n}",Math.max(0,myRankInfo.next.min-myRankInfo.xp).toLocaleString()).replace("{r}",nextNm)}</div>
+              </>) : <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:12}}>{t.rankMax||"You've reached the top tier. Legendary."}</div>}
+            </div>
+          ); })()}
+
+        {/* Public toggle + earned count */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px 14px",marginBottom:8}}>
+          <div style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{(t.badgesEarnedCount||"{n} of {m} badges").replace("{n}",earnedBadgeCount).replace("{m}",BADGES.length)}</div>
+          <button onClick={()=>srs.setBadgesPublic(!flairPublic)} style={{fontSize:12,fontWeight:700,border:"1px solid "+(flairPublic?"var(--color-accent)":"var(--color-border-secondary)"),background:flairPublic?"var(--color-sel-tint)":"transparent",color:flairPublic?"var(--color-accent)":"var(--color-text-secondary)",borderRadius:20,padding:"5px 12px",cursor:"pointer"}}>{flairPublic?(t.badgesPublicOn||"Shown publicly"):(t.badgesPublicOff||"Hidden")}</button>
+        </div>
+        <div style={{fontSize:11.5,color:"var(--color-text-tertiary)",marginBottom:16}}>{t.badgesEquipHint||"Tap an earned badge to pin it next to your name."}</div>
+
+        {/* Categories */}
+        {BADGE_CATEGORIES.map(cat=>(
+          <div key={cat} style={{marginBottom:18}}>
+            <p style={Sb.secLabel}>{t["badgeCat_"+cat]||cat}</p>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}}>
+              {BADGES.filter(b=>b.cat===cat).map(b=>{
+                const p = badgeEval.progress[b.id]||{value:0,target:b.target,earned:false,pct:0,count:null};
+                const equipped = flairEquipped===b.id;
+                const nm=(t["badge_"+b.id])||b.name, desc=(t["badgeDesc_"+b.id])||b.desc;
+                return (
+                  <div key={b.id} onClick={p.earned?()=>srs.equipBadge(equipped?null:b.id):undefined}
+                    style={{background:"var(--color-background-primary)",border:"1px "+(equipped?"solid var(--color-accent)":p.earned?"solid var(--color-border-secondary)":"dashed var(--color-border-tertiary)"),borderRadius:12,padding:"13px 12px",textAlign:"center",cursor:p.earned?"pointer":"default",opacity:p.earned?1:0.72,position:"relative"}}>
+                    {equipped && <span style={{position:"absolute",top:7,right:9,fontSize:9.5,fontWeight:800,color:"var(--color-accent)",textTransform:"uppercase",letterSpacing:.4}}>{t.badgePinned||"Pinned"}</span>}
+                    <div style={{fontSize:26,lineHeight:1,marginBottom:6}} aria-hidden="true">{p.earned?b.emoji:"🔒"}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:p.earned?"var(--color-text-primary)":"var(--color-text-secondary)"}}>{nm}</div>
+                    <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2,lineHeight:1.35}}>{desc}</div>
+                    {p.earned ? (
+                      <div style={{fontSize:10.5,fontWeight:700,color:"var(--color-accent)",marginTop:7}}>{p.count&&p.count>1?(t.badgeEarnedX||"Earned ×{n}").replace("{n}",p.count):(t.badgeEarned||"Earned")}</div>
+                    ) : (<>
+                      <div style={{height:5,background:"var(--color-border-tertiary)",borderRadius:3,marginTop:8,overflow:"hidden"}}><div style={{width:`${p.pct}%`,height:"100%",background:"var(--color-accent)"}}/></div>
+                      <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:4}}>{p.value.toLocaleString()} / {p.target.toLocaleString()}</div>
+                    </>)}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   if (screen==="challenges") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
@@ -5508,7 +5685,10 @@ export default function StudyQuiz() {
                 <span style={{width:20,textAlign:"center",fontWeight:800,fontSize:13,color:i===0?"#a3762b":"var(--color-text-tertiary)",fontFamily:"monospace",flexShrink:0}}>{i+1}</span>
                 <AvatarInitial name={r.username} size={28}/>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.username}{r.you?` · ${t.youWord||"you"}`:""}{r.team?` · ${(t.teamWord||"Team")} ${r.team}`:""}{i===0?" 👑":""}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                    <span style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.username}{r.you?` · ${t.youWord||"you"}`:""}{r.team?` · ${(t.teamWord||"Team")} ${r.team}`:""}{i===0?" 👑":""}</span>
+                    <Flair rank={r.rank} badge={r.badge} t={t} small/>
+                  </div>
                 </div>
                 <div style={{fontSize:14,fontWeight:800,color:"var(--color-text-primary)",fontFamily:"monospace",flexShrink:0}}>{r.score}/{r.total}</div>
               </div>
@@ -5627,6 +5807,7 @@ export default function StudyQuiz() {
     const r = arenaResult;
     return (
       <div style={Sb.root}><style>{CSS}</style>
+        {badgeToastEl}
         <AdBanners isPro={isPro}/>
         <div style={{background:"#312e81",padding:"36px 20px 28px",textAlign:"center"}}>
           {r.isBest && <div style={{fontSize:12,fontWeight:800,letterSpacing:1,color:"#fcd34d",textTransform:"uppercase",marginBottom:6}}>{t.arenaNewBest}</div>}
@@ -5691,7 +5872,10 @@ export default function StudyQuiz() {
                 <div key={i} style={{display:"grid",gridTemplateColumns:"30px 1fr auto",gap:10,alignItems:"center",padding:"11px 14px",borderBottom:i<b.top.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
                   <span style={{fontFamily:"monospace",fontWeight:700,fontSize:14,textAlign:"center",color:i===0?"#d97706":i===1?"#94a3b8":i===2?"#b45309":"var(--color-text-tertiary)"}}>{i+1}</span>
                   <div style={{minWidth:0}}>
-                    <div style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                      <span style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}</span>
+                      <Flair rank={row.rank} badge={row.badge} t={t} small/>
+                    </div>
                     <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",fontFamily:"monospace"}}>{t.arenaQCount.replace("{n}",row.questions)} · {row.freeze}/{row.hint}/{row.skip}</div>
                   </div>
                   <span style={{fontFamily:"monospace",fontWeight:700,fontSize:15}}>{(row.score||0).toLocaleString()}</span>
