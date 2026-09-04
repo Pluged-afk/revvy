@@ -111,6 +111,7 @@ const T_EN = {
   globalYouPos:"You're #{n}", globalEmpty:"No one is ranked yet. Be the first to make the board.",
   globalBoardCard:"The top 100 learners by rank, across every mode. The best of the best.",
   globalBoardSee:"See the global leaderboard",
+  socialTileSub:"Study together, compare progress", globalTileSub:"Top 100 by rank, best of the best",
   seeStandings:"See the standings", challengeCreateErr:"Couldn't create the challenge, try again.",
   arenaBoardLegend:"Player · questions · freeze / hint / skip used", arenaEntry:"Endless Arena", arenaEntrySub:"Ranked general-knowledge. One life, chase a high score.",
   unameTitle:"Pick a username", unameSub:"This is your public name on the leaderboard. You can change it later in settings.",

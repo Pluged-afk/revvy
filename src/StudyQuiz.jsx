@@ -4097,33 +4097,33 @@ export default function StudyQuiz() {
       </div>
 
       <div className="rv-home-body" style={{padding:"20px 16px 32px"}}>
-        {/* Friends + study groups entry */}
-        <div onClick={openSocial} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 16px",marginBottom:18,cursor:"pointer"}}>
-          <Medallion color="#0d9488"><Icon name="users" size={20}/></Medallion>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.socialTitle||"Friends & Groups"}</div>
-            <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.socialSub||"Add friends, form study groups, share material and compare progress."}</div>
+        {/* Quick-nav tiles: friends, badges, leaderboard side by side (wrap on
+            mobile) so they read as a compact dashboard, not a tall stack. */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12,marginBottom:18}}>
+          <div onClick={openSocial} style={Sb.navTile}>
+            <Medallion color="#0d9488"><Icon name="users" size={20}/></Medallion>
+            <div style={{minWidth:0}}>
+              <div style={Sb.navTileTitle}>{t.socialTitle||"Friends & Groups"}</div>
+              <div style={Sb.navTileSub}>{t.socialTileSub||"Study together, compare progress"}</div>
+            </div>
           </div>
-          <span style={{fontSize:17,color:"var(--color-text-tertiary)",flexShrink:0}}>›</span>
-        </div>
-        {/* Badges & rank entry */}
-        <div onClick={()=>setScreen("badges")} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 16px",marginBottom:18,cursor:"pointer"}}>
-          <Medallion color={RANKS[myRankInfo.index]?.color||"#4f46e5"}><span style={{fontSize:19}}>{RANKS[myRankInfo.index]?.emoji}</span></Medallion>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)",display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>{t.badgesTitle||"Badges & rank"} <RankPill index={myRankInfo.index} t={t} small/></div>
-            <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{(t.badgesHomeSub||"{n} of {m} badges earned. Level up your rank and pin a flair.").replace("{n}",earnedBadgeCount).replace("{m}",BADGES.length)}</div>
+          <div onClick={()=>setScreen("badges")} style={Sb.navTile}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+              <Medallion color={RANKS[myRankInfo.index]?.color||"#4f46e5"}><span style={{fontSize:19}}>{RANKS[myRankInfo.index]?.emoji}</span></Medallion>
+              {flairEquipped && <BadgeGlyph id={flairEquipped} size={19} t={t}/>}
+            </div>
+            <div style={{minWidth:0}}>
+              <div style={Sb.navTileTitle}>{t.badgesTitle||"Badges & rank"}</div>
+              <div style={{...Sb.navTileSub,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><RankPill index={myRankInfo.index} t={t} small/> {earnedBadgeCount}/{BADGES.length}</div>
+            </div>
           </div>
-          {flairEquipped && <BadgeGlyph id={flairEquipped} size={20} t={t}/>}
-          <span style={{fontSize:17,color:"var(--color-text-tertiary)",flexShrink:0}}>›</span>
-        </div>
-        {/* Global leaderboard entry (best of the best, by rank) */}
-        <div onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 16px",marginBottom:18,cursor:"pointer"}}>
-          <Medallion color="#b45309"><span style={{fontSize:18}}>🏆</span></Medallion>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.globalBoardTitle||"Global leaderboard"}</div>
-            <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.globalBoardCard||"The top 100 learners by rank, across every mode. The best of the best."}</div>
+          <div onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={Sb.navTile}>
+            <Medallion color="#b45309"><span style={{fontSize:18}}>🏆</span></Medallion>
+            <div style={{minWidth:0}}>
+              <div style={Sb.navTileTitle}>{t.globalBoardTitle||"Global leaderboard"}</div>
+              <div style={Sb.navTileSub}>{t.globalTileSub||"Top 100 by rank, best of the best"}</div>
+            </div>
           </div>
-          <span style={{fontSize:17,color:"var(--color-text-tertiary)",flexShrink:0}}>›</span>
         </div>
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
         <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4f46e5,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 14px rgba(79,70,229,0.2)":"none"}}>
@@ -4522,43 +4522,46 @@ export default function StudyQuiz() {
         {/* Other ways to study: one consistent, scannable set */}
         <p style={{...Sb.secLabel,margin:"2px 0 9px"}}>{t.otherWays||"More ways to study"}</p>
         {(() => {
-          const shell = {display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 14px",marginBottom:10,transition:"all 0.15s"};
-          const tile = {width:38,height:38,borderRadius:10,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-sel-tint)",color:"var(--color-accent)"};
-          const ttl = {fontWeight:700,fontSize:13.5,color:"var(--color-text-primary)"};
-          const sub = {fontSize:11.5,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"};
-          const pill = (bg) => ({fontSize:10,fontWeight:700,borderRadius:8,padding:"3px 8px",flexShrink:0,whiteSpace:"nowrap",color:"#fff",background:bg});
-          const chev = {fontSize:17,color:"var(--color-text-tertiary)",flexShrink:0};
+          const tileShell = {display:"flex",flexDirection:"column",gap:9,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 12px",transition:"all 0.15s"};
+          const tile = {width:36,height:36,borderRadius:10,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-sel-tint)",color:"var(--color-accent)"};
+          const ttl = {fontWeight:700,fontSize:13,color:"var(--color-text-primary)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"};
+          const sub = {fontSize:10.5,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"};
+          const pill = (bg) => ({fontSize:9.5,fontWeight:700,borderRadius:8,padding:"2px 7px",flexShrink:0,whiteSpace:"nowrap",color:"#fff",background:bg});
           const examUsed = !isPro && unlocks.examUsedToday();
-          return (<>
-            {/* Exam mode */}
-            <div onClick={isPro?()=>setScreen("exam_setup"):(examUsed?undefined:enterExamMode)} style={{...shell,cursor:examUsed?"default":"pointer",opacity:examUsed?0.6:1}}>
-              <span style={tile}><Icon name="cap" size={19}/></span>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={ttl}>{stripEmoji(t.examModeLabel)}</div>
-                <div style={sub}>{isPro?(t.examUnlimitedSub||"Unlimited custom exams from your notes"):(examAdBusy?t.loadingAd:examUsed?t.examAdUsed:unlocks.examUnlocked()?t.examAdUnlocked:t.examAdWatch)}</div>
+          return (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:14}}>
+              {/* Exam mode */}
+              <div onClick={isPro?()=>setScreen("exam_setup"):(examUsed?undefined:enterExamMode)} style={{...tileShell,cursor:examUsed?"default":"pointer",opacity:examUsed?0.6:1}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+                  <span style={tile}><Icon name="cap" size={18}/></span>
+                  <span style={pill(isPro?"#4f46e5":examUsed?"#94a3b8":unlocks.examUnlocked()?"#4f46e5":"#f59e0b")}>{isPro?t.badgeUnlimited:examUsed?t.examBadgeUsed:unlocks.examUnlocked()?t.examBadgeReady:t.examBadgeFree}</span>
+                </div>
+                <div style={{minWidth:0}}>
+                  <div style={ttl}>{stripEmoji(t.examModeLabel)}</div>
+                  <div style={sub}>{isPro?(t.examUnlimitedSub||"Unlimited custom exams"):(examAdBusy?t.loadingAd:examUsed?t.examAdUsed:unlocks.examUnlocked()?t.examAdUnlocked:t.examAdWatch)}</div>
+                </div>
               </div>
-              <span style={pill(isPro?"#4f46e5":examUsed?"#94a3b8":unlocks.examUnlocked()?"#4f46e5":"#f59e0b")}>{isPro?t.badgeUnlimited:examUsed?t.examBadgeUsed:unlocks.examUnlocked()?t.examBadgeReady:t.examBadgeFree}</span>
-            </div>
-            {/* Mock exams */}
-            <div onClick={()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }} style={{...shell,cursor:"pointer"}}>
-              <span style={tile}><Icon name="cap" size={19}/></span>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={ttl}>{t.mockCardTitle}</div>
-                <div style={sub}>{t.mockCardSub}</div>
+              {/* Mock exams */}
+              <div onClick={()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }} style={{...tileShell,cursor:"pointer"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+                  <span style={tile}><Icon name="cap" size={18}/></span>
+                  {!isPro && <span style={pill("#f59e0b")}>PRO</span>}
+                </div>
+                <div style={{minWidth:0}}>
+                  <div style={ttl}>{t.mockCardTitle}</div>
+                  <div style={sub}>{t.mockCardSub}</div>
+                </div>
               </div>
-              {!isPro && <span style={pill("#f59e0b")}>PRO</span>}
-              <span style={chev}>›</span>
-            </div>
-            {/* Endless Arena */}
-            <div onClick={openArena} style={{...shell,marginBottom:14,cursor:"pointer"}}>
-              <span style={tile}><Icon name="bolt" size={19}/></span>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={ttl}>{t.arenaEntry}</div>
-                <div style={sub}>{t.arenaEntrySub}</div>
+              {/* Endless Arena */}
+              <div onClick={openArena} style={{...tileShell,cursor:"pointer"}}>
+                <span style={tile}><Icon name="bolt" size={18}/></span>
+                <div style={{minWidth:0}}>
+                  <div style={ttl}>{t.arenaEntry}</div>
+                  <div style={sub}>{t.arenaEntrySub}</div>
+                </div>
               </div>
-              <span style={chev}>›</span>
             </div>
-          </>);
+          );
         })()}
         <button style={{...Sb.btnPrimary,width:"100%"}} onClick={generate}>{t.generate}</button>
         </div>
@@ -6240,6 +6243,9 @@ const Sb = {
   h1:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:32, fontWeight:700, color:"#fff", lineHeight:1.15, letterSpacing:-0.5, margin:"14px 0 12px" },
   h2:          { fontFamily:"'Fraunces',Georgia,serif", fontSize:22, fontWeight:700, color:"var(--color-text-primary)", letterSpacing:-0.3, margin:"0 0 16px" },
   secLabel:    { fontSize:11, fontWeight:700, color:"var(--color-text-tertiary)", letterSpacing:1.5, margin:"0 0 12px", textTransform:"uppercase" },
+  navTile:     { background:"var(--color-background-primary)", border:"1px solid var(--color-border-secondary)", borderRadius:14, padding:"14px", cursor:"pointer", display:"flex", flexDirection:"column", gap:10, minWidth:0 },
+  navTileTitle:{ fontWeight:700, fontSize:13.5, color:"var(--color-text-primary)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" },
+  navTileSub:  { fontSize:11, marginTop:2, lineHeight:1.4, color:"var(--color-text-secondary)", overflow:"hidden", textOverflow:"ellipsis" },
   fCard:       { background:"var(--color-background-primary)", borderRadius:14, padding:"15px 14px", border:"1px solid var(--color-border-secondary)", display:"flex", flexDirection:"column", gap:5, cursor:"default" },
   planCard:    { flex:1, background:"var(--color-background-primary)", borderRadius:14, padding:"16px 15px", border:"1px solid var(--color-border-secondary)" },
   topbar:      { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", background:"var(--color-background-primary)", borderBottom:"0.5px solid var(--color-border-tertiary)", position:"sticky", top:0, zIndex:10 },
