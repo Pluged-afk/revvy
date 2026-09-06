@@ -5687,11 +5687,16 @@ export default function StudyQuiz() {
       <div className="rv-center-narrow" style={{padding:"20px 16px 40px"}}>
         {socialErr && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>{socialErr}</div>}
         {/* Notification pop-up toggles (the unread bubbles show either way) */}
-        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",gap:18,flexWrap:"wrap",marginBottom:14,rowGap:10}}>
           <span style={{fontSize:11.5,fontWeight:700,letterSpacing:.4,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.notifAlertsLabel||"Alerts"}</span>
           {[["req",t.notifReqLabel||"Requests"],["msg",t.notifMsgLabel||"Messages"]].map(([k,lbl])=>{
             const on = srs.notif?.[k] !== false;
-            return <button key={k} onClick={()=>srs.setNotifPref(k,!on)} style={{fontSize:12,fontWeight:700,borderRadius:20,padding:"5px 12px",cursor:"pointer",fontFamily:"inherit",border:"1px solid "+(on?"var(--color-accent)":"var(--color-border-secondary)"),background:on?"var(--color-sel-tint)":"transparent",color:on?"var(--color-accent)":"var(--color-text-secondary)",display:"inline-flex",alignItems:"center",gap:5}}><Icon name="alert" size={12}/>{lbl}{on?"":` · ${t.notifOff||"off"}`}</button>;
+            return (
+              <span key={k} style={{display:"inline-flex",alignItems:"center",gap:9}}>
+                <span style={{fontSize:13,fontWeight:600,color:on?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{lbl}</span>
+                <Toggle on={on} onChange={(v)=>srs.setNotifPref(k,v)}/>
+              </span>
+            );
           })}
         </div>
         {/* Friends | Groups tabs */}
