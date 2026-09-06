@@ -190,6 +190,18 @@ function ensureTables() {
         played_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (challenge_id, clerk_user_id)
       )`,
+      // 1:1 friend challenges: each of the two friends plays the challenge
+      // (a 'challenge' friend_messages row) once — play-once via the PK +
+      // ON CONFLICT DO NOTHING — so their scores can be compared and a winner
+      // declared once both are in. challenge_id = the friend_messages.id.
+      sql`CREATE TABLE IF NOT EXISTS friend_challenge_scores (
+        challenge_id  BIGINT      NOT NULL,
+        clerk_user_id TEXT        NOT NULL,
+        score         INT         NOT NULL DEFAULT 0,
+        total         INT         NOT NULL DEFAULT 0,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (challenge_id, clerk_user_id)
+      )`,
     ]).then(() => sql`ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS points INT NOT NULL DEFAULT 0`)
       .then(() => sql`ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 1`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
@@ -726,6 +738,17 @@ async function dmSend(req, res, body, me) {
     VALUES (${me}, ${them}, ${kind}, ${bodyText}, ${data ? JSON.stringify(data) : null}::jsonb) RETURNING id`)[0];
   return res.status(200).json({ ok: true, id: Number(row.id) });
 }
+// Build the comparison payload for one friend challenge from the two players'
+// score rows. `complete` once both have played; winner is by percentage.
+function dmChallengePct(r) { return r && r.total > 0 ? Math.round((r.score / r.total) * 100) : 0; }
+function buildDmChallengeResults(mineRow, theirRow) {
+  const mine = mineRow ? { score: mineRow.score, total: mineRow.total, pct: dmChallengePct(mineRow) } : null;
+  const theirs = theirRow ? { score: theirRow.score, total: theirRow.total, pct: dmChallengePct(theirRow) } : null;
+  const complete = !!(mine && theirs);
+  let winner = null;
+  if (complete) winner = mine.pct > theirs.pct ? "me" : theirs.pct > mine.pct ? "them" : "tie";
+  return { mine, theirs, complete, winner, iPlayed: !!mine };
+}
 async function dmThread(req, res, body, me) {
   const them = clean(body.friendId, 60);
   if (!them) return res.status(400).json({ error: "Bad request." });
@@ -733,9 +756,39 @@ async function dmThread(req, res, body, me) {
   const rows = await sql`SELECT id, sender, kind, body, data, created_at FROM friend_messages
     WHERE (sender=${me} AND recipient=${them}) OR (sender=${them} AND recipient=${me})
     ORDER BY id ASC LIMIT 300`;
+  // Attach each challenge's two-sided scores + winner so the thread renders the
+  // comparison inline (the client already polls this every few seconds).
+  const chalIds = rows.filter((r) => r.kind === "challenge").map((r) => Number(r.id));
+  const scoreMap = {};
+  if (chalIds.length) {
+    const srows = await sql`SELECT challenge_id, clerk_user_id, score, total FROM friend_challenge_scores WHERE challenge_id = ANY(${chalIds}::bigint[])`;
+    for (const s of srows) { const cid = Number(s.challenge_id); (scoreMap[cid] ||= {})[s.clerk_user_id] = { score: s.score, total: s.total }; }
+  }
   const name = (await usernamesFor([them]))[them] || "friend";
   return res.status(200).json({ friendId: them, username: name,
-    messages: rows.map((r) => ({ id: Number(r.id), mine: r.sender === me, kind: r.kind, body: r.body, data: r.data || null, at: r.created_at })) });
+    messages: rows.map((r) => {
+      const m = { id: Number(r.id), mine: r.sender === me, kind: r.kind, body: r.body, data: r.data || null, at: r.created_at };
+      if (r.kind === "challenge") { const sm = scoreMap[Number(r.id)] || {}; m.results = buildDmChallengeResults(sm[me] || null, sm[them] || null); }
+      return m;
+    }) });
+}
+// Record this player's score on a friend challenge (play-once). Either of the
+// two friends may submit; ON CONFLICT DO NOTHING makes re-taking a no-op so the
+// first recorded score stands. Returns the current comparison.
+async function dmChallengeSubmit(req, res, body, me) {
+  const cid = Number(body.challengeId);
+  if (!Number.isFinite(cid) || cid <= 0) return res.status(400).json({ error: "Bad request." });
+  const msg = (await sql`SELECT sender, recipient, kind FROM friend_messages WHERE id=${cid} LIMIT 1`)[0];
+  if (!msg || msg.kind !== "challenge" || (msg.sender !== me && msg.recipient !== me))
+    return res.status(403).json({ error: "Not your challenge." });
+  const total = Math.max(0, Math.min(100, Math.round(Number(body.total) || 0)));
+  const score = Math.max(0, Math.min(total, Math.round(Number(body.score) || 0)));
+  await sql`INSERT INTO friend_challenge_scores (challenge_id, clerk_user_id, score, total)
+    VALUES (${cid}, ${me}, ${score}, ${total}) ON CONFLICT (challenge_id, clerk_user_id) DO NOTHING`;
+  const them = msg.sender === me ? msg.recipient : msg.sender;
+  const rows = await sql`SELECT clerk_user_id, score, total FROM friend_challenge_scores WHERE challenge_id=${cid}`;
+  const byId = Object.fromEntries(rows.map((r) => [r.clerk_user_id, { score: r.score, total: r.total }]));
+  return res.status(200).json({ ok: true, results: buildDmChallengeResults(byId[me] || null, byId[them] || null) });
 }
 
 // Lightweight notification summary for background polling: how many incoming
@@ -1073,6 +1126,7 @@ export default async function handler(req, res) {
       if (body?.action === "notifications") return notifications(req, res, userId);
       if (body?.action === "dmSend") return dmSend(req, res, body, userId);
       if (body?.action === "dmThread") return dmThread(req, res, body, userId);
+      if (body?.action === "dmChallengeSubmit") return dmChallengeSubmit(req, res, body, userId);
       if (body?.action === "friendAdd") return friendAdd(req, res, body, userId);
       if (body?.action === "friendRespond") return friendRespond(req, res, body, userId);
       if (body?.action === "friendRemove") return friendRemove(req, res, body, userId);

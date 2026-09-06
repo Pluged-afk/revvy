@@ -125,6 +125,8 @@ const T_EN = {
   dmPickHint:"Pick a study set from your library.", dmNoSets:"No study sets yet. Make a quiz first, then you can share it.",
   dmSharedSet:"Shared a study set", dmChallengeLabel:"Challenge", dmPlayChallenge:"Play the challenge",
   dmYourScore:"Your progress", dmTheirScore:"Their progress", dmYourResult:"Your challenge result", dmTheirResult:"Their challenge result",
+  dmYouLabel:"You", dmYouWon:"You won 🏆", dmTheyWon:"{name} won", dmTie:"It's a tie!",
+  dmChalWaiting:"You scored {s}/{n} · {p}%. Waiting for {name} to play…",
   rankUpLabel:"Rank up!", rankUpSub:"You've leveled up. Keep climbing.", dayStreakLabel:"day streak",
   notifOnTitle:"Reminders on", notifOnBody:"We'll nudge you to keep your streak and review what's due.",
   notifStudyTime:"Time to study", notifStreakTitle:"Keep your streak alive",

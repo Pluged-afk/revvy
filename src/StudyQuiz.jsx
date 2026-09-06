@@ -2577,11 +2577,13 @@ export default function StudyQuiz() {
           if (r && r.ok && !r.pending) srs.recordChallengeResult(!!r.won);
         })();
       }
-      // A friend challenge: send the run's score back to that friend as a DM.
+      // A friend challenge: record this run's score against the challenge
+      // (play-once, server-deduped) so both friends' scores can be compared and
+      // a winner shown once both have played.
       if (dmChallengeRef.current) {
         const dc = dmChallengeRef.current; dmChallengeRef.current = null;
         const c = answers.filter((a) => a && a.isCorrect).length, n = answers.length;
-        socialApi("dmSend", { friendId: dc.friendId, kind: "score", body: dc.title || "", data: { title: dc.title || "", score: c, total: n, pct: n ? Math.round((c / n) * 100) : 0 } });
+        if (dc.challengeId) socialApi("dmChallengeSubmit", { challengeId: dc.challengeId, score: c, total: n });
       }
       srs.recordTopics(quiz.questions.map((q, i) => ({ topic: q.topic, correct: answers[i]?.isCorrect === true })));
       // Adaptive difficulty: log this round only if it was a fresh, difficulty-
@@ -3824,7 +3826,7 @@ export default function StudyQuiz() {
   const [dmMsgs, setDmMsgs] = useState([]);
   const [dmInput, setDmInput] = useState("");
   const [dmSharePick, setDmSharePick] = useState(false); // library picker open
-  const dmChallengeRef = useRef(null); // {friendId, title} → auto-reply a score on results
+  const dmChallengeRef = useRef(null); // {challengeId, friendId, title} → record score on results
   const [socialErr, setSocialErr] = useState("");
   const [friendInput, setFriendInput] = useState("");
   const [friendMsg, setFriendMsg] = useState("");
@@ -3995,7 +3997,7 @@ export default function StudyQuiz() {
       }
       if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
       genBlocksRef.current = blocks;
-      dmChallengeRef.current = opts.challenge && opts.friendId ? { friendId: opts.friendId, title: data.title || "" } : null;
+      dmChallengeRef.current = opts.challenge && opts.challengeId ? { challengeId: opts.challengeId, friendId: opts.friendId, title: data.title || "" } : null;
       setQuiz({ title: `${data.title || (t.friendWord || "Friend")} · ${opts.challenge ? (t.challengeWord || "Challenge") : (t.friendWord || "Friend")}`, subject: data.subject || "", questions: res.questions.slice(0, n), type: "mcq", fresh: !opts.challenge, genDiff: diff });
       setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
       setScreen("quiz");
@@ -5896,9 +5898,36 @@ export default function StudyQuiz() {
                 <div style={{fontSize:11,fontWeight:800,letterSpacing:.4,textTransform:"uppercase",color:isChal?"#a3762b":"var(--color-accent)",marginBottom:4,display:"inline-flex",alignItems:"center",gap:5}}><Icon name={isChal?"trophy":"layers"} size={12}/>{isChal?(t.dmChallengeLabel||"Challenge"):(t.dmSharedSet||"Shared a study set")}</div>
                 <div style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)"}}>{d.title||m.body}</div>
                 {d.subject&&<div style={{fontSize:11.5,color:"var(--color-text-tertiary)",marginTop:1}}>{d.subject}</div>}
-                {isChal
-                  ? (!m.mine && <button onClick={()=>quizFromDM(d,{challenge:true,friendId:activeDM.friendId})} style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:12.5,background:"#a3762b",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="bolt" size={14}/>{t.dmPlayChallenge||"Play the challenge"}</button>)
-                  : <button onClick={()=>quizFromDM(d)} style={{...Sb.btnOutline,width:"100%",marginTop:10,fontSize:12.5,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="bolt" size={14}/>{t.quizThis||"Quiz me on this"}</button>}
+                {isChal ? (()=>{
+                  const rz=m.results||{}, nm=activeDM.username;
+                  // Both friends played → show the head-to-head + who won.
+                  if (rz.complete && rz.mine && rz.theirs) {
+                    const win=rz.winner, mineWon=win==="me";
+                    const banner=win==="tie"?(t.dmTie||"It's a tie!"):mineWon?(t.dmYouWon||"You won 🏆"):(t.dmTheyWon||"{name} won").replace("{name}",nm);
+                    const bg=win==="tie"?"var(--color-background-secondary)":mineWon?"rgba(34,197,94,0.15)":"rgba(148,163,184,0.15)";
+                    const fg=win==="tie"?"var(--color-text-secondary)":mineWon?"#16a34a":"var(--color-text-secondary)";
+                    return (
+                      <div style={{marginTop:10}}>
+                        <div style={{display:"flex",gap:8}}>
+                          {[{lbl:t.dmYouLabel||"You",r:rz.mine,hi:mineWon},{lbl:nm,r:rz.theirs,hi:win==="them"}].map((s,i)=>(
+                            <div key={i} style={{flex:1,textAlign:"center",background:s.hi?"rgba(163,118,43,0.14)":"var(--color-background-secondary)",border:"1px solid "+(s.hi?"#a3762b":"var(--color-border-secondary)"),borderRadius:10,padding:"9px 6px",minWidth:0}}>
+                              <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.3,textTransform:"uppercase",color:"var(--color-text-tertiary)",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.lbl}</div>
+                              <div style={{fontSize:16,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{s.r.score}/{s.r.total}</div>
+                              <div style={{fontSize:11.5,color:"var(--color-text-secondary)"}}>{s.r.pct}%</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{marginTop:8,textAlign:"center",fontSize:12.5,fontWeight:800,color:fg,background:bg,borderRadius:9,padding:"7px 10px"}}>{banner}</div>
+                      </div>
+                    );
+                  }
+                  // I've played, waiting on my friend.
+                  if (rz.iPlayed && rz.mine) return (
+                    <div style={{marginTop:10,fontSize:12,color:"var(--color-text-secondary)",background:"var(--color-background-secondary)",borderRadius:10,padding:"9px 11px",lineHeight:1.45}}>{(t.dmChalWaiting||"You scored {s}/{n} · {p}%. Waiting for {name} to play…").replace("{s}",rz.mine.score).replace("{n}",rz.mine.total).replace("{p}",rz.mine.pct).replace("{name}",nm)}</div>
+                  );
+                  // Haven't played yet (either friend can) → play once.
+                  return <button onClick={()=>quizFromDM(d,{challenge:true,friendId:activeDM.friendId,challengeId:m.id})} style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:12.5,background:"#a3762b",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="bolt" size={14}/>{t.dmPlayChallenge||"Play the challenge"}</button>;
+                })() : <button onClick={()=>quizFromDM(d)} style={{...Sb.btnOutline,width:"100%",marginTop:10,fontSize:12.5,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="bolt" size={14}/>{t.quizThis||"Quiz me on this"}</button>}
               </div>
             );
           }) : <div style={{textAlign:"center",color:"var(--color-text-tertiary)",fontSize:12.5,padding:"28px 0",lineHeight:1.6}}>{t.dmEmpty||"No messages yet. Say hi, share a study set, or challenge them."}</div>}
