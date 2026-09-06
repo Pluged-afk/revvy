@@ -60,16 +60,20 @@ function Medallion({ color = "#4f46e5", size = 38, children }) {
 // counts. Split by category so the pop-ups + toggles can target each type.
 function computeUnread(data, seen) {
   const s = seen || {};
-  if (!data) return { friends: 0, msg: 0, chal: 0, total: 0, byGroup: {} };
+  if (!data) return { friends: 0, msg: 0, chal: 0, total: 0, byGroup: {}, byFriend: {} };
   const friends = Math.max(0, (data.friendReqs || 0) - (s.friendReqs || 0));
-  let msg = 0, chal = 0; const byGroup = {};
+  let msg = 0, chal = 0; const byGroup = {}, byFriend = {};
   for (const g of data.groups || []) {
     const sg = (s.g && s.g[g.id]) || { m: 0, c: 0 };
     const m = Math.max(0, (g.msg || 0) - (sg.m || 0));
     const c = Math.max(0, (g.chal || 0) - (sg.c || 0));
     msg += m; chal += c; byGroup[g.id] = { m, c };
   }
-  return { friends, msg, chal, total: friends + msg + chal, byGroup };
+  for (const d of data.dms || []) {
+    const dm = Math.max(0, (d.msg || 0) - ((s.f && s.f[d.id]) || 0));
+    msg += dm; byFriend[d.id] = dm;
+  }
+  return { friends, msg, chal, total: friends + msg + chal, byGroup, byFriend };
 }
 // A small red count bubble for unread notifications.
 function NotifBubble({ n, style }) {
@@ -2573,6 +2577,12 @@ export default function StudyQuiz() {
           if (r && r.ok && !r.pending) srs.recordChallengeResult(!!r.won);
         })();
       }
+      // A friend challenge: send the run's score back to that friend as a DM.
+      if (dmChallengeRef.current) {
+        const dc = dmChallengeRef.current; dmChallengeRef.current = null;
+        const c = answers.filter((a) => a && a.isCorrect).length, n = answers.length;
+        socialApi("dmSend", { friendId: dc.friendId, kind: "score", body: dc.title || "", data: { title: dc.title || "", score: c, total: n, pct: n ? Math.round((c / n) * 100) : 0 } });
+      }
       srs.recordTopics(quiz.questions.map((q, i) => ({ topic: q.topic, correct: answers[i]?.isCorrect === true })));
       // Adaptive difficulty: log this round only if it was a fresh, difficulty-
       // calibrated set (not a fix-your-misses re-drill or a retry of seen
@@ -3809,6 +3819,12 @@ export default function StudyQuiz() {
   const [notifData, setNotifData] = useState(null);
   const [notifToast, setNotifToast] = useState(null); // {text} for a transient pop-up
   const notifPrevRef = useRef(null);
+  // Friend direct messages
+  const [activeDM, setActiveDM] = useState(null); // {friendId, username}
+  const [dmMsgs, setDmMsgs] = useState([]);
+  const [dmInput, setDmInput] = useState("");
+  const [dmSharePick, setDmSharePick] = useState(false); // library picker open
+  const dmChallengeRef = useRef(null); // {friendId, title} → auto-reply a score on results
   const [socialErr, setSocialErr] = useState("");
   const [friendInput, setFriendInput] = useState("");
   const [friendMsg, setFriendMsg] = useState("");
@@ -3935,6 +3951,60 @@ export default function StudyQuiz() {
       setScreen("quiz");
     } catch (err) { setError(err.message?.includes("parse") ? t.errAiFormat : err.message); setScreen("group"); }
   }, [requireLogin, activeGroup, consumeQuestions, isPro, diff, lang, t]);
+
+  // ── Friend direct messages ───────────────────────────────────────────────
+  const loadDM = useCallback(async (friendId) => {
+    const r = await socialApi("dmThread", { friendId });
+    if (r && !r.error) setDmMsgs(r.messages || []);
+  }, []);
+  const openDM = useCallback((friend) => {
+    if (requireLogin()) return;
+    setActiveDM({ friendId: friend.userId, username: friend.username, rank: friend.rank, badge: friend.badge, xp: friend.xp });
+    setDmMsgs([]); setDmInput(""); setDmSharePick(false); setScreen("dm");
+    loadDM(friend.userId);
+  }, [requireLogin, loadDM]);
+  const sendDM = useCallback(async (payload) => {
+    const fid = activeDM?.friendId; if (!fid) return;
+    const r = await socialApi("dmSend", { friendId: fid, ...payload });
+    if (r && r.ok) loadDM(fid); else if (r?.error) setSocialErr(r.error);
+  }, [activeDM, loadDM]);
+  const sendDMText = useCallback(() => {
+    const txt = dmInput.trim(); if (!txt) return;
+    setDmInput(""); sendDM({ kind: "text", body: txt });
+  }, [dmInput, sendDM]);
+  // Send a snapshot of my rank / streak / accuracy.
+  const shareScoreToDM = useCallback(() => {
+    sendDM({ kind: "score", body: "", data: { rank: myRankInfo.index, xp: myRankInfo.xp, streak: stats.streak || 0, accuracy: stats.accuracy ?? null } });
+  }, [sendDM, myRankInfo, stats]);
+  // Generate a quiz from a shared study set (a friend's material, or a challenge).
+  // For a challenge the run's score is auto-sent back to that friend on results.
+  const quizFromDM = useCallback(async (data, opts = {}) => {
+    if (!data?.summary) { setSocialErr(t.groupNoMaterial || "Nothing to quiz on here."); return; }
+    const n = 10;
+    const consumed = await consumeQuestions(n);
+    if (consumed && consumed.allowed === false) { setError(isPro ? "Daily limit reached." : "Daily limit reached. Watch an ad or upgrade."); setScreen("upload"); return; }
+    setScreen("loading");
+    try {
+      const blocks = [{ type: "text", text: `${data.title || ""}${data.subject ? " (" + data.subject + ")" : ""}\n\n${data.summary}` }];
+      let res = null, lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { const r = await callClaude({ blocks, numQ: n, diff, type: "mcq", uiLangName: LANGS[lang]?.name }); if (r?.questions?.length) { res = r; break; } }
+        catch (e) { lastErr = e; }
+      }
+      if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
+      genBlocksRef.current = blocks;
+      dmChallengeRef.current = opts.challenge && opts.friendId ? { friendId: opts.friendId, title: data.title || "" } : null;
+      setQuiz({ title: `${data.title || (t.friendWord || "Friend")} · ${opts.challenge ? (t.challengeWord || "Challenge") : (t.friendWord || "Friend")}`, subject: data.subject || "", questions: res.questions.slice(0, n), type: "mcq", fresh: !opts.challenge, genDiff: diff });
+      setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
+      setScreen("quiz");
+    } catch (err) { setError(err.message?.includes("parse") ? t.errAiFormat : err.message); setScreen("dm"); }
+  }, [consumeQuestions, isPro, diff, lang, t]);
+  // Poll the open DM thread so replies appear live.
+  useEffect(() => {
+    if (screen !== "dm" || !activeDM) return;
+    const id = setInterval(() => loadDM(activeDM.friendId), 4000);
+    return () => clearInterval(id);
+  }, [screen, activeDM, loadDM]);
   // Invite links land at /app?join=CODE: once signed in, join that group and open it.
   useEffect(() => {
     if (joinHandledRef.current || !user) return;
@@ -4177,6 +4247,13 @@ export default function StudyQuiz() {
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, activeGroup, notifData]);
+  useEffect(() => {
+    if (screen !== "dm" || !activeDM || !notifData) return;
+    const d = (notifData.dms || []).find((x) => x.id === activeDM.friendId); if (!d) return;
+    const id = setTimeout(() => srs.markNotifSeen({ f: { [activeDM.friendId]: d.msg } }), 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, activeDM, notifData]);
   const myRankInfo = useMemo(() => rankOf({ stats: srs.stats }), [srs.stats]);
   const badgeEval = useMemo(() => evaluateBadges({ stats: srs.stats, mockScores: srs.mockScores, badges: srs.badges }), [srs.stats, srs.mockScores, srs.badges]);
   const earnedBadgeCount = badgeEval.earnedIds.length;
@@ -5734,10 +5811,20 @@ export default function StudyQuiz() {
         {/* Friends */}
         <p style={Sb.secLabel}>{(t.friendsWord||"Friends")}{social?.friends?.length?` (${social.friends.length})`:""}</p>
         {social?.friends?.length ? social.friends.map(f=>(
-          <div key={f.userId} style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 12px",marginBottom:8}}>
-            <AvatarInitial name={f.username} size={30}/>
-            <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.username}</span>
-            <button onClick={()=>doRemoveFriend(f.userId)} style={{background:"none",color:"var(--color-text-tertiary)",border:"none",fontSize:12,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:2}}>{t.removeWord||"Remove"}</button>
+          <div key={f.userId} onClick={()=>openDM(f)} style={{display:"flex",alignItems:"center",gap:11,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}>
+            <AvatarInitial name={f.username} size={34}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                <span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.username}</span>
+                <Flair rank={f.rank} badge={f.badge} t={t} small/>
+              </div>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:1,display:"inline-flex",alignItems:"center",gap:7}}>
+                {f.xp!=null && <span style={{fontFamily:"monospace",fontWeight:700}}>{Number(f.xp).toLocaleString()} XP</span>}
+                <span style={{color:"var(--color-accent)",fontWeight:600}}>{t.dmMessageWord||"Message"} ›</span>
+              </div>
+            </div>
+            <NotifBubble n={unread.byFriend[f.userId]||0}/>
+            <button onClick={(e)=>{e.stopPropagation();doRemoveFriend(f.userId);}} style={{flexShrink:0,background:"none",color:"var(--color-text-tertiary)",border:"none",fontSize:12,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:2}}>{t.removeWord||"Remove"}</button>
           </div>
         )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)",marginBottom:8}}>{t.noFriends||"No friends yet. Add someone by their username above."}</div>}
         </>)}
@@ -5768,6 +5855,77 @@ export default function StudyQuiz() {
         </>)}
       </div>
       {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} t={t}/>}
+    </div>
+  );
+
+  if (screen==="dm" && activeDM) return (
+    <div style={Sb.root}><style>{CSS}</style>
+      <AdBanners isPro={isPro}/>
+      {notifToastEl}
+      <div style={Sb.topbar} className="rv-topbar">
+        <button style={Sb.backBtn} onClick={()=>{setScreen("social");loadSocial();}}>← {t.backWord}</button>
+        <span style={{fontSize:12.5,fontWeight:700,color:"var(--color-text-primary)",display:"inline-flex",alignItems:"center",gap:6,minWidth:0}}>{activeDM.username}<Flair rank={activeDM.rank} badge={activeDM.badge} t={t} small/></span>
+        <span/>
+      </div>
+      <div className="rv-center-narrow" style={{padding:"14px 16px 20px",display:"flex",flexDirection:"column",minHeight:"calc(100vh - 130px)"}}>
+        {socialErr && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:12}}>{socialErr}</div>}
+        <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
+          {dmMsgs.length ? dmMsgs.map(m=>{
+            if (m.kind==="text") return (
+              <div key={m.id} style={{alignSelf:m.mine?"flex-end":"flex-start",maxWidth:"82%"}}>
+                <div style={{background:m.mine?"var(--color-accent)":"var(--color-background-secondary)",color:m.mine?"#fff":"var(--color-text-primary)",borderRadius:14,padding:"8px 12px",fontSize:13.5,lineHeight:1.4,wordBreak:"break-word"}}>{m.body}</div>
+              </div>
+            );
+            if (m.kind==="score") { const d=m.data||{}; const isResult=d.total>0; return (
+              <div key={m.id} style={{alignSelf:m.mine?"flex-end":"flex-start",maxWidth:"88%",background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"12px 14px"}}>
+                <div style={{fontSize:11,fontWeight:800,letterSpacing:.4,textTransform:"uppercase",color:"var(--color-text-tertiary)",marginBottom:6}}>{isResult?(m.mine?(t.dmYourResult||"Your challenge result"):(t.dmTheirResult||"Their challenge result")):(m.mine?(t.dmYourScore||"Your progress"):(t.dmTheirScore||"Their progress"))}</div>
+                {isResult && <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:6}}>{d.title}</div>}
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  {isResult && <span style={{fontSize:16,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{d.score}/{d.total} · {d.pct}%</span>}
+                  <RankPill index={d.rank} t={t} small/>
+                  {d.streak>0 && <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:12.5,fontWeight:700,color:"#f97316"}}>🔥 {d.streak}</span>}
+                  {d.accuracy!=null && <span style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{d.accuracy}% {t.accuracyLbl||"accuracy"}</span>}
+                  {d.xp!=null && <span style={{fontSize:12.5,fontFamily:"monospace",fontWeight:700,color:"var(--color-accent)"}}>{Number(d.xp).toLocaleString()} XP</span>}
+                </div>
+              </div>
+            ); }
+            const d=m.data||{}, isChal=m.kind==="challenge";
+            return (
+              <div key={m.id} style={{alignSelf:m.mine?"flex-end":"flex-start",maxWidth:"88%",background:"var(--color-background-primary)",border:"1px solid "+(isChal?"#a3762b":"var(--color-border-secondary)"),borderRadius:14,padding:"12px 14px"}}>
+                <div style={{fontSize:11,fontWeight:800,letterSpacing:.4,textTransform:"uppercase",color:isChal?"#a3762b":"var(--color-accent)",marginBottom:4,display:"inline-flex",alignItems:"center",gap:5}}><Icon name={isChal?"trophy":"layers"} size={12}/>{isChal?(t.dmChallengeLabel||"Challenge"):(t.dmSharedSet||"Shared a study set")}</div>
+                <div style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)"}}>{d.title||m.body}</div>
+                {d.subject&&<div style={{fontSize:11.5,color:"var(--color-text-tertiary)",marginTop:1}}>{d.subject}</div>}
+                {isChal
+                  ? (!m.mine && <button onClick={()=>quizFromDM(d,{challenge:true,friendId:activeDM.friendId})} style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:12.5,background:"#a3762b",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="bolt" size={14}/>{t.dmPlayChallenge||"Play the challenge"}</button>)
+                  : <button onClick={()=>quizFromDM(d)} style={{...Sb.btnOutline,width:"100%",marginTop:10,fontSize:12.5,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="bolt" size={14}/>{t.quizThis||"Quiz me on this"}</button>}
+              </div>
+            );
+          }) : <div style={{textAlign:"center",color:"var(--color-text-tertiary)",fontSize:12.5,padding:"28px 0",lineHeight:1.6}}>{t.dmEmpty||"No messages yet. Say hi, share a study set, or challenge them."}</div>}
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+          <button onClick={()=>setDmSharePick("material")} style={{...Sb.btnOutline,fontSize:12,flex:1,minWidth:100,padding:"9px 10px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="layers" size={14}/>{t.dmShareSet||"Share a set"}</button>
+          <button onClick={()=>setDmSharePick("challenge")} style={{...Sb.btnOutline,fontSize:12,flex:1,minWidth:100,padding:"9px 10px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="trophy" size={14}/>{t.dmChallenge||"Challenge"}</button>
+          <button onClick={shareScoreToDM} style={{...Sb.btnOutline,fontSize:12,flex:1,minWidth:100,padding:"9px 10px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Icon name="spark" size={14}/>{t.dmShareScore||"Share score"}</button>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <input value={dmInput} onChange={e=>setDmInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendDMText();}} placeholder={t.dmPlaceholder||"Message"} maxLength={2000} style={{flex:1,minWidth:0,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+          <button onClick={sendDMText} disabled={!dmInput.trim()} style={{...Sb.btnPrimary,padding:"0 16px",fontSize:13,opacity:dmInput.trim()?1:0.45}}>{t.sendWord||"Send"}</button>
+        </div>
+      </div>
+      {dmSharePick && (
+        <div style={{position:"fixed",inset:0,zIndex:650,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setDmSharePick(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:"18px 18px 0 0",padding:"18px 16px 24px",width:"100%",maxWidth:520,maxHeight:"70vh",overflowY:"auto"}}>
+            <div style={{fontSize:15,fontWeight:800,color:"var(--color-text-primary)",marginBottom:3}}>{dmSharePick==="challenge"?(t.dmPickChallenge||"Challenge them on which set?"):(t.dmPickShare||"Share which set?")}</div>
+            <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:12}}>{t.dmPickHint||"Pick a study set from your library."}</div>
+            {srs.library.docs.length ? srs.library.docs.map(d=>(
+              <button key={d.id} onClick={()=>{ sendDM({kind:dmSharePick, body:d.title, data:{title:d.title, subject:d.subject||"", summary:d.summary||""}}); setDmSharePick(false); }} style={{width:"100%",textAlign:"left",background:"var(--color-background-secondary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px 13px",marginBottom:8,cursor:"pointer",fontFamily:"inherit"}}>
+                <div style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)"}}>{d.title}</div>
+                {d.subject&&<div style={{fontSize:11.5,color:"var(--color-text-tertiary)"}}>{d.subject}</div>}
+              </button>
+            )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)",padding:"10px 0"}}>{t.dmNoSets||"No study sets yet. Make a quiz first, then you can share it."}</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 

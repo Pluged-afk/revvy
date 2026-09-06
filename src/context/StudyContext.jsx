@@ -80,10 +80,13 @@ function normNotif(n) {
   const g = (s.g && typeof s.g === "object") ? s.g : {};
   const cleanG = {};
   for (const [k, v] of Object.entries(g)) cleanG[String(k)] = { m: Math.max(0, Math.round(Number(v?.m) || 0)), c: Math.max(0, Math.round(Number(v?.c) || 0)) };
+  const f = (s.f && typeof s.f === "object") ? s.f : {};
+  const cleanF = {};
+  for (const [k, v] of Object.entries(f)) cleanF[String(k)] = Math.max(0, Math.round(Number(v) || 0));
   return {
-    seen: { friendReqs: Math.max(0, Math.round(Number(s.friendReqs) || 0)), g: cleanG },
+    seen: { friendReqs: Math.max(0, Math.round(Number(s.friendReqs) || 0)), g: cleanG, f: cleanF },
     req: n.req !== false, // pop-ups for friend/challenge requests (default on)
-    msg: n.msg !== false, // pop-ups for group messages (default on)
+    msg: n.msg !== false, // pop-ups for group + direct messages (default on)
   };
 }
 function emptyData() {
@@ -265,8 +268,10 @@ function mergeNotif(a, b) {
   for (const k of new Set([...Object.keys(A.seen.g), ...Object.keys(B.seen.g)])) {
     g[k] = { m: Math.max(A.seen.g[k]?.m || 0, B.seen.g[k]?.m || 0), c: Math.max(A.seen.g[k]?.c || 0, B.seen.g[k]?.c || 0) };
   }
+  const f = {};
+  for (const k of new Set([...Object.keys(A.seen.f), ...Object.keys(B.seen.f)])) f[k] = Math.max(A.seen.f[k] || 0, B.seen.f[k] || 0);
   return {
-    seen: { friendReqs: Math.max(A.seen.friendReqs, B.seen.friendReqs), g },
+    seen: { friendReqs: Math.max(A.seen.friendReqs, B.seen.friendReqs), g, f },
     req: A.req !== false && B.req !== false,
     msg: A.msg !== false && B.msg !== false,
   };
@@ -528,12 +533,13 @@ export function StudyProvider({ children }) {
     if (!patch) return;
     commit((p) => {
       const n = normNotif(p.notif);
-      const seen = { friendReqs: n.seen.friendReqs, g: { ...n.seen.g } };
+      const seen = { friendReqs: n.seen.friendReqs, g: { ...n.seen.g }, f: { ...n.seen.f } };
       if (typeof patch.friendReqs === "number") seen.friendReqs = Math.max(seen.friendReqs, Math.round(patch.friendReqs));
       if (patch.g) for (const [k, v] of Object.entries(patch.g)) {
         const cur = seen.g[k] || { m: 0, c: 0 };
         seen.g[k] = { m: typeof v.m === "number" ? Math.max(cur.m, Math.round(v.m)) : cur.m, c: typeof v.c === "number" ? Math.max(cur.c, Math.round(v.c)) : cur.c };
       }
+      if (patch.f) for (const [k, v] of Object.entries(patch.f)) seen.f[k] = Math.max(seen.f[k] || 0, Math.round(Number(v) || 0));
       return { ...p, notif: { ...n, seen } };
     });
   }, [commit]);

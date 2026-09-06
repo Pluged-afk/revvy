@@ -146,6 +146,18 @@ function ensureTables() {
         text          TEXT        NOT NULL,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
+      // 1:1 friend direct messages. `kind` carries text OR a shared payload:
+      // 'text' | 'material' (a study set to quiz on) | 'score' (a result/brag
+      // card) | 'challenge' (a fixed quiz set the friend plays). `data` is JSONB.
+      sql`CREATE TABLE IF NOT EXISTS friend_messages (
+        id         BIGSERIAL   PRIMARY KEY,
+        sender     TEXT        NOT NULL,
+        recipient  TEXT        NOT NULL,
+        kind       TEXT        NOT NULL DEFAULT 'text',
+        body       TEXT        NOT NULL DEFAULT '',
+        data       JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
       // Collective rewards: when the group levels up its shared goal, every member
       // gets a claimable reward (added to their personal power-up wallet). One row
       // per (group, member, level) so a level is only ever rewarded once each.
@@ -182,6 +194,8 @@ function ensureTables() {
       .then(() => sql`ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 1`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS arena_board ON arena_score (best_score DESC)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS friend_msg_thread ON friend_messages (sender, recipient, id)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS friend_msg_inbox ON friend_messages (recipient, sender)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS gk_pool_diff ON gk_pool (difficulty)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS friendships_addr ON friendships (addressee, status)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS friendships_req ON friendships (requester, status)`)
@@ -581,13 +595,13 @@ async function usernamesFor(ids) {
 // so both rank and badge are suppressed. rank 0 (Novice) is a real, shown tier.
 function publicRank(r) { const n = r && r.rank; return (n == null || Number(n) < 0) ? null : Number(n); }
 function publicBadge(r) { return publicRank(r) == null ? null : (r.equipped_badge || null); }
-// Map clerk ids -> their public {badge, rank} for leaderboards/standings.
+// Map clerk ids -> their public {badge, rank, xp} for leaderboards/standings.
 async function flairFor(ids) {
   if (!ids.length) return {};
-  const rows = await sql`SELECT COALESCE(clerk_user_id, id) AS uid, equipped_badge, rank FROM profiles
+  const rows = await sql`SELECT COALESCE(clerk_user_id, id) AS uid, equipped_badge, rank, xp FROM profiles
                          WHERE clerk_user_id = ANY(${ids}::text[]) OR id = ANY(${ids}::text[])`;
   const out = {};
-  for (const r of rows) if (r.uid) out[r.uid] = { badge: publicBadge(r), rank: publicRank(r) };
+  for (const r of rows) if (r.uid) out[r.uid] = { badge: publicBadge(r), rank: publicRank(r), xp: publicRank(r) == null ? null : (r.xp == null ? null : Number(r.xp)) };
   return out;
 }
 // POST action=setBadge: mirror the caller's equipped badge + rank tier onto their
@@ -686,8 +700,42 @@ async function socialOverview(req, res, me) {
     else outgoing.push({ id: Number(r.id), userId: r.addressee, username: nameOf(r.addressee) });
   }
   friends.sort((a, b) => a.username.localeCompare(b.username));
+  // Attach each friend's public rank tier + XP + equipped badge for the list.
+  const fflair = await flairFor(friends.map((f) => f.userId));
+  friends.forEach((f) => { const x = fflair[f.userId] || {}; f.rank = x.rank ?? null; f.badge = x.badge || null; f.xp = x.xp ?? null; });
   const groups = grpRows.map((g) => ({ id: Number(g.id), name: g.name, members: Number(g.members), isOwner: g.owner === me }));
   return res.status(200).json({ friends, incoming, outgoing, groups });
+}
+
+// ── Friend direct messages (text / shared material / score / challenge) ──────
+async function areFriends(me, them) {
+  if (!them || them === me) return false;
+  return (await sql`SELECT 1 FROM friendships WHERE status='accepted' AND ((requester=${me} AND addressee=${them}) OR (requester=${them} AND addressee=${me})) LIMIT 1`).length > 0;
+}
+const DM_KINDS = new Set(["text", "material", "score", "challenge"]);
+async function dmSend(req, res, body, me) {
+  const them = clean(body.friendId, 60);
+  if (!them) return res.status(400).json({ error: "Bad request." });
+  if (!(await areFriends(me, them))) return res.status(403).json({ error: "You can only message your friends." });
+  const kind = DM_KINDS.has(body.kind) ? body.kind : "text";
+  const bodyText = clean(body.body || "", 2000);
+  let data = null;
+  if (body.data && typeof body.data === "object") { const json = JSON.stringify(body.data); if (json.length <= 60000) data = body.data; }
+  if (kind === "text" && !bodyText) return res.status(400).json({ error: "Say something." });
+  const row = (await sql`INSERT INTO friend_messages (sender, recipient, kind, body, data)
+    VALUES (${me}, ${them}, ${kind}, ${bodyText}, ${data ? JSON.stringify(data) : null}::jsonb) RETURNING id`)[0];
+  return res.status(200).json({ ok: true, id: Number(row.id) });
+}
+async function dmThread(req, res, body, me) {
+  const them = clean(body.friendId, 60);
+  if (!them) return res.status(400).json({ error: "Bad request." });
+  if (!(await areFriends(me, them))) return res.status(403).json({ error: "You're not friends." });
+  const rows = await sql`SELECT id, sender, kind, body, data, created_at FROM friend_messages
+    WHERE (sender=${me} AND recipient=${them}) OR (sender=${them} AND recipient=${me})
+    ORDER BY id ASC LIMIT 300`;
+  const name = (await usernamesFor([them]))[them] || "friend";
+  return res.status(200).json({ friendId: them, username: name,
+    messages: rows.map((r) => ({ id: Number(r.id), mine: r.sender === me, kind: r.kind, body: r.body, data: r.data || null, at: r.created_at })) });
 }
 
 // Lightweight notification summary for background polling: how many incoming
@@ -705,7 +753,10 @@ async function notifications(req, res, me) {
     const cMap = Object.fromEntries(chals.map((r) => [Number(r.group_id), r.n]));
     groups = gids.map((id) => ({ id, msg: mMap[id] || 0, chal: cMap[id] || 0 }));
   }
-  return res.status(200).json({ friendReqs, groups });
+  // Per-friend direct-message totals received (client diffs vs its seen counts).
+  const dmRows = await sql`SELECT sender, COUNT(*)::int AS n FROM friend_messages WHERE recipient=${me} GROUP BY sender`;
+  const dms = dmRows.map((r) => ({ id: r.sender, msg: r.n }));
+  return res.status(200).json({ friendReqs, groups, dms });
 }
 
 async function groupCreate(req, res, body, me) {
@@ -1020,6 +1071,8 @@ export default async function handler(req, res) {
       // Friends + study groups
       if (body?.action === "social") return socialOverview(req, res, userId);
       if (body?.action === "notifications") return notifications(req, res, userId);
+      if (body?.action === "dmSend") return dmSend(req, res, body, userId);
+      if (body?.action === "dmThread") return dmThread(req, res, body, userId);
       if (body?.action === "friendAdd") return friendAdd(req, res, body, userId);
       if (body?.action === "friendRespond") return friendRespond(req, res, body, userId);
       if (body?.action === "friendRemove") return friendRemove(req, res, body, userId);
