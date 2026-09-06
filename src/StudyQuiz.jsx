@@ -321,8 +321,8 @@ const SoundEngine = (() => {
     rankUp:    ()=>[[523,0],[659,.1],[784,.2],[1047,.32],[1319,.46],[1568,.60]].forEach(([f,d])=>tone(f,'triangle',0.22,0.24,d)),
     // A rising "streak" flare that gets hotter (higher, brighter) with the count.
     streak:    (lvl=1)=>{ const n=Math.min(Math.max(lvl,1),30); const base=380+n*22; tone(base,'sine',0.09,0.16); tone(base*1.33,'sine',0.11,0.15,0.06); tone(base*1.66,'triangle',0.12,0.13,0.12); },
-    // A soft chime for a new social notification (friend request / message / challenge).
-    ping:      ()=>{ tone(880,'sine',0.08,0.13); tone(1175,'sine',0.10,0.12,0.07); },
+    // A clear chime for a new social notification (friend request / message / challenge).
+    ping:      ()=>{ tone(784,'sine',0.11,0.28); tone(1047,'sine',0.13,0.26,0.09); tone(1319,'sine',0.15,0.22,0.18); },
     setVolume:(v)=>{ if(master) master.gain.value = Math.max(0,Math.min(1,v/100)); },
     setEnabled:(v)=>{ enabled = !!v; },
   };
@@ -1719,7 +1719,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
   };
   if (!draft) return null;
   const DEFAULTS = {theme:'system',fontSize:'medium',animations:true,sound:true,
-    volume:70,haptics:false,feedback:'immediate',autoAdvance:false,autoAdvanceSec:5,defaultDiff:1,defaultQCount:10};
+    volume:70,notifSound:true,haptics:false,feedback:'immediate',autoAdvance:false,autoAdvanceSec:5,defaultDiff:1,defaultQCount:10};
   return (
     <div style={{position:"fixed",inset:0,zIndex:600,display:"flex",pointerEvents:"all"}}>
       <div onClick={onCancel} style={{flex:1,background:"rgba(0,0,0,0.45)",backdropFilter:"blur(1px)"}}/>
@@ -1911,6 +1911,9 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 style={{flex:1,accentColor:"#4f46e5",cursor:draft.sound?"pointer":"not-allowed",opacity:draft.sound?1:0.4}}/>
               <Icon name="volume" size={17} style={{color:"var(--color-text-secondary)",flexShrink:0}}/>
             </div>
+          </SettingRow>
+          <SettingRow label={s.notifSounds||"Notification sounds"} desc={!draft.sound?(s.volumeNeedSound||"Turn on sound effects first."):(s.notifSoundsDesc||"Play a chime for friend requests, messages and challenges.")} last>
+            <Toggle on={draft.notifSound!==false} onChange={v=>update("notifSound",v)}/>
           </SettingRow>
 
           <SectionLabel label={s.secHaptics}/>
@@ -2638,6 +2641,7 @@ export default function StudyQuiz() {
     animations:true,
     sound:true,
     volume:70,
+    notifSound:true,
     haptics:false,
     feedback:'immediate',
     autoAdvance:false,
@@ -4141,7 +4145,7 @@ export default function StudyQuiz() {
     if (msgOn && dM > 0) parts.push((t.notifNewMsg || "{n} new message{s}").replace("{n}", dM).replace("{s}", dM > 1 ? "s" : ""));
     if (!parts.length) return;
     const txt = parts.join(" · ");
-    const id = setTimeout(() => { setNotifToast({ text: txt }); SoundEngine.ping(); }, 0);
+    const id = setTimeout(() => { setNotifToast({ text: txt }); if (settings.notifSound !== false) SoundEngine.ping(); }, 0);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unread]);
@@ -5717,7 +5721,7 @@ export default function StudyQuiz() {
                 <AvatarInitial name={r.username} size={30}/>
                 <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.username}</span>
                 <button onClick={()=>doRespondFriend(r.id,true)} style={{background:"var(--color-accent)",color:"#fff",border:"none",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.acceptWord||"Accept"}</button>
-                <button onClick={()=>doRespondFriend(r.id,false)} style={{background:"none",color:"var(--color-text-tertiary)",border:"none",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>{t.declineWord||"Decline"}</button>
+                <button onClick={()=>doRespondFriend(r.id,false)} style={{background:"rgba(239,68,68,0.12)",color:"#ef4444",border:"1px solid rgba(239,68,68,0.35)",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.declineWord||"Decline"}</button>
               </div>
             ))}
           </div>

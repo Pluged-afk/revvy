@@ -412,6 +412,7 @@ const T_EN = {
     animations:"Animations", animationsDesc:"Disable for reduced motion",
     soundEffects:"Sound Effects",
     volume:"Volume", volumeNeedSound:"Enable sound first",
+    notifSounds:"Notification sounds", notifSoundsDesc:"Play a chime for friend requests, messages and challenges.",
     vibration:"Vibration", vibrationDesc:"Android only, not available on iOS",
     feedback:"Answer Feedback", feedbackImmediate:"Correct/wrong shown immediately after each pick", feedbackEnd:"All answers revealed only at the final results screen", segInstant:"Instant", segAtEnd:"At End",
     autoAdvance:"Auto-advance", autoAdvanceDesc:"Moves to the next question automatically after you answer",
