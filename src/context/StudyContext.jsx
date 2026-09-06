@@ -72,8 +72,22 @@ function normBadges(b) {
     public: b.public !== false, // default on
   };
 }
+// Social-notification state: last-seen counts (so the unread bubble + pop-ups
+// only fire for genuinely new activity), plus the two per-user pop-up toggles.
+function normNotif(n) {
+  n = (n && typeof n === "object") ? n : {};
+  const s = (n.seen && typeof n.seen === "object") ? n.seen : {};
+  const g = (s.g && typeof s.g === "object") ? s.g : {};
+  const cleanG = {};
+  for (const [k, v] of Object.entries(g)) cleanG[String(k)] = { m: Math.max(0, Math.round(Number(v?.m) || 0)), c: Math.max(0, Math.round(Number(v?.c) || 0)) };
+  return {
+    seen: { friendReqs: Math.max(0, Math.round(Number(s.friendReqs) || 0)), g: cleanG },
+    req: n.req !== false, // pop-ups for friend/challenge requests (default on)
+    msg: n.msg !== false, // pop-ups for group messages (default on)
+  };
+}
 function emptyData() {
-  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), updatedAt: 0 };
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), notif: normNotif({}), updatedAt: 0 };
 }
 const asTopicStats = (t) => (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
 
@@ -205,6 +219,7 @@ function mergeStudy(server, local) {
     streakSavers: Math.max(0, Math.min(SAVER_CAP, Math.max(Number(server.streakSavers) || 0, Number(local.streakSavers) || 0))),
     savedProgress: Math.max(0, Number(server.savedProgress) || 0, Number(local.savedProgress) || 0),
     badges: mergeBadges(server.badges, local.badges),
+    notif: mergeNotif(server.notif, local.notif),
     updatedAt: Date.now(),
   };
 }
@@ -239,6 +254,21 @@ function mergeBadges(a, b) {
     equipped: B.equipped || A.equipped || null,
     seen: [...new Set([...A.seen, ...B.seen])],
     public: A.public !== false && B.public !== false,
+  };
+}
+// Merge notification state: keep the HIGHER seen count per field (never resurface
+// something already seen on another device); a toggle is off if either side has
+// turned it off.
+function mergeNotif(a, b) {
+  const A = normNotif(a), B = normNotif(b);
+  const g = {};
+  for (const k of new Set([...Object.keys(A.seen.g), ...Object.keys(B.seen.g)])) {
+    g[k] = { m: Math.max(A.seen.g[k]?.m || 0, B.seen.g[k]?.m || 0), c: Math.max(A.seen.g[k]?.c || 0, B.seen.g[k]?.c || 0) };
+  }
+  return {
+    seen: { friendReqs: Math.max(A.seen.friendReqs, B.seen.friendReqs), g },
+    req: A.req !== false && B.req !== false,
+    msg: A.msg !== false && B.msg !== false,
   };
 }
 
@@ -491,6 +521,28 @@ export function StudyProvider({ children }) {
     commit((p) => { const b = normBadges(p.badges); return { ...p, badges: { ...b, seen: [...new Set([...b.seen, ...add])] } }; });
   }, [commit]);
 
+  // ── Social notifications ────────────────────────────────────────────────
+  // Update the last-seen counts (marks activity read → clears the bubble).
+  // patch = { friendReqs?, g?: { [gid]: { m?, c? } } }.
+  const markNotifSeen = useCallback((patch) => {
+    if (!patch) return;
+    commit((p) => {
+      const n = normNotif(p.notif);
+      const seen = { friendReqs: n.seen.friendReqs, g: { ...n.seen.g } };
+      if (typeof patch.friendReqs === "number") seen.friendReqs = Math.max(seen.friendReqs, Math.round(patch.friendReqs));
+      if (patch.g) for (const [k, v] of Object.entries(patch.g)) {
+        const cur = seen.g[k] || { m: 0, c: 0 };
+        seen.g[k] = { m: typeof v.m === "number" ? Math.max(cur.m, Math.round(v.m)) : cur.m, c: typeof v.c === "number" ? Math.max(cur.c, Math.round(v.c)) : cur.c };
+      }
+      return { ...p, notif: { ...n, seen } };
+    });
+  }, [commit]);
+  // Toggle a pop-up preference ("req" | "msg"). The unread bubble is unaffected.
+  const setNotifPref = useCallback((key, on) => {
+    if (key !== "req" && key !== "msg") return;
+    commit((p) => { const n = normNotif(p.notif); return { ...p, notif: { ...n, [key]: !!on } }; });
+  }, [commit]);
+
   // Record per-topic outcomes (seen + correct) from a finished quiz/exam. Powers
   // the mastery view and "drill weak spots". Ignores blank / "general" topics.
   const recordTopics = useCallback((rows) => {
@@ -585,6 +637,7 @@ export function StudyProvider({ children }) {
     addMissed, grade, removeCard, clearAll, setExamDate, recordSession, recordTopics, recordPerf,
     completeActivity, usePowerup, grantPowerups, recordChallengeResult,
     syncBadges, equipBadge, setBadgesPublic, markBadgesSeen,
+    notif: data.notif, markNotifSeen, setNotifPref,
     bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc, recordMockScore,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };

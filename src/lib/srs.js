@@ -66,5 +66,9 @@ export function useSRS() {
     equipBadge: study?.equipBadge || (() => {}),
     setBadgesPublic: study?.setBadgesPublic || (() => {}),
     markBadgesSeen: study?.markBadgesSeen || (() => {}),
+    // Social notifications (unread bubble + pop-up toggles).
+    notif: study?.notif || { seen: { friendReqs: 0, g: {} }, req: true, msg: true },
+    markNotifSeen: study?.markNotifSeen || (() => {}),
+    setNotifPref: study?.setNotifPref || (() => {}),
   };
 }

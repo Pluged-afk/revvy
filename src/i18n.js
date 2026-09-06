@@ -116,6 +116,8 @@ const T_EN = {
   globalLockedTitle:"The board opens soon",
   globalLockedSub:"The global leaderboard unlocks once {need} learners are ranked. {have} so far, keep climbing.",
   socialTabFriends:"Friends", socialTabGroups:"Groups",
+  notifAlertsLabel:"Alerts", notifReqLabel:"Requests", notifMsgLabel:"Messages", notifOff:"off",
+  notifFriendReq:"{n} new friend request{s}", notifChallengeReq:"{n} new challenge{s}", notifNewMsg:"{n} new message{s}",
   rankUpLabel:"Rank up!", rankUpSub:"You've leveled up. Keep climbing.", dayStreakLabel:"day streak",
   notifOnTitle:"Reminders on", notifOnBody:"We'll nudge you to keep your streak and review what's due.",
   notifStudyTime:"Time to study", notifStreakTitle:"Keep your streak alive",

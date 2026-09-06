@@ -690,6 +690,24 @@ async function socialOverview(req, res, me) {
   return res.status(200).json({ friends, incoming, outgoing, groups });
 }
 
+// Lightweight notification summary for background polling: how many incoming
+// friend requests, and per-group totals of messages from OTHERS + challenges.
+// The client diffs these against its own last-seen counts to derive unread
+// counts + fresh pop-ups (keeps this endpoint cheap + stateless).
+async function notifications(req, res, me) {
+  const friendReqs = (await sql`SELECT COUNT(*)::int AS n FROM friendships WHERE addressee=${me} AND status='pending'`)[0]?.n || 0;
+  const gids = (await sql`SELECT group_id FROM group_members WHERE clerk_user_id=${me}`).map((r) => Number(r.group_id));
+  let groups = [];
+  if (gids.length) {
+    const msgs = await sql`SELECT group_id, COUNT(*)::int AS n FROM group_messages WHERE group_id = ANY(${gids}::bigint[]) AND clerk_user_id <> ${me} GROUP BY group_id`;
+    const chals = await sql`SELECT group_id, COUNT(*)::int AS n FROM group_challenges WHERE group_id = ANY(${gids}::bigint[]) GROUP BY group_id`;
+    const mMap = Object.fromEntries(msgs.map((r) => [Number(r.group_id), r.n]));
+    const cMap = Object.fromEntries(chals.map((r) => [Number(r.group_id), r.n]));
+    groups = gids.map((id) => ({ id, msg: mMap[id] || 0, chal: cMap[id] || 0 }));
+  }
+  return res.status(200).json({ friendReqs, groups });
+}
+
 async function groupCreate(req, res, body, me) {
   const name = clean(body.name, 40);
   if (!name) return res.status(400).json({ error: "Give your group a name." });
@@ -1001,6 +1019,7 @@ export default async function handler(req, res) {
       if (body?.action === "globalBoard") return globalBoard(req, res, userId);
       // Friends + study groups
       if (body?.action === "social") return socialOverview(req, res, userId);
+      if (body?.action === "notifications") return notifications(req, res, userId);
       if (body?.action === "friendAdd") return friendAdd(req, res, body, userId);
       if (body?.action === "friendRespond") return friendRespond(req, res, body, userId);
       if (body?.action === "friendRemove") return friendRemove(req, res, body, userId);

@@ -56,6 +56,26 @@ function Medallion({ color = "#4f46e5", size = 38, children }) {
     </span>
   );
 }
+// Unread social notifications = server counts minus the learner's last-seen
+// counts. Split by category so the pop-ups + toggles can target each type.
+function computeUnread(data, seen) {
+  const s = seen || {};
+  if (!data) return { friends: 0, msg: 0, chal: 0, total: 0, byGroup: {} };
+  const friends = Math.max(0, (data.friendReqs || 0) - (s.friendReqs || 0));
+  let msg = 0, chal = 0; const byGroup = {};
+  for (const g of data.groups || []) {
+    const sg = (s.g && s.g[g.id]) || { m: 0, c: 0 };
+    const m = Math.max(0, (g.msg || 0) - (sg.m || 0));
+    const c = Math.max(0, (g.chal || 0) - (sg.c || 0));
+    msg += m; chal += c; byGroup[g.id] = { m, c };
+  }
+  return { friends, msg, chal, total: friends + msg + chal, byGroup };
+}
+// A small red count bubble for unread notifications.
+function NotifBubble({ n, style }) {
+  if (!n) return null;
+  return <span style={{ minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: "#ef4444", color: "#fff", fontSize: 11, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center", lineHeight: 1, ...style }}>{n > 99 ? "99+" : n}</span>;
+}
 // A group's "pic": a colored rounded-square monogram, hue derived from the name
 // so every group looks distinct without needing an uploaded image.
 function GroupAvatar({ name, size = 40 }) {
@@ -301,6 +321,8 @@ const SoundEngine = (() => {
     rankUp:    ()=>[[523,0],[659,.1],[784,.2],[1047,.32],[1319,.46],[1568,.60]].forEach(([f,d])=>tone(f,'triangle',0.22,0.24,d)),
     // A rising "streak" flare that gets hotter (higher, brighter) with the count.
     streak:    (lvl=1)=>{ const n=Math.min(Math.max(lvl,1),30); const base=380+n*22; tone(base,'sine',0.09,0.16); tone(base*1.33,'sine',0.11,0.15,0.06); tone(base*1.66,'triangle',0.12,0.13,0.12); },
+    // A soft chime for a new social notification (friend request / message / challenge).
+    ping:      ()=>{ tone(880,'sine',0.08,0.13); tone(1175,'sine',0.10,0.12,0.07); },
     setVolume:(v)=>{ if(master) master.gain.value = Math.max(0,Math.min(1,v/100)); },
     setEnabled:(v)=>{ enabled = !!v; },
   };
@@ -3779,6 +3801,10 @@ export default function StudyQuiz() {
   const [socialBusy, setSocialBusy] = useState(false);
   const [socialTab, setSocialTab] = useState("friends"); // friends | groups
   const [joinPreview, setJoinPreview] = useState(null); // {code,name,members,already,id} from a shared invite link
+  // Social notifications: latest server counts + a pop-up toast + delta tracking.
+  const [notifData, setNotifData] = useState(null);
+  const [notifToast, setNotifToast] = useState(null); // {text} for a transient pop-up
+  const notifPrevRef = useRef(null);
   const [socialErr, setSocialErr] = useState("");
   const [friendInput, setFriendInput] = useState("");
   const [friendMsg, setFriendMsg] = useState("");
@@ -4086,6 +4112,67 @@ export default function StudyQuiz() {
       if (b && !b.error && !b.locked) { setGlobalUnlocked(true); setGlobalBoardData(b); }
     })();
   }, [user]);
+  // ── Social notifications ────────────────────────────────────────────────
+  // Poll the lightweight summary while signed in (and on mount, so activity that
+  // happened while offline surfaces at login).
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    const poll = async () => { const d = await socialApi("notifications"); if (alive && d && !d.error) setNotifData(d); };
+    poll();
+    const id = setInterval(poll, 25000);
+    return () => { alive = false; clearInterval(id); };
+  }, [user]);
+  const unread = useMemo(() => computeUnread(notifData, srs.notif?.seen), [notifData, srs.notif]);
+  // Pop up a toast + chime when NEW activity appears (first poll after login
+  // covers anything waiting), respecting the two toggles. The bubble counts
+  // regardless of the toggles.
+  useEffect(() => {
+    if (!notifData) return;
+    const reqOn = srs.notif?.req !== false, msgOn = srs.notif?.msg !== false;
+    const prev = notifPrevRef.current;
+    notifPrevRef.current = unread;
+    const dF = prev ? unread.friends - prev.friends : unread.friends;
+    const dM = prev ? unread.msg - prev.msg : unread.msg;
+    const dC = prev ? unread.chal - prev.chal : unread.chal;
+    const parts = [];
+    if (reqOn && dF > 0) parts.push((t.notifFriendReq || "{n} new friend request{s}").replace("{n}", dF).replace("{s}", dF > 1 ? "s" : ""));
+    if (reqOn && dC > 0) parts.push((t.notifChallengeReq || "{n} new challenge{s}").replace("{n}", dC).replace("{s}", dC > 1 ? "s" : ""));
+    if (msgOn && dM > 0) parts.push((t.notifNewMsg || "{n} new message{s}").replace("{n}", dM).replace("{s}", dM > 1 ? "s" : ""));
+    if (!parts.length) return;
+    const txt = parts.join(" · ");
+    const id = setTimeout(() => { setNotifToast({ text: txt }); SoundEngine.ping(); }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unread]);
+  useEffect(() => {
+    if (!notifToast) return;
+    const id = setTimeout(() => setNotifToast(null), 4500);
+    return () => clearTimeout(id);
+  }, [notifToast]);
+  // Mark activity seen (clears the bubble) when the learner actually looks at it:
+  // the friends tab for requests, a group's chat for messages, its challenges list
+  // for challenges. Deferred so it isn't a synchronous setState in the effect.
+  useEffect(() => {
+    if (screen !== "social" || !notifData) return;
+    const id = setTimeout(() => srs.markNotifSeen({ friendReqs: notifData.friendReqs }), 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, notifData?.friendReqs]);
+  useEffect(() => {
+    if (screen !== "group" || groupTab !== "chat" || !activeGroup || !notifData) return;
+    const g = (notifData.groups || []).find((x) => x.id === activeGroup.id); if (!g) return;
+    const id = setTimeout(() => srs.markNotifSeen({ g: { [activeGroup.id]: { m: g.msg } } }), 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, groupTab, activeGroup, notifData]);
+  useEffect(() => {
+    if (screen !== "challenges" || !activeGroup || !notifData) return;
+    const g = (notifData.groups || []).find((x) => x.id === activeGroup.id); if (!g) return;
+    const id = setTimeout(() => srs.markNotifSeen({ g: { [activeGroup.id]: { c: g.chal } } }), 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, activeGroup, notifData]);
   const myRankInfo = useMemo(() => rankOf({ stats: srs.stats }), [srs.stats]);
   const badgeEval = useMemo(() => evaluateBadges({ stats: srs.stats, mockScores: srs.mockScores, badges: srs.badges }), [srs.stats, srs.mockScores, srs.badges]);
   const earnedBadgeCount = badgeEval.earnedIds.length;
@@ -4178,6 +4265,14 @@ export default function StudyQuiz() {
       </div>
     </div>
   ) : null;
+  // Transient social-notification pop-up (top of screen); tap to open Friends.
+  const notifToastEl = notifToast ? (
+    <div style={{position:"fixed",left:0,right:0,top:14,zIndex:910,display:"flex",justifyContent:"center",pointerEvents:"none",padding:"0 14px"}}>
+      <div className="rv-badge-pop" onClick={()=>{setNotifToast(null);openSocial();}} style={{pointerEvents:"auto",cursor:"pointer",background:"var(--color-accent)",color:"#fff",borderRadius:12,padding:"10px 15px",boxShadow:"0 10px 28px rgba(79,70,229,0.4)",display:"inline-flex",alignItems:"center",gap:9,maxWidth:380,fontSize:13,fontWeight:700}}>
+        <Icon name="users" size={17}/>{notifToast.text}
+      </div>
+    </div>
+  ) : null;
   const flairRank = myRankInfo.index;
   const flairEquipped = srs.badges?.equipped || "";
   const flairPublic = srs.badges?.public !== false;
@@ -4212,7 +4307,7 @@ export default function StudyQuiz() {
   if (screen==="home") return (
     <div style={Sb.root}><style>{CSS}</style>
       <ActivatingOverlay show={activating}/>
-      {badgeToastEl}{rankToastEl}{burstConfetti&&<Confetti/>}
+      {badgeToastEl}{rankToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
       {joinPreviewEl}
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
@@ -4260,7 +4355,10 @@ export default function StudyQuiz() {
             mobile) so they read as a compact dashboard, not a tall stack. */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12,marginBottom:18}}>
           <div onClick={openSocial} style={Sb.navTile}>
-            <Medallion color="#0d9488"><Icon name="users" size={20}/></Medallion>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+              <Medallion color="#0d9488"><Icon name="users" size={20}/></Medallion>
+              <NotifBubble n={unread.total}/>
+            </div>
             <div style={{minWidth:0}}>
               <div style={Sb.navTileTitle}>{t.socialTitle||"Friends & Groups"}</div>
               <div style={Sb.navTileSub}>{t.socialTileSub||"Study together, compare progress"}</div>
@@ -4852,7 +4950,7 @@ export default function StudyQuiz() {
   // ── RESULTS ──────────────────────────────────────────────────────
   if (screen==="results" && quiz) return (
     <div style={Sb.root}><style>{CSS}</style>
-      {badgeToastEl}{rankToastEl}{burstConfetti&&<Confetti/>}
+      {badgeToastEl}{rankToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
       <AdBanners isPro={isPro} bottom={false}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
       <div style={{background:"#312e81",padding:"36px 20px 28px",textAlign:"center"}}>
@@ -5292,7 +5390,7 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {badgeToastEl}{rankToastEl}{burstConfetti&&<Confetti/>}
+      {badgeToastEl}{rankToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(15,23,42,0.16)"}}>{t.welcomePro}</div>}
         {showConfetti&&<Confetti/>}
         <div style={{background:theme.bg,padding:"40px 20px 32px",textAlign:"center"}}>
@@ -5577,12 +5675,21 @@ export default function StudyQuiz() {
   if (screen==="social") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
+      {notifToastEl}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
         <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.socialTitle||"Friends & Groups"}</span><span/>
       </div>
       <div className="rv-center-narrow" style={{padding:"20px 16px 40px"}}>
         {socialErr && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"10px 14px",fontSize:13,color:"#b91c1c",marginBottom:14}}>{socialErr}</div>}
+        {/* Notification pop-up toggles (the unread bubbles show either way) */}
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:14}}>
+          <span style={{fontSize:11.5,fontWeight:700,letterSpacing:.4,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.notifAlertsLabel||"Alerts"}</span>
+          {[["req",t.notifReqLabel||"Requests"],["msg",t.notifMsgLabel||"Messages"]].map(([k,lbl])=>{
+            const on = srs.notif?.[k] !== false;
+            return <button key={k} onClick={()=>srs.setNotifPref(k,!on)} style={{fontSize:12,fontWeight:700,borderRadius:20,padding:"5px 12px",cursor:"pointer",fontFamily:"inherit",border:"1px solid "+(on?"var(--color-accent)":"var(--color-border-secondary)"),background:on?"var(--color-sel-tint)":"transparent",color:on?"var(--color-accent)":"var(--color-text-secondary)",display:"inline-flex",alignItems:"center",gap:5}}><Icon name="alert" size={12}/>{lbl}{on?"":` · ${t.notifOff||"off"}`}</button>;
+          })}
+        </div>
         {/* Friends | Groups tabs */}
         <div style={{marginBottom:16}}>
           <Segmented value={socialTab} onChange={(o)=>setSocialTab(o.value)} options={[
@@ -5635,6 +5742,7 @@ export default function StudyQuiz() {
               <div style={{fontWeight:700,fontSize:13.5,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.name}</div>
               <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:2}}>{(t.membersCount||"{n} members").replace("{n}",g.members)}{g.isOwner?` · ${t.ownerWord||"owner"}`:""}</div>
             </div>
+            <NotifBubble n={(unread.byGroup[g.id]?.m||0)+(unread.byGroup[g.id]?.c||0)} style={{marginRight:4}}/>
             <span style={{fontSize:17,color:"var(--color-text-tertiary)"}}>›</span>
           </div>
         ))}
@@ -5657,6 +5765,7 @@ export default function StudyQuiz() {
   if (screen==="group") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
+      {notifToastEl}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>{setScreen("social");loadSocial();}}>← {t.backWord}</button>
         <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeGroup?.name||(t.groupWord||"Group")}</span><span/>
@@ -5907,6 +6016,7 @@ export default function StudyQuiz() {
   if (screen==="challenges") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
+      {notifToastEl}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>{ if(activeChallenge){setActiveChallenge(null);} else {setScreen("group");} }}>← {activeChallenge?(t.backWord||"Back"):(activeGroup?.name||t.groupWord||"Group")}</button>
         <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.groupChallenges||"Challenges"}</span><span/>
@@ -6076,7 +6186,7 @@ export default function StudyQuiz() {
     const r = arenaResult;
     return (
       <div style={Sb.root}><style>{CSS}</style>
-        {badgeToastEl}{rankToastEl}{burstConfetti&&<Confetti/>}
+        {badgeToastEl}{rankToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
         <AdBanners isPro={isPro}/>
         <div style={{background:"#312e81",padding:"36px 20px 28px",textAlign:"center"}}>
           {r.isBest && <div style={{fontSize:12,fontWeight:800,letterSpacing:1,color:"#fcd34d",textTransform:"uppercase",marginBottom:6}}>{t.arenaNewBest}</div>}
