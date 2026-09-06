@@ -306,6 +306,14 @@ const SoundEngine = (() => {
   };
 })();
 
+// One-shot celebration guards: each achievement's sound + confetti fires at most
+// ONCE per page load, so navigating between screens (or a remount) never replays
+// it. They reset on a fresh app load, and cross-session dedup is handled by the
+// persisted badges.seen list.
+const _celebratedBadges = new Set();
+let _celebratedRankIdx = -1;
+let _celebratedStreak = -1;
+
 // Cool, modern product palette (Aug 2026 redesign): neutral slate/gray base,
 // hairline borders, a confident indigo accent. Replaces the earlier warm ivory
 // theme so the app reads as a serious study tool.
@@ -4086,7 +4094,15 @@ export default function StudyQuiz() {
     const seen = new Set(srs.badges?.seen || []);
     const fresh = (srs.badges?.earned || []).filter((e) => !seen.has(e.id)).map((e) => e.id);
     if (!fresh.length) return;
-    const id = setTimeout(() => { setBadgeToast(fresh); srs.markBadgesSeen(fresh); SoundEngine.unlock(); fireBurst(); }, 450);
+    // Celebrate only badges not already celebrated this page load; always persist
+    // the seen list so it never replays on the next open either.
+    const toShow = fresh.filter((id) => !_celebratedBadges.has(id));
+    const id = setTimeout(() => {
+      srs.markBadgesSeen(fresh);
+      if (!toShow.length) return;
+      toShow.forEach((x) => _celebratedBadges.add(x));
+      setBadgeToast(toShow); SoundEngine.unlock(); fireBurst();
+    }, 450);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [earnedCount]);
@@ -4094,8 +4110,8 @@ export default function StudyQuiz() {
   // moment the streak extends. Silent on first load.
   useEffect(() => {
     const s = stats.streak || 0;
-    if (prevStreakRef.current == null) { prevStreakRef.current = s; return; }
-    if (s > prevStreakRef.current) SoundEngine.streak(s);
+    if (prevStreakRef.current == null) { prevStreakRef.current = s; if (_celebratedStreak < 0) _celebratedStreak = s; return; }
+    if (s > prevStreakRef.current && s > _celebratedStreak) { _celebratedStreak = s; SoundEngine.streak(s); }
     prevStreakRef.current = s;
   }, [stats.streak]);
   // Auto-dismiss the badge toast.
@@ -4113,8 +4129,8 @@ export default function StudyQuiz() {
   // Rank-up celebration: fanfare + confetti + a toast when the tier climbs.
   useEffect(() => {
     const r = myRankInfo.index;
-    if (prevRankRef.current == null) { prevRankRef.current = r; return; } // don't fire on first load
-    if (r > prevRankRef.current) { SoundEngine.rankUp(); fireBurst(); setRankToast(RANKS[r]); setTimeout(() => setRankToast(null), 5000); }
+    if (prevRankRef.current == null) { prevRankRef.current = r; if (_celebratedRankIdx < 0) _celebratedRankIdx = r; return; } // seed, don't fire on first load
+    if (r > prevRankRef.current && r > _celebratedRankIdx) { _celebratedRankIdx = r; SoundEngine.rankUp(); fireBurst(); setRankToast(RANKS[r]); setTimeout(() => setRankToast(null), 5000); }
     prevRankRef.current = r;
   }, [myRankInfo.index, fireBurst]);
   // Shared "badge unlocked" toast, dropped into the finish screens + home.
@@ -4199,7 +4215,11 @@ export default function StudyQuiz() {
           <div className="rv-hero-top">
             <button onClick={()=>navigate("/")} title={t.mainSite} className="rv-hero-back" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.78)",fontFamily:"inherit",padding:0,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}>← {t.mainSite}</button>
             <div className="rv-hero-tools">
-              {user ? (
+              {authLoading ? (
+                // Restoring the session: hold a placeholder so signed-in users
+                // never see (or click) "Log in" before Clerk finishes loading.
+                <span aria-hidden="true" style={{width:30,height:30,borderRadius:"50%",background:"rgba(255,255,255,0.18)",flexShrink:0}}/>
+              ) : user ? (
                 <button onClick={()=>openSettings()} title={t.accountLbl} aria-label={t.accountLbl}
                   style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
                   <span style={{position:"relative",width:30,height:30,borderRadius:"50%",overflow:"hidden",flexShrink:0,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff"}}>
