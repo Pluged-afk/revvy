@@ -310,7 +310,6 @@ const SoundEngine = (() => {
 // ONCE per page load, so navigating between screens (or a remount) never replays
 // it. They reset on a fresh app load, and cross-session dedup is handled by the
 // persisted badges.seen list.
-const _celebratedBadges = new Set();
 let _celebratedRankIdx = -1;
 let _celebratedStreak = -1;
 
@@ -3808,6 +3807,7 @@ export default function StudyQuiz() {
   const [rankToast, setRankToast] = useState(null);   // a RANKS entry when the tier goes up
   const prevRankRef = useRef(null);
   const prevStreakRef = useRef(null);
+  const badgeBaselineRef = useRef(null); // ids the learner already qualified for at load (never celebrated)
   const fireBurst = useCallback(() => { setBurstConfetti(true); setTimeout(() => setBurstConfetti(false), 3800); }, []);
   // Which collapsible home cards are expanded (default collapsed to a tidy header).
   const [openCard, setOpenCard] = useState({});
@@ -4086,26 +4086,32 @@ export default function StudyQuiz() {
       if (b && !b.error && !b.locked) { setGlobalUnlocked(true); setGlobalBoardData(b); }
     })();
   }, [user]);
-  // Fire an unlock toast for any earned-but-not-yet-toasted badge, then mark it
-  // seen so it never repeats. Deferred out of the effect body so it doesn't
-  // cascade renders; keyed on the earned count so it only runs on real changes.
-  const earnedCount = (srs.badges?.earned || []).length;
+  const myRankInfo = useMemo(() => rankOf({ stats: srs.stats }), [srs.stats]);
+  const badgeEval = useMemo(() => evaluateBadges({ stats: srs.stats, mockScores: srs.mockScores, badges: srs.badges }), [srs.stats, srs.mockScores, srs.badges]);
+  const earnedBadgeCount = badgeEval.earnedIds.length;
+  const myXP = myRankInfo.xp;
+  // Celebrate ONLY a badge that becomes earned during THIS session (a real
+  // unlock). On the first evaluation we baseline everything the learner already
+  // qualifies for and mark it seen, so re-opening the app never replays the
+  // effect or the toast — the toast + sound + confetti fire once, at the moment
+  // of unlocking. Keyed on the qualifying-set signature.
+  const earnedKey = badgeEval.earnedIds.join(",");
   useEffect(() => {
-    const seen = new Set(srs.badges?.seen || []);
-    const fresh = (srs.badges?.earned || []).filter((e) => !seen.has(e.id)).map((e) => e.id);
+    const now = badgeEval.earnedIds;
+    if (badgeBaselineRef.current == null) {
+      badgeBaselineRef.current = new Set(now);
+      const seen = new Set(srs.badges?.seen || []);
+      const unseen = now.filter((id) => !seen.has(id));
+      if (unseen.length) setTimeout(() => srs.markBadgesSeen(unseen), 0); // silence future opens
+      return;
+    }
+    const fresh = now.filter((id) => !badgeBaselineRef.current.has(id));
     if (!fresh.length) return;
-    // Celebrate only badges not already celebrated this page load; always persist
-    // the seen list so it never replays on the next open either.
-    const toShow = fresh.filter((id) => !_celebratedBadges.has(id));
-    const id = setTimeout(() => {
-      srs.markBadgesSeen(fresh);
-      if (!toShow.length) return;
-      toShow.forEach((x) => _celebratedBadges.add(x));
-      setBadgeToast(toShow); SoundEngine.unlock(); fireBurst();
-    }, 450);
+    fresh.forEach((id) => badgeBaselineRef.current.add(id));
+    const id = setTimeout(() => { setBadgeToast(fresh); srs.markBadgesSeen(fresh); SoundEngine.unlock(); fireBurst(); }, 450);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [earnedCount]);
+  }, [earnedKey]);
   // Streak getting hotter: a rising flare (pitch scales with the count) the
   // moment the streak extends. Silent on first load.
   useEffect(() => {
@@ -4120,12 +4126,12 @@ export default function StudyQuiz() {
     const id = setTimeout(() => setBadgeToast(null), 4200);
     return () => clearTimeout(id);
   }, [badgeToast]);
-  // Mirror the learner's rank + equipped flair onto their public profile so the
-  // arena and group leaderboards can show it cheaply. rank = -1 means hidden.
-  const myRankInfo = useMemo(() => rankOf({ stats: srs.stats }), [srs.stats]);
-  const badgeEval = useMemo(() => evaluateBadges({ stats: srs.stats, mockScores: srs.mockScores, badges: srs.badges }), [srs.stats, srs.mockScores, srs.badges]);
-  const earnedBadgeCount = badgeEval.earnedIds.length;
-  const myXP = myRankInfo.xp;
+  // Opening the trophy case counts as "seeing" your achievements: clear the pill.
+  useEffect(() => {
+    if (screen !== "badges") return;
+    const id = setTimeout(() => setBadgeToast(null), 0);
+    return () => clearTimeout(id);
+  }, [screen]);
   // Rank-up celebration: fanfare + confetti + a toast when the tier climbs.
   useEffect(() => {
     const r = myRankInfo.index;
