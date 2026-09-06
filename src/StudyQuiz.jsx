@@ -3972,7 +3972,9 @@ export default function StudyQuiz() {
     const txt = dmInput.trim(); if (!txt) return;
     setDmInput(""); sendDM({ kind: "text", body: txt });
   }, [dmInput, sendDM]);
-  // Send a snapshot of my rank / streak / accuracy.
+  // Send a snapshot of my rank / streak / accuracy. (myRankInfo is declared
+  // here, above the DM handlers, so this callback's deps don't hit its TDZ.)
+  const myRankInfo = useMemo(() => rankOf({ stats: srs.stats }), [srs.stats]);
   const shareScoreToDM = useCallback(() => {
     sendDM({ kind: "score", body: "", data: { rank: myRankInfo.index, xp: myRankInfo.xp, streak: stats.streak || 0, accuracy: stats.accuracy ?? null } });
   }, [sendDM, myRankInfo, stats]);
@@ -4254,7 +4256,6 @@ export default function StudyQuiz() {
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, activeDM, notifData]);
-  const myRankInfo = useMemo(() => rankOf({ stats: srs.stats }), [srs.stats]);
   const badgeEval = useMemo(() => evaluateBadges({ stats: srs.stats, mockScores: srs.mockScores, badges: srs.badges }), [srs.stats, srs.mockScores, srs.badges]);
   const earnedBadgeCount = badgeEval.earnedIds.length;
   const myXP = myRankInfo.xp;
