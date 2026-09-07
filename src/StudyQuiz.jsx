@@ -4046,6 +4046,26 @@ export default function StudyQuiz() {
       setScreen("quiz");
     } catch (err) { setError(err.message?.includes("parse") ? t.errAiFormat : err.message); setScreen("home"); }
   }, [consumeQuestions, isPro, lang, t]);
+  // First-run starter card: decide exactly ONCE whether this load is a genuine
+  // first run, and latch it in a ref so persisting "seen" below never hides the
+  // card mid-view. For a KNOWN signed-in user we wait for the server blob
+  // (srs.loaded) so a returning learner on a fresh device isn't mistaken for
+  // brand new; otherwise (guest, or before auth resolves) we decide from the
+  // local blob, which already carries their seen flag on a device they've used.
+  // The re-render that flips this is driven by the blob loading, so no setState
+  // is needed here.
+  const starterDecidedRef = useRef(false);
+  const starterShowRef = useRef(false);
+  if (!starterDecidedRef.current && !(user && !srs.loaded)) {
+    starterDecidedRef.current = true;
+    starterShowRef.current = librarySize(srs.library) === 0 && !srs.starterSeen;
+  }
+  const showStarter = starterShowRef.current;
+  // Persist the one-shot the first time we show it, so it never returns.
+  useEffect(() => {
+    if (showStarter && !srs.starterSeen) srs.markStarterSeen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showStarter]);
   // Poll the open DM thread so replies appear live.
   useEffect(() => {
     if (screen !== "dm" || !activeDM) return;
@@ -4481,8 +4501,8 @@ export default function StudyQuiz() {
         {/* First-run starter library: until the learner has uploaded material of
             their own, give them a one-tap path to a real quiz on a ready-made
             topic, so the core loop lands before any upload. Disappears once they
-            have their own material. */}
-        {librarySize(srs.library)===0 && (
+            have their own material. Shown once ever (see showStarter one-shot). */}
+        {showStarter && librarySize(srs.library)===0 && (
           <div style={{background:"linear-gradient(135deg,#4f46e5,#6366f1)",borderRadius:16,padding:"18px 18px 16px",marginBottom:18,boxShadow:"0 6px 20px rgba(79,70,229,0.22)"}}>
             <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:3}}>
               <span style={{fontSize:20}} aria-hidden="true">✨</span>

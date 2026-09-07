@@ -70,5 +70,9 @@ export function useSRS() {
     notif: study?.notif || { seen: { friendReqs: 0, g: {} }, req: true, msg: true },
     markNotifSeen: study?.markNotifSeen || (() => {}),
     setNotifPref: study?.setNotifPref || (() => {}),
+    // First-run starter card: a persisted one-shot + a "server blob ready" flag.
+    starterSeen: study?.starterSeen ?? false,
+    markStarterSeen: study?.markStarterSeen || (() => {}),
+    loaded: study?.loaded ?? false,
   };
 }

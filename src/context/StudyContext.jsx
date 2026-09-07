@@ -90,7 +90,7 @@ function normNotif(n) {
   };
 }
 function emptyData() {
-  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), notif: normNotif({}), updatedAt: 0 };
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), notif: normNotif({}), starterSeen: false, updatedAt: 0 };
 }
 const asTopicStats = (t) => (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
 
@@ -133,6 +133,9 @@ function loadLocal() {
       wallet: normWallet(blob.wallet),
       streakSavers: Math.max(0, Math.min(SAVER_CAP, Number(blob.streakSavers) || 0)),
       savedProgress: Math.max(0, Number(blob.savedProgress) || 0),
+      // Persisted one-shot flag: must survive a local reload or the first-run
+      // starter card would resurface every time a guest reopens the app.
+      starterSeen: !!blob.starterSeen,
       updatedAt: blob.updatedAt || 0,
     };
   }
@@ -150,6 +153,7 @@ function loadLocal() {
     wallet: normWallet({}),
     streakSavers: 0,
     savedProgress: 0,
+    starterSeen: false,
     updatedAt: 0,
   };
 }
@@ -223,6 +227,9 @@ function mergeStudy(server, local) {
     savedProgress: Math.max(0, Number(server.savedProgress) || 0, Number(local.savedProgress) || 0),
     badges: mergeBadges(server.badges, local.badges),
     notif: mergeNotif(server.notif, local.notif),
+    // Sticky one-shot: once the first-run starter card has been seen on ANY
+    // device, it stays seen everywhere so it never resurfaces.
+    starterSeen: !!(server.starterSeen || local.starterSeen),
     updatedAt: Date.now(),
   };
 }
@@ -311,6 +318,11 @@ export function StudyProvider({ children }) {
   const [data, setData] = useState(loadLocal);
   const dataRef = useRef(data);
   const hydrated = useRef(false);   // server load/merge done → safe to write up
+  // Reactive twin of `hydrated` for consumers that must wait for the canonical
+  // (server-merged) blob before making a one-shot decision, e.g. showing a
+  // first-run card exactly once. Stays false for a signed-in user until their
+  // server blob has merged, so a returning user is never treated as brand new.
+  const [loaded, setLoaded] = useState(false);
   const saveTimer = useRef(null);
 
   // Persist locally + (debounced) to the server on every change.
@@ -347,8 +359,9 @@ export function StudyProvider({ children }) {
         const merged = mergeStudy(body?.data || {}, dataRef.current);
         hydrated.current = true;
         setData(merged); // change effect pushes the merged blob back up once
+        setLoaded(true);
       } catch {
-        if (!cancelled) hydrated.current = true; // allow local→server on next edit
+        if (!cancelled) { hydrated.current = true; setLoaded(true); } // allow local→server on next edit
       }
     })();
     return () => { cancelled = true; };
@@ -548,6 +561,10 @@ export function StudyProvider({ children }) {
     if (key !== "req" && key !== "msg") return;
     commit((p) => { const n = normNotif(p.notif); return { ...p, notif: { ...n, [key]: !!on } }; });
   }, [commit]);
+  // Permanently mark the first-run starter card as seen (idempotent one-shot).
+  const markStarterSeen = useCallback(() => {
+    commit((p) => (p.starterSeen ? p : { ...p, starterSeen: true }));
+  }, [commit]);
 
   // Record per-topic outcomes (seen + correct) from a finished quiz/exam. Powers
   // the mastery view and "drill weak spots". Ignores blank / "general" topics.
@@ -644,6 +661,7 @@ export function StudyProvider({ children }) {
     completeActivity, usePowerup, grantPowerups, recordChallengeResult,
     syncBadges, equipBadge, setBadgesPublic, markBadgesSeen,
     notif: data.notif, markNotifSeen, setNotifPref,
+    starterSeen: data.starterSeen, markStarterSeen, loaded,
     bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc, recordMockScore,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };
