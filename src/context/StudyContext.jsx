@@ -133,6 +133,13 @@ function loadLocal() {
       wallet: normWallet(blob.wallet),
       streakSavers: Math.max(0, Math.min(SAVER_CAP, Number(blob.streakSavers) || 0)),
       savedProgress: Math.max(0, Number(blob.savedProgress) || 0),
+      // badges + notif MUST survive a local reload. Dropping them reset the
+      // "seen" state on every reopen, which re-announced already-seen social
+      // activity (a bottom toast + chime) and, for guests, emptied the trophy
+      // case. (The celebration effects re-baseline per load so they never
+      // replayed, but the notification toast diffs against notif.seen.)
+      badges: normBadges(blob.badges),
+      notif: normNotif(blob.notif),
       // Persisted one-shot flag: must survive a local reload or the first-run
       // starter card would resurface every time a guest reopens the app.
       starterSeen: !!blob.starterSeen,
@@ -153,6 +160,8 @@ function loadLocal() {
     wallet: normWallet({}),
     streakSavers: 0,
     savedProgress: 0,
+    badges: normBadges({}),
+    notif: normNotif({}),
     starterSeen: false,
     updatedAt: 0,
   };
