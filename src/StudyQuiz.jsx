@@ -50,8 +50,11 @@ function AvatarInitial({ name, size = 34 }) {
 // color. Gives each home card a distinct, lively identity instead of a row of
 // flat monochrome line icons. The tint reads in both light and dark themes.
 function Medallion({ color = "#4f46e5", size = 38, children }) {
+  // A subtle two-tone gradient tint + a faint same-hue ring gives every icon
+  // depth and a consistent treatment, so a palette of relevant per-icon colors
+  // reads as one designed family rather than a clashing rainbow.
   return (
-    <span style={{ flexShrink: 0, width: size, height: size, borderRadius: 12, background: color + "1f", color, display: "inline-flex", alignItems: "center", justifyContent: "center" }} aria-hidden="true">
+    <span style={{ flexShrink: 0, width: size, height: size, borderRadius: 12, background: `linear-gradient(140deg, ${color}30, ${color}12)`, boxShadow: `inset 0 0 0 1px ${color}33`, color, display: "inline-flex", alignItems: "center", justifyContent: "center" }} aria-hidden="true">
       {children}
     </span>
   );
@@ -4807,7 +4810,7 @@ export default function StudyQuiz() {
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12,marginBottom:18}}>
           <div onClick={openSocial} className="rv-tile" style={Sb.navTile}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
-              <Medallion color="#4f46e5"><Icon name="users" size={20}/></Medallion>
+              <Medallion color="#14b8a6"><Icon name="users" size={20}/></Medallion>
               <NotifBubble n={unread.total}/>
             </div>
             <div style={{minWidth:0}}>
@@ -4827,7 +4830,7 @@ export default function StudyQuiz() {
           </div>
           {globalUnlocked && (
           <div onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} className="rv-tile" style={Sb.navTile}>
-            <Medallion color="#4f46e5"><span style={{fontSize:18}}>🏆</span></Medallion>
+            <Medallion color="#f59e0b"><span style={{fontSize:18}}>🏆</span></Medallion>
             <div style={{minWidth:0}}>
               <div style={Sb.navTileTitle}>{t.globalBoardTitle||"Global leaderboard"}</div>
               <div style={Sb.navTileSub}>{t.globalTileSub||"Top 100 by rank, best of the best"}</div>
@@ -4868,7 +4871,7 @@ export default function StudyQuiz() {
         {mastery.length>0 && (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div onClick={()=>toggleCard("mastery")} style={{display:"flex",alignItems:"center",gap:10,marginBottom:openCard.mastery?12:0,cursor:"pointer"}}>
-              <Medallion color="#4f46e5" size={36}><Icon name="chart" size={19}/></Medallion>
+              <Medallion color="#3b82f6" size={36}><Icon name="chart" size={19}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.masteryTitle}</div>
                 <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.masterySub}</div>
@@ -4899,7 +4902,7 @@ export default function StudyQuiz() {
         {librarySize(srs.library)>0 && (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div onClick={()=>toggleCard("library")} style={{display:"flex",alignItems:"center",gap:10,marginBottom:openCard.library?12:0,cursor:"pointer"}}>
-              <Medallion color="#4f46e5" size={36}><Icon name="layers" size={19}/></Medallion>
+              <Medallion color="#10b981" size={36}><Icon name="layers" size={19}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.libraryTitle}</div>
                 <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.librarySets.replace("{n}",librarySize(srs.library)).replace("{s}",librarySize(srs.library)>1?"s":"")}</div>
@@ -4959,7 +4962,7 @@ export default function StudyQuiz() {
         {!homePlan ? (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <Medallion color="#4f46e5"><Icon name="compass" size={20}/></Medallion>
+              <Medallion color="#8b5cf6"><Icon name="compass" size={20}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.coachTitle}</div>
                 <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.coachTagline}</div>
