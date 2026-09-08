@@ -4703,9 +4703,9 @@ export default function StudyQuiz() {
             to everyone (incl. new users) so features like Friends are reachable
             straight away, the app is feature-rich but stays easy to scan. */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12,marginBottom:18}}>
-          <div onClick={openSocial} style={Sb.navTile}>
+          <div onClick={openSocial} className="rv-tile" style={Sb.navTile}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
-              <Medallion color="#0d9488"><Icon name="users" size={20}/></Medallion>
+              <Medallion color="#4f46e5"><Icon name="users" size={20}/></Medallion>
               <NotifBubble n={unread.total}/>
             </div>
             <div style={{minWidth:0}}>
@@ -4713,7 +4713,7 @@ export default function StudyQuiz() {
               <div style={Sb.navTileSub}>{t.socialTileSub||"Study together, compare progress"}</div>
             </div>
           </div>
-          <div onClick={()=>setScreen("badges")} style={Sb.navTile}>
+          <div onClick={()=>setScreen("badges")} className="rv-tile" style={Sb.navTile}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
               <Medallion color={RANKS[myRankInfo.index]?.color||"#4f46e5"}><span style={{fontSize:19}}>{RANKS[myRankInfo.index]?.emoji}</span></Medallion>
               {flairEquipped && <BadgeGlyph id={flairEquipped} size={19} t={t}/>}
@@ -4724,8 +4724,8 @@ export default function StudyQuiz() {
             </div>
           </div>
           {globalUnlocked && (
-          <div onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={Sb.navTile}>
-            <Medallion color="#b45309"><span style={{fontSize:18}}>🏆</span></Medallion>
+          <div onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} className="rv-tile" style={Sb.navTile}>
+            <Medallion color="#4f46e5"><span style={{fontSize:18}}>🏆</span></Medallion>
             <div style={{minWidth:0}}>
               <div style={Sb.navTileTitle}>{t.globalBoardTitle||"Global leaderboard"}</div>
               <div style={Sb.navTileSub}>{t.globalTileSub||"Top 100 by rank, best of the best"}</div>
@@ -4766,7 +4766,7 @@ export default function StudyQuiz() {
         {mastery.length>0 && (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div onClick={()=>toggleCard("mastery")} style={{display:"flex",alignItems:"center",gap:10,marginBottom:openCard.mastery?12:0,cursor:"pointer"}}>
-              <Medallion color="#2563eb" size={36}><Icon name="chart" size={19}/></Medallion>
+              <Medallion color="#4f46e5" size={36}><Icon name="chart" size={19}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.masteryTitle}</div>
                 <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.masterySub}</div>
@@ -4797,7 +4797,7 @@ export default function StudyQuiz() {
         {librarySize(srs.library)>0 && (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div onClick={()=>toggleCard("library")} style={{display:"flex",alignItems:"center",gap:10,marginBottom:openCard.library?12:0,cursor:"pointer"}}>
-              <Medallion color="#0f9d5a" size={36}><Icon name="layers" size={19}/></Medallion>
+              <Medallion color="#4f46e5" size={36}><Icon name="layers" size={19}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.libraryTitle}</div>
                 <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.librarySets.replace("{n}",librarySize(srs.library)).replace("{s}",librarySize(srs.library)>1?"s":"")}</div>
@@ -4857,7 +4857,7 @@ export default function StudyQuiz() {
         {!homePlan ? (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <Medallion color="#7c3aed"><Icon name="compass" size={20}/></Medallion>
+              <Medallion color="#4f46e5"><Icon name="compass" size={20}/></Medallion>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.coachTitle}</div>
                 <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:"var(--color-text-secondary)"}}>{t.coachTagline}</div>
@@ -5137,7 +5137,7 @@ export default function StudyQuiz() {
           const tileShell = {display:"flex",flexDirection:"column",gap:9,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 12px",transition:"all 0.15s"};
           const tile = {width:36,height:36,borderRadius:10,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-sel-tint)",color:"var(--color-accent)"};
           const ttl = {fontWeight:700,fontSize:13,color:"var(--color-text-primary)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"};
-          const sub = {fontSize:10.5,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"};
+          const sub = {fontSize:10.5,color:"var(--color-text-secondary)",marginTop:2,lineHeight:1.35,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"};
           const pill = (bg) => ({fontSize:9.5,fontWeight:700,borderRadius:8,padding:"2px 7px",flexShrink:0,whiteSpace:"nowrap",color:"#fff",background:bg});
           const examUsed = !isPro && unlocks.examUsedToday();
           return (
@@ -5362,7 +5362,7 @@ export default function StudyQuiz() {
         </div>
         <button style={{...Sb.btnOutline,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setScoreCardOpen(true)}><Icon name="spark" size={16}/>{t.shareResultBtn}</button>
         {scoreCardOpen && <ScoreCardModal t={t} onClose={()=>setScoreCardOpen(false)} data={{ score, total:quiz.questions.length, pct: quiz.questions.length?Math.round(score/quiz.questions.length*100):0, subject: quiz.subject||quiz.title||"", rankEmoji: RANKS[myRankInfo.index]?.emoji, rankName:(t["rank_"+RANKS[myRankInfo.index]?.key])||RANKS[myRankInfo.index]?.name, xp: myRankInfo.xp, streak: stats.streak||0 }}/>}
-        <button style={{...Sb.btnPrimary,width:"100%",margin:"0 0 14px",background:"var(--color-clay,#b5502f)"}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="trophy" size={16}/>{t.challengeFriend}</span>}</button>
+        <button style={{...Sb.btnOutline,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="trophy" size={16}/>{t.challengeFriend}</span>}</button>
         {shareOpen && <ShareModal link={shareLink} err={shareErr} copied={shareCopied} onCopy={copyShare} onClose={()=>setShareOpen(false)} challengeScore={`${score}/${quiz.questions.length}`} t={t}/>}
         {!isPro&&adsOn&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}><Icon name="volume" size={13}/>{t.advertisement}</div>}
         <p style={Sb.secLabel}>{t.review}</p>
@@ -7058,6 +7058,8 @@ const CSS = `
   .step-0{animation-delay:0.3s}.step-1{animation-delay:0.8s}.step-2{animation-delay:1.3s}.step-3{animation-delay:1.8s}
   .exam-type-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(67,56,202,0.18)!important;border-color:#4f46e5!important;background:var(--color-hover-tint)!important}
   button:hover:not(:disabled){transform:translateY(-1px)}
+  .rv-tile{transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+  .rv-tile:hover{transform:translateY(-1px);border-color:#4f46e5;box-shadow:0 4px 14px rgba(79,70,229,0.12)}
   button:active:not(:disabled){transform:scale(0.97)}
   .quiz-opt:hover:not(:disabled){transform:translateX(4px)!important;border-color:#4f46e5!important;background:var(--color-hover-tint)!important;box-shadow:2px 0 0 0 #4f46e5}
   .quiz-opt:active:not(:disabled){transform:translateX(2px)!important}
