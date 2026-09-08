@@ -1314,7 +1314,7 @@ function ExplainBox({ ctx, t }) {
     setAsking(false);
   };
   if (!open) return (
-    <button onClick={load} style={{marginTop:8,marginLeft:23,background:"none",border:"none",color:"var(--color-accent)",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="chat" size={13}/>{t.explainWhy}</button>
+    <button onClick={load} style={{marginTop:9,marginLeft:23,background:"var(--color-sel-tint)",border:"1px solid #c7d2fe",color:"var(--color-accent)",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"6px 12px",borderRadius:20,display:"inline-flex",alignItems:"center",gap:6}}><Icon name="chat" size={13}/>{t.explainWhy}</button>
   );
   return (
     <div style={{marginTop:8,marginLeft:23,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"10px 12px"}} className="fade-in">
@@ -1334,6 +1334,126 @@ function ExplainBox({ ctx, t }) {
           <button onClick={doAsk} disabled={asking||!ask.trim()} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:(asking||!ask.trim())?0.5:1}}>{asking?"…":t.explainAskBtn}</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Shareable score card ─────────────────────────────────────────────────
+// Draws a branded result image (1080x1350, story-friendly) entirely on a canvas
+// so it ships with the app: no external library, no CSP concern. The card is a
+// screenshot-worthy payoff and a free growth surface (people post it).
+function rr(ctx, x, y, w, h, r) {
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+  else { ctx.beginPath(); ctx.rect(x, y, w, h); }
+}
+function fitText(ctx, text, maxW) {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let s = text;
+  while (s.length > 1 && ctx.measureText(s + "…").width > maxW) s = s.slice(0, -1);
+  return s.trimEnd() + "…";
+}
+async function buildScoreCard(canvas, d, t) {
+  const W = 1080, H = 1350, cx = W / 2;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  try { if (document.fonts?.ready) await document.fonts.ready; } catch { /* ignore */ }
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, "#4f46e5"); g.addColorStop(1, "#7c3aed");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const rg = ctx.createRadialGradient(cx, H * 0.16, 60, cx, H * 0.16, W * 0.75);
+  rg.addColorStop(0, "rgba(255,255,255,0.18)"); rg.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+  // Wordmark + URL
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left"; ctx.fillStyle = "#fff";
+  ctx.font = "700 62px Fraunces, Georgia, serif"; ctx.fillText("Revyy", 90, 150);
+  ctx.textAlign = "right"; ctx.font = "500 34px system-ui, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.72)"; ctx.fillText("revyy.app", W - 90, 146);
+  // Label
+  ctx.textAlign = "center";
+  ctx.font = "700 32px system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.7)";
+  ctx.fillText((t.scoreCardLabel || "Quiz result").toUpperCase(), cx, 378);
+  // Hero score
+  ctx.fillStyle = "#fff"; ctx.font = "700 250px Fraunces, Georgia, serif";
+  ctx.fillText(`${d.score}/${d.total}`, cx, 628);
+  // Percent + subject
+  ctx.font = "600 56px system-ui, sans-serif"; ctx.fillStyle = "#fde68a";
+  let sub = `${d.pct}%`; if (d.subject) sub += "  ·  " + d.subject;
+  ctx.fillText(fitText(ctx, sub, W - 170), cx, 710);
+  // Rank pill
+  const rankText = `${d.rankEmoji || "🎓"}  ${d.rankName || ""}`.trim();
+  ctx.font = "600 46px system-ui, sans-serif";
+  const rw = ctx.measureText(rankText).width, pw = rw + 90, ph = 96, py = 812;
+  ctx.fillStyle = "rgba(255,255,255,0.15)"; rr(ctx, cx - pw / 2, py, pw, ph, 48); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.textBaseline = "middle";
+  ctx.fillText(rankText, cx, py + ph / 2 + 3); ctx.textBaseline = "alphabetic";
+  // Stat row
+  const stat = [];
+  if (d.streak > 0) stat.push(`🔥 ${d.streak} ${t.dayStreakLabel || "day streak"}`);
+  stat.push(`⚡ ${Number(d.xp || 0).toLocaleString()} XP`);
+  ctx.font = "600 44px system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.fillText(stat.join("      "), cx, 1030);
+  // CTA
+  const cta = t.scoreCardCta || "Beat my score at revyy.app";
+  ctx.font = "600 40px system-ui, sans-serif";
+  const cw = ctx.measureText(cta).width + 84, ch = 100, cyy = 1170;
+  ctx.fillStyle = "rgba(255,255,255,0.16)"; rr(ctx, cx - cw / 2, cyy, cw, ch, 26); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.textBaseline = "middle";
+  ctx.fillText(cta, cx, cyy + ch / 2 + 2); ctx.textBaseline = "alphabetic";
+}
+// Share the rendered card as a PNG: native share sheet where supported (mobile),
+// otherwise a download. Returns the method used (or null on failure/cancel).
+async function shareScoreCard(canvas, { text, filename = "revyy-result.png" }) {
+  const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+  if (!blob) return null;
+  const file = new File([blob], filename, { type: "image/png" });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], text });
+      return "share";
+    }
+  } catch { return null; /* user cancelled the share sheet */ }
+  try {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    return "download";
+  } catch { return null; }
+}
+function ScoreCardModal({ data, t, onClose }) {
+  const canvasRef = useRef(null);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const c = canvasRef.current; if (!c) return;
+      await buildScoreCard(c, data, t);
+      if (!alive) return;
+      try { setUrl(c.toDataURL("image/png")); } catch { /* tainted/unsupported */ }
+    })();
+    return () => { alive = false; };
+  }, [data, t]);
+  const doShare = async () => {
+    const c = canvasRef.current; if (!c || busy) return;
+    setBusy(true);
+    await shareScoreCard(c, { text: t.scoreCardCta || "Beat my score at revyy.app" });
+    setBusy(false);
+  };
+  const btn = { flex: 1, borderRadius: 12, padding: "12px", fontSize: 13.5, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "none" };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 700, background: "rgba(0,0,0,0.62)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--color-background-primary)", borderRadius: 20, padding: 18, maxWidth: 340, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+        <canvas ref={canvasRef} style={{ display: "none" }} />
+        {url
+          ? <img src={url} alt="" style={{ width: "100%", maxWidth: 258, borderRadius: 14, boxShadow: "0 12px 34px rgba(0,0,0,0.28)" }} />
+          : <div style={{ width: 258, height: 322, borderRadius: 14, background: "var(--color-background-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>…</div>}
+        <button onClick={doShare} disabled={busy || !url} style={{ ...btn, width: "100%", background: "#4f46e5", color: "#fff", opacity: (busy || !url) ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <Icon name="spark" size={16} />{t.shareResultBtn || "Share result"}
+        </button>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--color-text-secondary)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{t.scoreCardClose || "Close"}</button>
+      </div>
     </div>
   );
 }
@@ -2341,6 +2461,7 @@ export default function StudyQuiz() {
   const planDoneRef = useRef(null);
   // Share-a-quiz
   const [shareOpen, setShareOpen] = useState(false);
+  const [scoreCardOpen, setScoreCardOpen] = useState(false); // shareable result image
   const [shareLink, setShareLink] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr]   = useState("");
@@ -5182,6 +5303,8 @@ export default function StudyQuiz() {
           <button style={{...Sb.btnPrimary,flex:1,margin:0}} onClick={retry}>{t.retry}</button>
           <button style={{...Sb.btnOutline,flex:1}} onClick={newMat}>{t.newMat}</button>
         </div>
+        <button style={{...Sb.btnOutline,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setScoreCardOpen(true)}><Icon name="spark" size={16}/>{t.shareResultBtn}</button>
+        {scoreCardOpen && <ScoreCardModal t={t} onClose={()=>setScoreCardOpen(false)} data={{ score, total:quiz.questions.length, pct: quiz.questions.length?Math.round(score/quiz.questions.length*100):0, subject: quiz.subject||quiz.title||"", rankEmoji: RANKS[myRankInfo.index]?.emoji, rankName:(t["rank_"+RANKS[myRankInfo.index]?.key])||RANKS[myRankInfo.index]?.name, xp: myRankInfo.xp, streak: stats.streak||0 }}/>}
         <button style={{...Sb.btnPrimary,width:"100%",margin:"0 0 14px",background:"var(--color-clay,#b5502f)"}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="trophy" size={16}/>{t.challengeFriend}</span>}</button>
         {shareOpen && <ShareModal link={shareLink} err={shareErr} copied={shareCopied} onCopy={copyShare} onClose={()=>setShareOpen(false)} challengeScore={`${score}/${quiz.questions.length}`} t={t}/>}
         {!isPro&&adsOn&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}><Icon name="volume" size={13}/>{t.advertisement}</div>}
