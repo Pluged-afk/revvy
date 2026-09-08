@@ -30,7 +30,8 @@ const T_EN = {
   questionsLeftToday:"questions left today", used:"used", bonusWord:"bonus", maxPerQuiz:"Max {n}/quiz", loadingAd:"Loading ad…", watchAdForQuestions:"Watch ad for +{n} questions",
   tagline:"Turn any material into a quiz",
   sub:"Upload a PDF, paste notes, take a photo, Revyy builds your quiz in seconds.", start:"Get started →",
-  starterTitle:"Try a quick quiz", starterSub:"Pick a topic and play a 10-question quiz. No notes needed.",
+  starterTitle:"Try a quick quiz", starterSub:"One tap to a 10-question warm-up. No notes needed.",
+  starterGoalTitle:"What are you studying for?", starterSubjectsLabel:"Or try a subject",
   whatUpload:"WHAT YOU CAN UPLOAD",
   features:[
     ["📄","PDFs","Upload lecture slides, textbooks, or any PDF document"],

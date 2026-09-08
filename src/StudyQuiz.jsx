@@ -2329,11 +2329,31 @@ function MockPassagePanel({ passage, svg, activeU, label }) {
   );
 }
 
-// Starter library: ready-made topics a brand-new user (no material of their
+// Starter library: ready-made warm-ups a brand-new user (no material of their
 // own yet) can quiz on in one tap, so they feel the core "make a quiz" magic
-// before uploading anything. Each summary is rich enough for the AI to build a
-// solid 10-question set; questions are generated in the user's UI language.
-const STARTER_SETS = [
+// before uploading anything. Grouped by GOAL: the eight exams Revyy has mocks
+// for (so a serious prepper sees THEIR test, not generic trivia) and a few
+// broad subjects. Each summary is rich enough for the AI to build a solid
+// 10-question set; questions are generated in the user's UI language.
+const STARTER_EXAMS = [
+  { id: "starter_sat", emoji: "📝", title: "SAT", subject: "SAT",
+    summary: "A warm-up mixing the digital SAT's core skills: standard English grammar and punctuation (subject-verb agreement, commas, transitions, concision), reading a short passage for its main idea and evidence, and the most common math topics, linear equations, ratios and percentages, and basic functions." },
+  { id: "starter_act", emoji: "📘", title: "ACT", subject: "ACT",
+    summary: "A warm-up covering the ACT's core skills: English grammar and punctuation, reading for main idea and detail, core algebra and geometry (equations, ratios, area and angles), and interpreting a simple data table or graph the way the science section expects." },
+  { id: "starter_psat", emoji: "✏️", title: "PSAT", subject: "PSAT/NMSQT",
+    summary: "A warm-up mirroring the digital PSAT and SAT: standard English grammar and punctuation, reading a short passage for its main idea, and common math topics, linear equations, ratios and percentages, and basic functions." },
+  { id: "starter_gre", emoji: "🎓", title: "GRE", subject: "GRE",
+    summary: "A warm-up on the GRE's core skills: high-frequency academic vocabulary used in context, reading comprehension and inference, and quantitative reasoning basics, arithmetic, ratios and percentages, algebra, and simple data interpretation." },
+  { id: "starter_gmat", emoji: "📊", title: "GMAT", subject: "GMAT",
+    summary: "A warm-up on GMAT Focus skills: critical reasoning (spotting an argument's assumption and what strengthens or weakens it), quantitative problem solving (algebra, ratios, word problems), and reading a short table or chart to reach a decision." },
+  { id: "starter_lsat", emoji: "⚖️", title: "LSAT", subject: "LSAT",
+    summary: "A warm-up on LSAT logical reasoning: identifying an argument's conclusion and its support, naming the assumption, spotting a flaw, and choosing what would most strengthen or weaken a short argument, plus careful reading for a passage's main point." },
+  { id: "starter_mcat", emoji: "🧪", title: "MCAT", subject: "MCAT",
+    summary: "A warm-up on MCAT foundations: cell biology and biochemistry basics (macromolecules, enzymes, metabolism), general and organic chemistry fundamentals (bonding, acids and bases, functional groups), and a touch of introductory psychology and sociology terms." },
+  { id: "starter_ucat", emoji: "🩺", title: "UCAT", subject: "UCAT",
+    summary: "A warm-up on UCAT-style reasoning: reading a short passage to judge whether a statement follows, quantitative reasoning from a table or chart, spotting the pattern in an abstract set, and a simple logical decision-making puzzle." },
+];
+const STARTER_SUBJECTS = [
   { id: "starter_bio", emoji: "🧬", title: "Biology Basics", subject: "Biology",
     summary: "Cells are the basic unit of life. Prokaryotic cells (bacteria) have no nucleus, while eukaryotic cells (plants, animals, fungi) keep their DNA inside a membrane-bound nucleus. Key organelles: mitochondria produce ATP energy through cellular respiration; chloroplasts in plant cells carry out photosynthesis, converting carbon dioxide and water into glucose and oxygen using sunlight; ribosomes build proteins; the cell membrane controls what enters and leaves. DNA is made of four bases (A, T, C, G) and carries genetic instructions; it is copied during replication and read to make proteins via transcription and translation. Mitosis produces two identical cells for growth; meiosis produces four genetically varied sex cells. Osmosis is the movement of water across a membrane from low to high solute concentration." },
   { id: "starter_world", emoji: "🌍", title: "World History", subject: "History",
@@ -4630,13 +4650,18 @@ export default function StudyQuiz() {
             have their own material. Shown once ever (see showStarter one-shot). */}
         {showStarter && librarySize(srs.library)===0 && (
           <div style={{background:"linear-gradient(135deg,#4f46e5,#6366f1)",borderRadius:16,padding:"18px 18px 16px",marginBottom:18,boxShadow:"0 6px 20px rgba(79,70,229,0.22)"}}>
-            <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:3}}>
-              <span style={{fontSize:20}} aria-hidden="true">✨</span>
-              <div style={{fontWeight:800,fontSize:15.5,color:"#fff"}}>{t.starterTitle||"Try a quick quiz"}</div>
+            <div style={{fontWeight:800,fontSize:15.5,color:"#fff",marginBottom:3}}>{t.starterGoalTitle||"What are you studying for?"}</div>
+            <div style={{fontSize:12.5,color:"rgba(255,255,255,0.85)",lineHeight:1.5,marginBottom:13}}>{t.starterSub||"One tap to a 10-question warm-up. No notes needed."}</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:15}}>
+              {STARTER_EXAMS.map(s=>(
+                <button key={s.id} onClick={()=>startSampleQuiz(s)} style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.16)",border:"1px solid rgba(255,255,255,0.26)",borderRadius:999,padding:"8px 13px",cursor:"pointer",fontFamily:"inherit",color:"#fff",fontSize:12.5,fontWeight:700}}>
+                  <span aria-hidden="true">{s.emoji}</span>{s.title}
+                </button>
+              ))}
             </div>
-            <div style={{fontSize:12.5,color:"rgba(255,255,255,0.85)",lineHeight:1.5,marginBottom:14}}>{t.starterSub||"Pick a topic and play a 10-question quiz. No notes needed."}</div>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:0.4,textTransform:"uppercase",color:"rgba(255,255,255,0.65)",marginBottom:9}}>{t.starterSubjectsLabel||"Or try a subject"}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:9}}>
-              {STARTER_SETS.map(s=>(
+              {STARTER_SUBJECTS.map(s=>(
                 <button key={s.id} onClick={()=>startSampleQuiz(s)} style={{display:"flex",alignItems:"center",gap:9,background:"rgba(255,255,255,0.14)",border:"1px solid rgba(255,255,255,0.22)",borderRadius:11,padding:"11px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"left",color:"#fff"}}>
                   <span style={{fontSize:20,flexShrink:0}} aria-hidden="true">{s.emoji}</span>
                   <span style={{minWidth:0}}>
