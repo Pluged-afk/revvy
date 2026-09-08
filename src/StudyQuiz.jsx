@@ -4699,9 +4699,9 @@ export default function StudyQuiz() {
           </div>
         )}
         {/* Quick-nav tiles: friends, badges, leaderboard side by side (wrap on
-            mobile) so they read as a compact dashboard, not a tall stack. Hidden
-            for a brand-new learner (phased home) so the first screen stays focused. */}
-        {hasStarted && (
+            mobile) so they read as a compact dashboard, not a tall stack. Shown
+            to everyone (incl. new users) so features like Friends are reachable
+            straight away, the app is feature-rich but stays easy to scan. */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12,marginBottom:18}}>
           <div onClick={openSocial} style={Sb.navTile}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
@@ -4733,7 +4733,6 @@ export default function StudyQuiz() {
           </div>
           )}
         </div>
-        )}
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
         <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4f46e5,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 14px rgba(79,70,229,0.2)":"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -4854,8 +4853,8 @@ export default function StudyQuiz() {
             })}</div>}
           </div>
         )}
-        {/* AI Study Coach, day-by-day exam plan (phased home: revealed after first quiz) */}
-        {hasStarted && (!homePlan ? (
+        {/* AI Study Coach, day-by-day exam plan */}
+        {!homePlan ? (
           <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
               <Medallion color="#7c3aed"><Icon name="compass" size={20}/></Medallion>
@@ -4896,7 +4895,7 @@ export default function StudyQuiz() {
               )}
             </div>
           );
-        })())}
+        })()}
         <p style={Sb.secLabel}>{t.whatUpload}</p>
         <div className="rv-feat-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
           {[...t.features.filter(([icon])=>icon!=="🔗"), t.langFeature].map(([,title,sub],i)=>(
