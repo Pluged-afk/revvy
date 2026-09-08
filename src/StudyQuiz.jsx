@@ -1770,6 +1770,45 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
   );
 }
 
+// Default keyboard bindings for MCQ quizzes: 1-4 pick options, Enter advances.
+// Rebindable per-user in Settings. Stored as raw KeyboardEvent.key values.
+const DEFAULT_KEYBINDS = { o1: "1", o2: "2", o3: "3", o4: "4", next: "Enter" };
+// Pretty-print a stored key for the UI (Space, Enter, arrows, upper-cased letters).
+const keyLabel = (v) => v === " " ? "Space" : v === "ArrowRight" ? "→" : v === "ArrowLeft" ? "←" : v === "ArrowUp" ? "↑" : v === "ArrowDown" ? "↓" : (v || "").length === 1 ? v.toUpperCase() : (v || "?");
+// Rebindable keyboard-controls editor. Tap an action, press any key to bind it.
+function KeyBindings({ bindings, onChange, t }) {
+  const [listening, setListening] = useState(null);
+  useEffect(() => {
+    if (!listening) return;
+    const onKey = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (e.key !== "Escape") onChange({ ...DEFAULT_KEYBINDS, ...bindings, [listening]: e.key });
+      setListening(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [listening, bindings, onChange]);
+  const b = { ...DEFAULT_KEYBINDS, ...(bindings || {}) };
+  const rows = [
+    ["o1", (t.kbOpt || "Answer {n}").replace("{n}", 1)],
+    ["o2", (t.kbOpt || "Answer {n}").replace("{n}", 2)],
+    ["o3", (t.kbOpt || "Answer {n}").replace("{n}", 3)],
+    ["o4", (t.kbOpt || "Answer {n}").replace("{n}", 4)],
+    ["next", t.kbNext || "Next / submit"],
+  ];
+  const cap = (active) => ({ minWidth: 58, padding: "6px 10px", borderRadius: 8, border: "1px solid " + (active ? "var(--color-accent)" : "var(--color-border-secondary)"), background: active ? "var(--color-sel-tint)" : "var(--color-background-secondary)", color: active ? "var(--color-accent)" : "var(--color-text-primary)", fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", fontVariant: "small-caps" });
+  return (
+    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+      {rows.map(([k, label]) => (
+        <div key={k} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>{label}</span>
+          <button onClick={() => setListening(k)} style={cap(listening === k)}>{listening === k ? (t.kbPress || "press a key…") : keyLabel(b[k])}</button>
+        </div>
+      ))}
+      <button onClick={() => onChange({ ...DEFAULT_KEYBINDS })} style={{ alignSelf: "flex-start", background: "none", border: "none", color: "var(--color-accent)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", padding: "2px 0" }}>{t.kbReset || "Reset to defaults"}</button>
+    </div>
+  );
+}
 function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, onOpenBadges = () => {}, t }) {
   const s = t.set || {};
   const { user, username, saveUsername, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
@@ -1843,7 +1882,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
   };
   if (!draft) return null;
   const DEFAULTS = {theme:'system',fontSize:'medium',animations:true,sound:true,
-    volume:70,notifSound:true,haptics:false,feedback:'immediate',autoAdvance:false,autoAdvanceSec:5,defaultDiff:1,defaultQCount:10};
+    volume:70,notifSound:true,haptics:false,feedback:'immediate',autoAdvance:false,autoAdvanceSec:5,defaultDiff:1,defaultQCount:10,keyboardOn:true,keyBindings:DEFAULT_KEYBINDS};
   return (
     <div style={{position:"fixed",inset:0,zIndex:600,display:"flex",pointerEvents:"all"}}>
       <div onClick={onCancel} style={{flex:1,background:"rgba(0,0,0,0.45)",backdropFilter:"blur(1px)"}}/>
@@ -2063,6 +2102,14 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
                 <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>15s</span>
               </div>
             </SettingRow>
+          )}
+          <SettingRow label={s.keyboard||"Keyboard controls"} desc={s.keyboardDesc||"Answer with your keyboard on a computer. Tap a key below to rebind it."}>
+            <Toggle on={draft.keyboardOn!==false} onChange={v=>update("keyboardOn",v)}/>
+          </SettingRow>
+          {draft.keyboardOn!==false && (
+            <div style={{padding:"0 2px 6px"}}>
+              <KeyBindings bindings={draft.keyBindings} onChange={b=>update("keyBindings",b)} t={t}/>
+            </div>
           )}
           <SettingRow label={s.defaultDiff} desc={s.defaultDiffDesc}>
             <Seg options={[["0",s.segEasy],["1",s.segMed],["2",s.segHard]]} value={String(draft.defaultDiff)} onChange={v=>update("defaultDiff",parseInt(v))}/>
@@ -2821,6 +2868,8 @@ export default function StudyQuiz() {
     defaultDiff:1,
     defaultQCount:10,
     nickname:'',
+    keyboardOn:true,
+    keyBindings:DEFAULT_KEYBINDS,
   });
   const [examSections, setExamSections] = useState([
     {id:0, type:'mcq',     count:'10', marksPerQ:'2'},
@@ -3792,24 +3841,30 @@ export default function StudyQuiz() {
     for (let x=wrong.length-1;x>0;x--){const j=Math.floor(Math.random()*(x+1));[wrong[x],wrong[j]]=[wrong[j],wrong[x]];}
     setQuizElim(wrong.slice(0,nElim)); srs.usePowerup("hint"); haptic();
   };
-  // Keyboard-driven MCQ (desktop nicety): number keys 1-9 pick an option,
-  // Enter advances once an answer is chosen. Skipped for typed answers
-  // (fill/match) and whenever focus is in a field, so nothing is hijacked.
+  // Keyboard-driven MCQ (opt-in via Settings, keys rebindable): the bound keys
+  // pick an option, the "next" key advances once an answer is chosen. Skipped
+  // for typed answers (fill/match) and whenever focus is in a field.
   useEffect(() => {
-    if (screen !== "quiz" || quiz?.type !== "mcq") return;
+    if (screen !== "quiz" || quiz?.type !== "mcq" || settings.keyboardOn === false) return;
+    const norm = (k) => (k && k.length === 1 ? k.toLowerCase() : k);
+    const b = { ...DEFAULT_KEYBINDS, ...(settings.keyBindings || {}) };
+    const optMap = { [norm(b.o1)]: 0, [norm(b.o2)]: 1, [norm(b.o3)]: 2, [norm(b.o4)]: 3 };
+    const nextKey = norm(b.next);
     const onKey = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const tag = (e.target?.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
-      if (e.key >= "1" && e.key <= "9") {
-        const i = Number(e.key) - 1, opts = quiz.questions[qIdx]?.options || [];
+      const k = norm(e.key);
+      if (k === nextKey) { if (selected !== null) { e.preventDefault(); nextMCQ(); } return; }
+      if (k in optMap) {
+        const i = optMap[k], opts = quiz.questions[qIdx]?.options || [];
         if (selected === null && i < opts.length && !quizElim.includes(i)) { e.preventDefault(); pick(i); }
-      } else if (e.key === "Enter" && selected !== null) { e.preventDefault(); nextMCQ(); }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, quiz, qIdx, selected, quizElim]);
+  }, [screen, quiz, qIdx, selected, quizElim, settings.keyboardOn, settings.keyBindings]);
   // Retry re-shuffles the SAME questions into a new order (never regenerates),
   // so a second attempt isn't a memorised run. Marked `replay` so the results
   // handler doesn't double-count it into stats / the deck / the adaptive signal.

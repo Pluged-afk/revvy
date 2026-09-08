@@ -228,6 +228,7 @@ const T_EN = {
   explainWhy:"Explain my mistake", explainLoading:"Thinking…", explainAsk:"Ask a follow-up…", explainAskBtn:"Ask",
   shareResultBtn:"Share result", scoreCardLabel:"Quiz result", scoreCardCta:"Beat my score at revyy.app", scoreCardSave:"Save image", scoreCardClose:"Close",
   printSheet:"Print / PDF",
+  kbOpt:"Answer {n}", kbNext:"Next / submit", kbPress:"press a key…", kbReset:"Reset to defaults",
   explainErr:"Couldn't load an explanation, try again.",
   // Feature A: source grounding. Feature B: flag a question and get a better one.
   srcFromNotes:"From your notes", srcVerify:"General knowledge, double-check", srcQuoteLabel:"From your material",
@@ -432,6 +433,7 @@ const T_EN = {
     feedback:"Answer Feedback", feedbackImmediate:"Correct/wrong shown immediately after each pick", feedbackEnd:"All answers revealed only at the final results screen", segInstant:"Instant", segAtEnd:"At End",
     autoAdvance:"Auto-advance", autoAdvanceDesc:"Moves to the next question automatically after you answer",
     autoAdvanceTime:"Auto-advance time", autoAdvanceTimeDesc:"How long to wait before the next question (instant feedback)",
+    keyboard:"Keyboard controls", keyboardDesc:"Answer with your keyboard on a computer. Tap a key below to rebind it.",
     defaultDiff:"Default Difficulty", defaultDiffDesc:"Starting difficulty when opening a new quiz", segEasy:"Easy", segMed:"Med", segHard:"Hard",
     defaultQ:"Default Questions", defaultQDesc:"Starting question count for new quizzes",
     secUsage:"USAGE", usageToday:"Questions today", leftWord:"left", usageBonus:"Extra questions (packs)", usageAdWatches:"Ad watches today", adLimitReached:"Daily ad limit reached",
