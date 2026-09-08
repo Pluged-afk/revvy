@@ -32,6 +32,8 @@ const T_EN = {
   sub:"Upload a PDF, paste notes, take a photo, Revyy builds your quiz in seconds.", start:"Get started →",
   starterTitle:"Try a quick quiz", starterSub:"One tap to a 10-question warm-up. No notes needed.",
   starterGoalTitle:"What are you studying for?", starterSubjectsLabel:"Or try a subject",
+  dailyGoalTitle:"Daily goal", dailyGoalDone:"Daily goal done!", dailyGoalProgress:"{n} of {g} questions today",
+  dailyStreakSafe:"🔥 {s}-day streak, safe for today", dailyStreakKeep:"🔥 {s}-day streak", dailyDoneNoStreak:"Nice. Come back tomorrow to start a streak.",
   whatUpload:"WHAT YOU CAN UPLOAD",
   features:[
     ["📄","PDFs","Upload lecture slides, textbooks, or any PDF document"],

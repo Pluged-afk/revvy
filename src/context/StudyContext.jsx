@@ -90,7 +90,7 @@ function normNotif(n) {
   };
 }
 function emptyData() {
-  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), notif: normNotif({}), starterSeen: false, updatedAt: 0 };
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), notif: normNotif({}), starterSeen: false, daily: { date: null, count: 0 }, updatedAt: 0 };
 }
 const asTopicStats = (t) => (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
 
@@ -143,6 +143,7 @@ function loadLocal() {
       // Persisted one-shot flag: must survive a local reload or the first-run
       // starter card would resurface every time a guest reopens the app.
       starterSeen: !!blob.starterSeen,
+      daily: (blob.daily && typeof blob.daily === "object") ? { date: blob.daily.date || null, count: Math.max(0, Math.round(Number(blob.daily.count) || 0)) } : { date: null, count: 0 },
       updatedAt: blob.updatedAt || 0,
     };
   }
@@ -163,6 +164,7 @@ function loadLocal() {
     badges: normBadges({}),
     notif: normNotif({}),
     starterSeen: false,
+    daily: { date: null, count: 0 },
     updatedAt: 0,
   };
 }
@@ -239,6 +241,16 @@ function mergeStudy(server, local) {
     // Sticky one-shot: once the first-run starter card has been seen on ANY
     // device, it stays seen everywhere so it never resurfaces.
     starterSeen: !!(server.starterSeen || local.starterSeen),
+    // Daily goal counter: if either side counted today, keep today's higher
+    // count (never sum, to avoid double-counting the same session); otherwise
+    // keep whichever side's date is more recent.
+    daily: (() => {
+      const a = server.daily || {}, b = local.daily || {}, today = dstr();
+      const at = a.date === today ? Math.max(0, Number(a.count) || 0) : 0;
+      const bt = b.date === today ? Math.max(0, Number(b.count) || 0) : 0;
+      if (at || bt) return { date: today, count: Math.max(at, bt) };
+      return (a.date || "") >= (b.date || "") ? { date: a.date || null, count: Math.max(0, Number(a.count) || 0) } : { date: b.date || null, count: Math.max(0, Number(b.count) || 0) };
+    })(),
     updatedAt: Date.now(),
   };
 }
@@ -452,8 +464,12 @@ export function StudyProvider({ children }) {
       let savedProgress = Number(p.savedProgress) || 0;
       if (!isArena) { const sp = addSaverProgress(savedProgress, streakSavers, total); savedProgress = sp.savedProgress; streakSavers = sp.streakSavers; }
       const wallet = earned ? walletAdd(p.wallet, earned) : normWallet(p.wallet);
+      // Daily goal: count questions answered today (resets when the day rolls
+      // over). Drives the home progress ring + the "keep your streak" nudge.
+      const pd = p.daily && p.daily.date === today ? p.daily : { date: today, count: 0 };
+      const daily = { date: today, count: pd.count + (isArena ? 0 : total) };
       return {
-        ...p, wallet, streakSavers, savedProgress,
+        ...p, wallet, streakSavers, savedProgress, daily,
         stats: {
           ...s,
           answered: isArena ? s.answered : s.answered + total,
@@ -670,7 +686,7 @@ export function StudyProvider({ children }) {
     completeActivity, usePowerup, grantPowerups, recordChallengeResult,
     syncBadges, equipBadge, setBadgesPublic, markBadgesSeen,
     notif: data.notif, markNotifSeen, setNotifPref,
-    starterSeen: data.starterSeen, markStarterSeen, loaded,
+    starterSeen: data.starterSeen, markStarterSeen, loaded, daily: data.daily,
     bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc, recordMockScore,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };

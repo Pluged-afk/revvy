@@ -4470,6 +4470,12 @@ export default function StudyQuiz() {
   // themselves once they've felt the loop once, so the first screen never
   // overwhelms. Everything comes back the moment they've started.
   const hasStarted = (stats.answered || 0) > 0 || librarySize(srs.library) > 0;
+  // Daily goal: a small, reachable target that (with the streak) gives a reason
+  // to come back tomorrow. Counted in the study blob (srs.daily), resets daily.
+  const DAILY_GOAL = 10;
+  const dailyToday = (srs.daily && srs.daily.date === new Date().toLocaleDateString("en-CA")) ? (srs.daily.count || 0) : 0;
+  const dailyMet = dailyToday >= DAILY_GOAL;
+  const dailyPct = Math.min(100, Math.round((dailyToday / DAILY_GOAL) * 100));
   // Celebrate ONLY a badge that becomes earned during THIS session (a real
   // unlock). On the first evaluation we baseline everything the learner already
   // qualifies for and mark it seen, so re-opening the app never replays the
@@ -4670,6 +4676,25 @@ export default function StudyQuiz() {
                   </span>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+        {/* Daily goal: a reachable target + the streak, the day-2 return hook.
+            Shown once the learner has started (a fresh user sees the chooser). */}
+        {hasStarted && (
+          <div style={{display:"flex",alignItems:"center",gap:14,background:dailyMet?"linear-gradient(135deg,#15803d,#22c55e)":"var(--color-background-primary)",border:dailyMet?"none":"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:dailyMet?"0 4px 14px rgba(34,197,94,0.22)":"none"}}>
+            <svg width="56" height="56" viewBox="0 0 56 56" style={{flexShrink:0}} aria-hidden="true">
+              <circle cx="28" cy="28" r="22" fill="none" stroke={dailyMet?"rgba(255,255,255,0.3)":"var(--color-background-secondary)"} strokeWidth="6"/>
+              <circle cx="28" cy="28" r="22" fill="none" stroke={dailyMet?"#fff":"var(--color-accent)"} strokeWidth="6" strokeLinecap="round" strokeDasharray="138.2" strokeDashoffset={138.2*(1-dailyPct/100)} transform="rotate(-90 28 28)"/>
+              <text x="28" y="28" textAnchor="middle" dominantBaseline="central" fontSize="15" fontWeight="800" fill={dailyMet?"#fff":"var(--color-text-primary)"} fontFamily="inherit">{dailyMet?"✓":dailyToday}</text>
+            </svg>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:14,color:dailyMet?"#fff":"var(--color-text-primary)"}}>{dailyMet?(t.dailyGoalDone||"Daily goal done!"):(t.dailyGoalTitle||"Daily goal")}</div>
+              <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:dailyMet?"rgba(255,255,255,0.9)":"var(--color-text-secondary)"}}>
+                {dailyMet
+                  ? ((stats.streak||0)>0 ? (t.dailyStreakSafe||"🔥 {s}-day streak, safe for today").replace("{s}",stats.streak) : (t.dailyDoneNoStreak||"Nice. Come back tomorrow to start a streak."))
+                  : (t.dailyGoalProgress||"{n} of {g} questions today").replace("{n}",dailyToday).replace("{g}",DAILY_GOAL) + ((stats.streak||0)>0 ? " · " + (t.dailyStreakKeep||"🔥 {s}-day streak").replace("{s}",stats.streak) : "")}
+              </div>
             </div>
           </div>
         )}

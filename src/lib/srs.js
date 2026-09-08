@@ -74,5 +74,6 @@ export function useSRS() {
     starterSeen: study?.starterSeen ?? false,
     markStarterSeen: study?.markStarterSeen || (() => {}),
     loaded: study?.loaded ?? false,
+    daily: study?.daily || { date: null, count: 0 },
   };
 }
