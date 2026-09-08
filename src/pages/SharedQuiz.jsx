@@ -44,6 +44,7 @@ export default function SharedQuiz() {
   const [revealed, setRevealed] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const [posted, setPosted] = useState(false);
+  const [replayLocked, setReplayLocked] = useState(false); // already scored this challenge once (fair play)
   const [copied, setCopied] = useState(false);
   // Part of the viral loop: a challenged player (even logged out) can forward the
   // SAME link on to grow the challenge circle.
@@ -91,9 +92,16 @@ export default function SharedQuiz() {
   }, [answers, idx, questions.length]);
 
   // Post the score to the leaderboard once, when the results screen opens.
+  // Fair play: a challenge counts only the FIRST attempt per browser, so a
+  // shared link can't be replayed to inflate the podium. A replay still shows
+  // the learner their score locally, it just isn't re-posted.
   useEffect(() => {
     if (state !== "done" || posted) return;
     setPosted(true);
+    const lockKey = "revyy_sq_" + id;
+    let already = false;
+    try { already = !!localStorage.getItem(lockKey); } catch { /* ignore */ }
+    if (already) { setReplayLocked(true); return; }
     (async () => {
       try {
         const res = await fetch("/api/study", {
@@ -102,6 +110,7 @@ export default function SharedQuiz() {
         });
         const d = await res.json().catch(() => ({}));
         if (Array.isArray(d.results)) setResults(d.results);
+        try { localStorage.setItem(lockKey, "1"); } catch { /* ignore */ }
       } catch { /* leaderboard is best-effort */ }
     })();
   }, [state, posted, id, name, score, questions.length]);
@@ -247,6 +256,12 @@ export default function SharedQuiz() {
         <div style={{ fontSize: 46, fontWeight: 800, fontFamily: "'Fraunces',Georgia,serif" }}>{pct}%</div>
         <div style={{ opacity: 0.85, fontSize: 14, marginTop: 2 }}>{score} / {questions.length} correct{selfGraded ? " (self-graded)" : ""}</div>
       </div>
+
+      {replayLocked && (
+        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "10px 14px", fontSize: 13, color: "#92400e", marginBottom: 18, textAlign: "center" }}>
+          Practice run. A challenge only counts your first attempt, so this score is not added to the leaderboard.
+        </div>
+      )}
 
       {hasChallenge && (() => {
         const won = pct > ownerPct, tied = pct === ownerPct;

@@ -3792,6 +3792,24 @@ export default function StudyQuiz() {
     for (let x=wrong.length-1;x>0;x--){const j=Math.floor(Math.random()*(x+1));[wrong[x],wrong[j]]=[wrong[j],wrong[x]];}
     setQuizElim(wrong.slice(0,nElim)); srs.usePowerup("hint"); haptic();
   };
+  // Keyboard-driven MCQ (desktop nicety): number keys 1-9 pick an option,
+  // Enter advances once an answer is chosen. Skipped for typed answers
+  // (fill/match) and whenever focus is in a field, so nothing is hijacked.
+  useEffect(() => {
+    if (screen !== "quiz" || quiz?.type !== "mcq") return;
+    const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
+      if (e.key >= "1" && e.key <= "9") {
+        const i = Number(e.key) - 1, opts = quiz.questions[qIdx]?.options || [];
+        if (selected === null && i < opts.length && !quizElim.includes(i)) { e.preventDefault(); pick(i); }
+      } else if (e.key === "Enter" && selected !== null) { e.preventDefault(); nextMCQ(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, quiz, qIdx, selected, quizElim]);
   // Retry re-shuffles the SAME questions into a new order (never regenerates),
   // so a second attempt isn't a memorised run. Marked `replay` so the results
   // handler doesn't double-count it into stats / the deck / the adaptive signal.
@@ -3848,6 +3866,35 @@ export default function StudyQuiz() {
   const score = answers.filter(a=>a.isCorrect).length;
   const pct   = quiz ? Math.round((score/quiz.questions.length)*100) : 0;
   const badge = pct>=90?{icon:"trophy",text:t.excellent}:pct>=75?{icon:"target",text:t.great}:pct>=60?{icon:"notes",text:t.good}:{icon:"flame",text:t.keep};
+  // Printable study sheet: open a clean, self-contained page (no app chrome)
+  // with every question, the correct answer marked, and explanations, then
+  // trigger the print dialog (which also offers "Save as PDF"). Lets students
+  // revise offline, a genuinely useful export nobody else does well.
+  const printStudySheet = () => {
+    if (!quiz?.questions?.length) return;
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const isMCQ = quiz.type === "mcq";
+    const rows = quiz.questions.map((q, i) => {
+      const a = answers[i];
+      let bodyHtml;
+      if (isMCQ && Array.isArray(q.options)) {
+        bodyHtml = "<ul class='opts'>" + q.options.map((o, oi) => {
+          const correct = oi === q.correct, chosenWrong = a && a.selected === oi && !correct;
+          return `<li class='${correct ? "correct" : chosenWrong ? "wrong" : ""}'>${correct ? "✓ " : chosenWrong ? "✗ " : ""}${esc(o)}</li>`;
+        }).join("") + "</ul>";
+      } else {
+        bodyHtml = `<p class='ans'><strong>Answer:</strong> ${esc(q.answer || (q.options && q.options[q.correct]) || "")}</p>`;
+      }
+      const exp = q.explanation ? `<p class='exp'>${esc(q.explanation)}</p>` : "";
+      return `<div class='q'><p class='qt'><span class='n'>${i + 1}.</span> ${esc(q.question)}</p>${bodyHtml}${exp}</div>`;
+    }).join("");
+    const title = esc(quiz.title || quiz.subject || (t.printSheet || "Study sheet"));
+    const doc = `<!doctype html><html><head><meta charset='utf-8'><title>${title} — Revyy</title><style>body{font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;background:#fff;max-width:720px;margin:0 auto;padding:32px 24px;line-height:1.55}h1{font-size:22px;margin:0 0 4px}.meta{color:#666;font-size:13px;margin:0 0 24px;font-family:system-ui,sans-serif}.q{margin:0 0 18px;page-break-inside:avoid}.qt{font-weight:700;margin:0 0 6px}.n{color:#4f46e5}.opts{list-style:none;padding:0;margin:0 0 6px}.opts li{padding:2px 0 2px 4px;font-size:15px}.opts li.correct{color:#15803d;font-weight:700}.opts li.wrong{color:#b91c1c}.ans{margin:4px 0}.exp{color:#555;font-size:14px;font-style:italic;margin:4px 0 0}.foot{margin-top:28px;border-top:1px solid #ddd;padding-top:12px;color:#888;font-size:12px;font-family:system-ui,sans-serif}@media print{body{padding:0}}</style></head><body><h1>${title}</h1><p class='meta'>Revyy study sheet · ${new Date().toLocaleDateString()} · ${t.scoreCardLabel || "Score"} ${score}/${quiz.questions.length}</p>${rows}<p class='foot'>Made with Revyy · revyy.app</p></body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) return; // pop-up blocked; the learner can allow pop-ups and retry
+    w.document.write(doc); w.document.close(); w.focus();
+    setTimeout(() => { try { w.print(); } catch { /* user can print manually */ } }, 350);
+  };
   // Adaptive difficulty, forward nudge: after a very strong or rough round,
   // offer to move the next quiz up or down a level (reward framing only). Uses
   // the level this set was actually generated at, not the current picker value.
@@ -5360,7 +5407,10 @@ export default function StudyQuiz() {
           <button style={{...Sb.btnPrimary,flex:1,margin:0}} onClick={retry}>{t.retry}</button>
           <button style={{...Sb.btnOutline,flex:1}} onClick={newMat}>{t.newMat}</button>
         </div>
-        <button style={{...Sb.btnOutline,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setScoreCardOpen(true)}><Icon name="spark" size={16}/>{t.shareResultBtn}</button>
+        <div style={{display:"flex",gap:10,marginBottom:14}}>
+          <button style={{...Sb.btnOutline,flex:1,margin:0,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setScoreCardOpen(true)}><Icon name="spark" size={16}/>{t.shareResultBtn}</button>
+          <button style={{...Sb.btnOutline,flex:1,margin:0,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={printStudySheet}><Icon name="notes" size={16}/>{t.printSheet||"Print / PDF"}</button>
+        </div>
         {scoreCardOpen && <ScoreCardModal t={t} onClose={()=>setScoreCardOpen(false)} data={{ score, total:quiz.questions.length, pct: quiz.questions.length?Math.round(score/quiz.questions.length*100):0, subject: quiz.subject||quiz.title||"", rankEmoji: RANKS[myRankInfo.index]?.emoji, rankName:(t["rank_"+RANKS[myRankInfo.index]?.key])||RANKS[myRankInfo.index]?.name, xp: myRankInfo.xp, streak: stats.streak||0 }}/>}
         <button style={{...Sb.btnOutline,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="trophy" size={16}/>{t.challengeFriend}</span>}</button>
         {shareOpen && <ShareModal link={shareLink} err={shareErr} copied={shareCopied} onCopy={copyShare} onClose={()=>setShareOpen(false)} challengeScore={`${score}/${quiz.questions.length}`} t={t}/>}

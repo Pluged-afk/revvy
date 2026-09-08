@@ -227,6 +227,7 @@ const T_EN = {
   // ── Explain why / readiness / share ──
   explainWhy:"Explain my mistake", explainLoading:"Thinking…", explainAsk:"Ask a follow-up…", explainAskBtn:"Ask",
   shareResultBtn:"Share result", scoreCardLabel:"Quiz result", scoreCardCta:"Beat my score at revyy.app", scoreCardSave:"Save image", scoreCardClose:"Close",
+  printSheet:"Print / PDF",
   explainErr:"Couldn't load an explanation, try again.",
   // Feature A: source grounding. Feature B: flag a question and get a better one.
   srcFromNotes:"From your notes", srcVerify:"General knowledge, double-check", srcQuoteLabel:"From your material",
