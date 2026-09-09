@@ -1490,7 +1490,7 @@ function RanksModal({ currentIndex, xp, t, onClose }) {
                 <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: r.color + "22", color: r.color }}><Icon name={r.icon} size={21} stroke={1.9} style={{ color: r.color }} /></div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: r.color }}>{nm}</div>
-                  <div style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", fontFamily: "monospace" }}>{r.min.toLocaleString()} XP{i === RANKS.length - 1 ? "+" : ""}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", fontFamily: "monospace" }}>{r.min.toLocaleString()} pts{i === RANKS.length - 1 ? "+" : ""}</div>
                 </div>
                 {current ? <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.4, textTransform: "uppercase", color: "#fff", background: r.color, borderRadius: 999, padding: "3px 10px" }}>{t.rankCurrent || "You"}</span>
                   : reached ? <Icon name="check" size={17} stroke={2.4} style={{ color: "#16a34a", flexShrink: 0 }} />
@@ -2461,34 +2461,6 @@ const STARTER_SUBJECTS = [
   { id: "starter_gk", emoji: "💡", title: "General Knowledge", subject: "Trivia",
     summary: "A varied mix of common knowledge. Water is made of two hydrogen atoms and one oxygen atom. There are eight planets in the solar system; Jupiter is the largest and Mercury is closest to the Sun. Light travels faster than sound, which is why lightning is seen before thunder. The human body has 206 bones and the heart has four chambers. Shakespeare wrote Romeo and Juliet and Hamlet. The Mona Lisa was painted by Leonardo da Vinci. A triangle's angles add up to 180 degrees. The freezing point of water is 0 degrees Celsius and boiling is 100. The speed of light is about 300,000 kilometres per second. Photosynthesis produces the oxygen we breathe." },
 ];
-
-// Competitive Arena tiers: a fixed skill ladder (so it works with any number
-// of players), each with its own colour and three divisions (III low → I high).
-// A learner's season-best run score maps to a tier + division here.
-const ARENA_TIERS = [
-  { name: "Bronze",   min: 0,    color: "#c08457" },
-  { name: "Silver",   min: 600,  color: "#9aa4b2" },
-  { name: "Gold",     min: 1500, color: "#e0a90a" },
-  { name: "Platinum", min: 3000, color: "#22b8cf" },
-  { name: "Diamond",  min: 6000, color: "#5b8def" },
-];
-function arenaTier(score) {
-  const s = Math.max(0, Math.round(Number(score) || 0));
-  let i = 0;
-  for (let k = 0; k < ARENA_TIERS.length; k++) if (s >= ARENA_TIERS[k].min) i = k;
-  const tier = ARENA_TIERS[i], next = ARENA_TIERS[i + 1] || null, romans = ["III", "II", "I"];
-  if (!next) return { name: tier.name, division: "", color: tier.color, pct: 1, toNext: 0, nextLabel: null, isMax: true };
-  const step = (next.min - tier.min) / 3;
-  const d = Math.min(2, Math.floor((s - tier.min) / step)); // 0..2 → III,II,I
-  const divFloor = tier.min + d * step, divCeil = tier.min + (d + 1) * step;
-  return {
-    name: tier.name, division: romans[d], color: tier.color,
-    pct: Math.max(0, Math.min(1, (s - divFloor) / step)),
-    toNext: Math.max(0, Math.ceil(divCeil - s)),
-    nextLabel: d < 2 ? `${tier.name} ${romans[d + 1]}` : `${next.name} III`,
-    isMax: false,
-  };
-}
 
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
@@ -6611,7 +6583,7 @@ export default function StudyQuiz() {
                 </div>
                 <div style={{textAlign:"right"}}>
                   <div style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:"var(--color-text-primary)"}}>{myRankInfo.xp.toLocaleString()}</div>
-                  <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>XP</div>
+                  <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>{t.arenaBestLabel||"best run"}</div>
                 </div>
                 <Icon name="chevron" size={16} stroke={2} style={{color:"var(--color-text-tertiary)",flexShrink:0}}/>
               </div>
@@ -6619,7 +6591,7 @@ export default function StudyQuiz() {
                 <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:14,overflow:"hidden"}}><div style={{width:`${Math.round((myRankInfo.toNext||0)*100)}%`,height:"100%",background:r.color}}/></div>
                 <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:6}}>{(t.rankToNext||"{n} XP to {r}").replace("{n}",Math.max(0,myRankInfo.next.min-myRankInfo.xp).toLocaleString()).replace("{r}",nextNm)}</div>
               </>) : <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:12}}>{t.rankMax||"You've reached the top tier. Legendary."}</div>}
-              <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",marginTop:8,display:"inline-flex",alignItems:"center",gap:5}}><span aria-hidden="true">⚡</span>{t.xpAdaptiveHint||"Harder questions earn more XP than easy ones."}</div>
+              <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",marginTop:8,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="bolt" size={12} style={{flexShrink:0}}/>{t.xpAdaptiveHint||"Your rank climbs with your best Endless Arena run."}</div>
             </div>
           ); })()}
         {showRanks && <RanksModal currentIndex={myRankInfo.index} xp={myRankInfo.xp} t={t} onClose={()=>setShowRanks(false)}/>}
@@ -6878,25 +6850,26 @@ export default function StudyQuiz() {
         <div className="rv-center-narrow" style={{padding:"20px 16px 40px"}}>
           {arenaBusy && <div style={{textAlign:"center",padding:"36px 0",color:"var(--color-text-tertiary)"}}><div className="spin-ring" style={{width:34,height:34,borderRadius:"50%",border:"3px solid var(--color-border-tertiary)",borderTopColor:"var(--color-accent)",margin:"0 auto"}}/></div>}
           {!arenaBusy && (<>
-            {/* Competitive season tier: a fresh ranked ladder each month. */}
-            {arenaSeasonData && (()=>{ const st=arenaSeasonData; const tier=arenaTier(st.you?.score||0); const days=Math.max(0,Math.ceil((new Date(st.endsAt).getTime()-Date.now())/86400000)); return (
-              <div style={{background:`linear-gradient(135deg, ${tier.color}22, ${tier.color}0d)`,border:`1px solid ${tier.color}66`,borderRadius:16,padding:16,marginBottom:14}}>
+            {/* Your competitive Arena RANK (Novice..Luminary from your best run),
+                with this month's season standing below. */}
+            {(()=>{ const r=RANKS[myRankInfo.index]; const nm=(t["rank_"+r.key])||r.name; const nextNm=myRankInfo.next?((t["rank_"+myRankInfo.next.key])||myRankInfo.next.name):null; const best=srs.stats?.arenaBest||0; const toNextPts=myRankInfo.next?Math.max(0,myRankInfo.next.min-best):0; const st=arenaSeasonData; const days=st?.endsAt?Math.max(0,Math.ceil((new Date(st.endsAt).getTime()-Date.now())/86400000)):null; return (
+              <div style={{background:`linear-gradient(135deg, ${r.color}22, ${r.color}0d)`,border:`1px solid ${r.color}66`,borderRadius:16,padding:16,marginBottom:14}}>
                 <div style={{display:"flex",alignItems:"center",gap:13}}>
-                  <div style={{width:52,height:52,borderRadius:14,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:tier.color+"26"}} aria-hidden="true"><Icon name="trophy" size={26} stroke={1.8} style={{color:tier.color}}/></div>
+                  <div style={{width:52,height:52,borderRadius:14,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:r.color+"26"}} aria-hidden="true"><Icon name={r.icon} size={26} stroke={1.8} style={{color:r.color}}/></div>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.arenaSeasonRank||"Season rank"}</div>
-                    <div style={{fontSize:19,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:tier.color}}>{tier.name}{tier.division?" "+tier.division:""}</div>
-                    <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:1}}>{st.you?.rank?(t.arenaSeasonPos||"#{r} of {n} this season").replace("{r}",st.you.rank).replace("{n}",st.players):(t.arenaSeasonUnranked||"Play a run to join the ladder")}</div>
+                    <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.arenaRankLabel||"Arena rank"}</div>
+                    <div style={{fontSize:19,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:r.color}}>{nm}</div>
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
-                    <div style={{fontSize:11,fontWeight:700,color:"var(--color-text-secondary)"}}>{days===0?(t.arenaSeasonEndsToday||"Ends today"):(t.arenaSeasonEnds||"{n}d left").replace("{n}",days)}</div>
-                    <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",fontFamily:"monospace",marginTop:2}}>{(st.you?.score||0).toLocaleString()} pts</div>
+                    <div style={{fontSize:19,fontWeight:800,fontFamily:"monospace",color:"var(--color-text-primary)"}}>{best.toLocaleString()}</div>
+                    <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>{t.arenaBestLabel||"best run"}</div>
                   </div>
                 </div>
-                {!tier.isMax ? (<>
-                  <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:13,overflow:"hidden"}}><div style={{width:`${Math.round(tier.pct*100)}%`,height:"100%",background:tier.color}}/></div>
-                  <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:6}}>{(t.arenaToNextTier||"+{n} pts to {r}").replace("{n}",tier.toNext.toLocaleString()).replace("{r}",tier.nextLabel)}</div>
-                </>) : <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:12}}>{t.arenaTopTier||"Top tier, you're at the summit this season."}</div>}
+                {myRankInfo.next ? (<>
+                  <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:13,overflow:"hidden"}}><div style={{width:`${Math.round((myRankInfo.toNext||0)*100)}%`,height:"100%",background:r.color}}/></div>
+                  <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:6}}>{(t.arenaToNextRank||"+{n} pts to {r}").replace("{n}",toNextPts.toLocaleString()).replace("{r}",nextNm)}</div>
+                </>) : <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:12}}>{t.arenaTopRank||"Top rank. A Luminary of the Arena."}</div>}
+                {st?.you && days!=null && <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:10,paddingTop:10,borderTop:`0.5px solid ${r.color}33`,display:"flex",justifyContent:"space-between",gap:8}}><span>{(t.arenaSeasonPos||"#{r} of {n} this season").replace("{r}",st.you.rank).replace("{n}",st.players)}</span><span style={{color:"var(--color-text-tertiary)"}}>{days===0?(t.arenaSeasonEndsToday||"Ends today"):(t.arenaSeasonEnds||"{n}d left").replace("{n}",days)}</span></div>}
               </div>
             ); })()}
             <div style={{marginBottom:12}}><Seg options={[["season",t.arenaThisSeason||"This season"],["all",t.arenaAllTime||"All time"]]} value={arenaTab} onChange={setArenaTab}/></div>

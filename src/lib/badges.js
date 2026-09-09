@@ -16,13 +16,13 @@
 // `icon` is a name in the custom line-icon set (Icon.jsx) used across the UI;
 // `emoji` is kept only for the canvas-drawn share card, which can't render SVG.
 export const RANKS = [
-  { key: "novice",     name: "Novice",     min: 0,     icon: "sprout",  emoji: "🌱", color: "#6b7280" },
-  { key: "apprentice", name: "Apprentice", min: 300,   icon: "book",    emoji: "📖", color: "#0f6e56" },
-  { key: "adept",      name: "Adept",      min: 1200,  icon: "compass", emoji: "🧭", color: "#185fa5" },
-  { key: "scholar",    name: "Scholar",    min: 3000,  icon: "cap",     emoji: "🎓", color: "#4f46e5" },
-  { key: "sage",       name: "Sage",       min: 7000,  icon: "owl",     emoji: "🦉", color: "#7c3aed" },
-  { key: "master",     name: "Master",     min: 15000, icon: "gem",     emoji: "📜", color: "#b45309" },
-  { key: "luminary",   name: "Luminary",   min: 30000, icon: "sun",     emoji: "☀️", color: "#a3762b" },
+  { key: "novice",     name: "Novice",     min: 0,    icon: "sprout",  emoji: "🌱", color: "#6b7280" },
+  { key: "apprentice", name: "Apprentice", min: 400,  icon: "book",    emoji: "📖", color: "#0f6e56" },
+  { key: "adept",      name: "Adept",      min: 1000, icon: "compass", emoji: "🧭", color: "#185fa5" },
+  { key: "scholar",    name: "Scholar",    min: 2000, icon: "cap",     emoji: "🎓", color: "#4f46e5" },
+  { key: "sage",       name: "Sage",       min: 3500, icon: "owl",     emoji: "🦉", color: "#7c3aed" },
+  { key: "master",     name: "Master",     min: 5500, icon: "gem",     emoji: "📜", color: "#b45309" },
+  { key: "luminary",   name: "Luminary",   min: 8000, icon: "sun",     emoji: "☀️", color: "#a3762b" },
 ];
 
 // ── Difficulty-adaptive XP ──────────────────────────────────────────────
@@ -61,7 +61,13 @@ export function rankFor(xp) {
   const toNext = next ? Math.max(0, Math.min(1, (xp - cur.min) / (next.min - cur.min))) : null;
   return { ...cur, index: idx, xp, next, toNext };
 }
-export function rankOf(study) { return rankFor(computeXP(buildCtx(study))); }
+// The rank is COMPETITIVE: it reflects your best Endless Arena run score, not
+// study activity (founder decision). Same 7 tiers, arena-scaled thresholds.
+// `computeXP` above is kept for other signals but no longer drives the rank.
+export function rankOf(study) {
+  const s = (study && study.stats) ? study.stats : (study || {});
+  return rankFor(Math.max(0, Math.round(Number(s.arenaBest) || 0)));
+}
 
 // Flatten the study blob into the plain numbers every badge check reads.
 export function buildCtx(study = {}) {
