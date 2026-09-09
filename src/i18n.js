@@ -99,6 +99,7 @@ const T_EN = {
   // Badges + rank (trophy case)
   badgesTitle:"Badges & rank", yourRank:"Your rank", rankToNext:"{n} XP to {r}",
   rankMax:"You've reached the top tier. Legendary.",
+  rankAllTitle:"Ranks", rankAllSub:"Earn XP to climb. Harder questions are worth more.", rankCurrent:"You", rankYourXp:"You have {n} XP",
   badgesEarnedCount:"{n} of {m} badges", badgesPublicOn:"Shown publicly", badgesPublicOff:"Hidden",
   badgesEquipHint:"Tap an earned badge to pin it next to your name.", badgePinned:"Pinned",
   badgeEarned:"Earned", badgeEarnedX:"Earned ×{n}",

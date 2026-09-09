@@ -1460,6 +1460,41 @@ function ScoreCardModal({ data, t, onClose }) {
     </div>
   );
 }
+// The full rank ladder: every tier with its own colour + icon, the current one
+// highlighted, tiers not yet reached dimmed and locked. Opened by tapping the
+// rank on the Badges screen.
+function RanksModal({ currentIndex, xp, t, onClose }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 700, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--color-background-primary)", borderRadius: "18px 18px 0 0", padding: "18px 16px 22px", width: "100%", maxWidth: 520, maxHeight: "82vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, fontFamily: "'Fraunces',Georgia,serif", color: "var(--color-text-primary)" }}>{t.rankAllTitle || "Ranks"}</div>
+          <button onClick={onClose} aria-label={t.scoreCardClose || "Close"} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", display: "flex", padding: 4 }}><Icon name="x" size={18} /></button>
+        </div>
+        <div style={{ fontSize: 12.5, color: "var(--color-text-secondary)", marginBottom: 14 }}>{t.rankAllSub || "Earn XP to climb. Harder questions are worth more."}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {RANKS.map((r, i) => {
+            const reached = currentIndex >= i, current = currentIndex === i;
+            const nm = (t["rank_" + r.key]) || r.name;
+            return (
+              <div key={r.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 14, opacity: reached ? 1 : 0.55, background: current ? r.color + "16" : "var(--color-background-secondary)", border: "1px solid " + (current ? r.color : "var(--color-border-secondary)") }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: r.color + "22", color: r.color }}><Icon name={r.icon} size={21} stroke={1.9} style={{ color: r.color }} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 800, color: r.color }}>{nm}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--color-text-tertiary)", fontFamily: "monospace" }}>{r.min.toLocaleString()} XP{i === RANKS.length - 1 ? "+" : ""}</div>
+                </div>
+                {current ? <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.4, textTransform: "uppercase", color: "#fff", background: r.color, borderRadius: 999, padding: "3px 10px" }}>{t.rankCurrent || "You"}</span>
+                  : reached ? <Icon name="check" size={17} stroke={2.4} style={{ color: "#16a34a", flexShrink: 0 }} />
+                  : <Icon name="lock" size={15} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--color-text-secondary)", textAlign: "center", marginTop: 14 }}>{(t.rankYourXp || "You have {n} XP").replace("{n}", (xp || 0).toLocaleString())}</div>
+      </div>
+    </div>
+  );
+}
 
 // Feature A: a small marker placed at the end of a question (and, in the review,
 // next to the answer). Hover tells you what it is; click reveals the exact words
@@ -2532,6 +2567,7 @@ export default function StudyQuiz() {
   // Share-a-quiz
   const [shareOpen, setShareOpen] = useState(false);
   const [scoreCardOpen, setScoreCardOpen] = useState(false); // shareable result image
+  const [showRanks, setShowRanks] = useState(false); // the full rank-ladder modal
   const [shareLink, setShareLink] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr]   = useState("");
@@ -6527,7 +6563,7 @@ export default function StudyQuiz() {
         {(()=>{ const r=RANKS[myRankInfo.index]; const nm=(t["rank_"+r.key])||r.name;
           const nextNm=myRankInfo.next?((t["rank_"+myRankInfo.next.key])||myRankInfo.next.name):null;
           return (
-            <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:16,padding:"16px 16px 18px",marginBottom:16}}>
+            <div onClick={()=>setShowRanks(true)} style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:16,padding:"16px 16px 18px",marginBottom:16,cursor:"pointer"}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
                 <div style={{width:52,height:52,borderRadius:"50%",background:r.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} aria-hidden="true"><Icon name={r.icon} size={26} stroke={1.8} style={{color:r.color}}/></div>
                 <div style={{flex:1,minWidth:0}}>
@@ -6538,6 +6574,7 @@ export default function StudyQuiz() {
                   <div style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:"var(--color-text-primary)"}}>{myRankInfo.xp.toLocaleString()}</div>
                   <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>XP</div>
                 </div>
+                <Icon name="chevron" size={16} stroke={2} style={{color:"var(--color-text-tertiary)",flexShrink:0}}/>
               </div>
               {nextNm ? (<>
                 <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:14,overflow:"hidden"}}><div style={{width:`${Math.round((myRankInfo.toNext||0)*100)}%`,height:"100%",background:r.color}}/></div>
@@ -6546,6 +6583,7 @@ export default function StudyQuiz() {
               <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",marginTop:8,display:"inline-flex",alignItems:"center",gap:5}}><span aria-hidden="true">⚡</span>{t.xpAdaptiveHint||"Harder questions earn more XP than easy ones."}</div>
             </div>
           ); })()}
+        {showRanks && <RanksModal currentIndex={myRankInfo.index} xp={myRankInfo.xp} t={t} onClose={()=>setShowRanks(false)}/>}
 
         {/* Link to the global leaderboard */}
         {globalUnlocked && <button onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:"transparent",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 14px",marginBottom:16,fontSize:13,fontWeight:700,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}><span aria-hidden="true">🏆</span>{t.globalBoardSee||"See the global leaderboard"}</button>}
