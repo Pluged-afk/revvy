@@ -34,9 +34,11 @@ const TAB_ICONS = { file: "folder", text: "pencil", photo: "camera", media: "pla
 // Localized name for a power-up ("hint" | "freeze" | "skip"), reusing the arena
 // labels so the reward economy speaks one language everywhere.
 const pupName = (t, key) => key === "freeze" ? (t.arenaFreeze || "Freeze") : key === "skip" ? (t.arenaSkip || "Skip") : (t.arenaHint || "Hint");
-// Leaderboard is hidden for now (still gated at 100 players server-side too). Flip
-// to true to re-expose the entry points on the arena intro + game-over screens.
-const SHOW_ARENA_LEADERBOARD = false;
+// Arena board entry points (intro + game-over). Now ON: the board leads with
+// the competitive SEASON tier + season leaderboard, which are NOT gated (work
+// from day one), so there's always something to show. The all-time board
+// behind the toggle is still gated at 100 players server-side.
+const SHOW_ARENA_LEADERBOARD = true;
 
 // Round initial-letter avatar used across friends + groups (no external image).
 function AvatarInitial({ name, size = 34 }) {
