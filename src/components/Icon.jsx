@@ -228,6 +228,60 @@ const PATHS = {
       <path d="M12 12.7l-1.1 1.5h2.2z" />
     </>
   ),
+  // Dedicated, two-tone RANK insignia (main shape in currentColor = the rank's
+  // colour, plus a gold accent). Kept distinct from every functional icon so a
+  // rank is never confused with Coach/Exam/theme etc.
+  rank_novice: (
+    <>
+      <path d="M12 21v-6.4" />
+      <path d="M12 14.6c0-2.8 2.2-5 5-5 0 2.8-2.2 5-5 5z" />
+      <path d="M12 16.4c0-2.3-1.9-4.2-4.2-4.2 0 2.3 1.9 4.2 4.2 4.2z" />
+      <circle cx="12" cy="9.3" r="1.5" fill="#f4b83a" stroke="none" />
+    </>
+  ),
+  rank_apprentice: (
+    <>
+      <path d="M12 6.6C10.3 5.4 8 4.9 5 5.1v11.9c3-.2 5.3.3 7 1.5" />
+      <path d="M12 6.6c1.7-1.2 4-1.7 7-1.5v11.9c-3-.2-5.3.3-7 1.5" />
+      <path d="M14.8 4.9h2.5v4.1l-1.25-1-1.25 1z" fill="#f4b83a" stroke="#f4b83a" strokeWidth="1" />
+    </>
+  ),
+  rank_adept: (
+    <>
+      <path d="M5.5 18.5l6.2-1.6" />
+      <path d="M11.5 17.2c-1.1-4.3 1.2-8.4 7.8-11.2-1.1 7-4.2 10.6-7.8 11.2z" />
+      <path d="M12.8 12.8l3-2.6" stroke="#f4b83a" />
+    </>
+  ),
+  rank_scholar: (
+    <>
+      <path d="M9.4 3.5l2.6 5.2 2.6-5.2" />
+      <circle cx="12" cy="14.7" r="5.3" />
+      <circle cx="12" cy="14.7" r="2" fill="#f4b83a" stroke="none" />
+    </>
+  ),
+  rank_sage: (
+    <>
+      <path d="M6 10.5a6 6 0 0 1 12 0V14a6 6 0 0 1-12 0z" />
+      <path d="M6.6 8.6 5 5l3.3 1.9M17.4 8.6 19 5l-3.3 1.9" />
+      <path d="M12 12.7l-1.1 1.5h2.2z" />
+      <circle cx="9.6" cy="11" r="1.6" fill="#f4b83a" stroke="#f4b83a" strokeWidth="0.7" />
+      <circle cx="14.4" cy="11" r="1.6" fill="#f4b83a" stroke="#f4b83a" strokeWidth="0.7" />
+    </>
+  ),
+  rank_master: (
+    <>
+      <path d="M7 4h10l4 5-9 12L3 9z" />
+      <path d="M3 9h18" stroke="#f4b83a" />
+      <path d="M9.5 4L7 9l5 12M14.5 4l2.5 5-5 12" stroke="#f4b83a" />
+    </>
+  ),
+  rank_luminary: (
+    <>
+      <path d="M12 3.5l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5L4.5 11l5.5-2z" />
+      <circle cx="12" cy="11" r="1.5" fill="#f4b83a" stroke="none" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 24, stroke = 1.6, className, style }) {

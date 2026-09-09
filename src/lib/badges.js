@@ -16,13 +16,13 @@
 // `icon` is a name in the custom line-icon set (Icon.jsx) used across the UI;
 // `emoji` is kept only for the canvas-drawn share card, which can't render SVG.
 export const RANKS = [
-  { key: "novice",     name: "Novice",     min: 0,    icon: "sprout",  emoji: "🌱", color: "#6b7280" },
-  { key: "apprentice", name: "Apprentice", min: 400,  icon: "book",    emoji: "📖", color: "#0f6e56" },
-  { key: "adept",      name: "Adept",      min: 1000, icon: "compass", emoji: "🧭", color: "#185fa5" },
-  { key: "scholar",    name: "Scholar",    min: 2000, icon: "cap",     emoji: "🎓", color: "#4f46e5" },
-  { key: "sage",       name: "Sage",       min: 3500, icon: "owl",     emoji: "🦉", color: "#7c3aed" },
-  { key: "master",     name: "Master",     min: 5500, icon: "gem",     emoji: "📜", color: "#b45309" },
-  { key: "luminary",   name: "Luminary",   min: 8000, icon: "sun",     emoji: "☀️", color: "#a3762b" },
+  { key: "novice",     name: "Novice",     min: 0,    icon: "rank_novice",     emoji: "🌱", color: "#6b7280" },
+  { key: "apprentice", name: "Apprentice", min: 400,  icon: "rank_apprentice", emoji: "📖", color: "#0f6e56" },
+  { key: "adept",      name: "Adept",      min: 1000, icon: "rank_adept",      emoji: "🧭", color: "#185fa5" },
+  { key: "scholar",    name: "Scholar",    min: 2000, icon: "rank_scholar",    emoji: "🎓", color: "#4f46e5" },
+  { key: "sage",       name: "Sage",       min: 3500, icon: "rank_sage",       emoji: "🦉", color: "#7c3aed" },
+  { key: "master",     name: "Master",     min: 5500, icon: "rank_master",     emoji: "📜", color: "#b45309" },
+  { key: "luminary",   name: "Luminary",   min: 8000, icon: "rank_luminary",   emoji: "☀️", color: "#a3762b" },
 ];
 
 // ── Difficulty-adaptive XP ──────────────────────────────────────────────
