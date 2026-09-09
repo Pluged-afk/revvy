@@ -1900,7 +1900,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
           padding:"16px 18px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",flexShrink:0}}>
           {signedIn && user ? (
             <div style={{display:"flex",alignItems:"center",gap:11,minWidth:0}}>
-              <div style={{position:"relative",width:40,height:40,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#4f46e5,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0}}>
+              <div style={{position:"relative",width:40,height:40,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#4f46e5,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0,...(isPro?{boxShadow:"0 0 0 2px #fbbf24, 0 0 0 4px rgba(251,191,36,0.35)"}:{})}}>
                 {((username||user.email||"?").charAt(0)).toUpperCase()}
                 {user.image && <img src={user.image} alt="" onError={e=>e.currentTarget.remove()} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>}
               </div>
@@ -4727,7 +4727,7 @@ export default function StudyQuiz() {
               ) : user ? (
                 <button onClick={()=>openSettings()} title={t.accountLbl} aria-label={t.accountLbl}
                   style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
-                  <span style={{position:"relative",width:30,height:30,borderRadius:"50%",overflow:"hidden",flexShrink:0,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff"}}>
+                  <span style={{position:"relative",width:30,height:30,borderRadius:"50%",overflow:"hidden",flexShrink:0,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",...(isPro?{boxShadow:"0 0 0 2px #fbbf24, 0 0 0 4px rgba(251,191,36,0.35)"}:{})}}>
                     {(username||user.email||"?").charAt(0).toUpperCase()}
                     {user.image && <img src={user.image} alt="" onError={(e)=>e.currentTarget.remove()} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>}
                   </span>

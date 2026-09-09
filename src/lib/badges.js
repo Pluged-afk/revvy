@@ -15,12 +15,12 @@
 // for the rank pill in both the app and the public leaderboards.
 export const RANKS = [
   { key: "novice",     name: "Novice",     min: 0,     emoji: "🌱", color: "#6b7280" },
-  { key: "apprentice", name: "Apprentice", min: 300,   emoji: "📗", color: "#0f6e56" },
-  { key: "adept",      name: "Adept",      min: 1200,  emoji: "📘", color: "#185fa5" },
+  { key: "apprentice", name: "Apprentice", min: 300,   emoji: "📖", color: "#0f6e56" },
+  { key: "adept",      name: "Adept",      min: 1200,  emoji: "🧭", color: "#185fa5" },
   { key: "scholar",    name: "Scholar",    min: 3000,  emoji: "🎓", color: "#4f46e5" },
-  { key: "sage",       name: "Sage",       min: 7000,  emoji: "🔭", color: "#7c3aed" },
-  { key: "master",     name: "Master",     min: 15000, emoji: "⭐", color: "#b45309" },
-  { key: "luminary",   name: "Luminary",   min: 30000, emoji: "🏆", color: "#a3762b" },
+  { key: "sage",       name: "Sage",       min: 7000,  emoji: "🦉", color: "#7c3aed" },
+  { key: "master",     name: "Master",     min: 15000, emoji: "📜", color: "#b45309" },
+  { key: "luminary",   name: "Luminary",   min: 30000, emoji: "☀️", color: "#a3762b" },
 ];
 
 // ── Difficulty-adaptive XP ──────────────────────────────────────────────
