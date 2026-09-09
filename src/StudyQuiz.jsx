@@ -119,7 +119,7 @@ function RankPill({ index, t, small = false }) {
   const r = RANKS[index];
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: r.color + "22", color: r.color, fontSize: small ? 10 : 11, fontWeight: 800, padding: small ? "1px 7px" : "2px 9px", borderRadius: 20, whiteSpace: "nowrap", lineHeight: 1.4 }}>
-      <span aria-hidden="true">{r.emoji}</span>{(t && t["rank_" + r.key]) || r.name}
+      <Icon name={r.icon} size={small ? 12 : 13} stroke={2.1} />{(t && t["rank_" + r.key]) || r.name}
     </span>
   );
 }
@@ -4647,7 +4647,7 @@ export default function StudyQuiz() {
   const rankToastEl = rankToast ? (
     <div style={{position:"fixed",inset:0,zIndex:905,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",padding:16}}>
       <div className="rv-rank-burst" onClick={()=>{setRankToast(null);setScreen("badges");}} style={{pointerEvents:"auto",cursor:"pointer",textAlign:"center",background:"var(--color-background-primary)",border:`2px solid ${rankToast.color}`,borderRadius:20,padding:"22px 26px",boxShadow:`0 18px 50px ${rankToast.color}55`,maxWidth:320}}>
-        <div style={{fontSize:46,lineHeight:1,marginBottom:6}} aria-hidden="true">{rankToast.emoji}</div>
+        <div style={{marginBottom:6,display:"flex",justifyContent:"center"}} aria-hidden="true"><Icon name={rankToast.icon} size={44} stroke={1.8} style={{color:rankToast.color}}/></div>
         <div style={{fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.rankUpLabel||"Rank up!"}</div>
         <div style={{fontSize:24,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:rankToast.color,margin:"2px 0 4px"}}>{(t["rank_"+rankToast.key])||rankToast.name}</div>
         <div style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{t.rankUpSub||"You've leveled up. Keep climbing."}</div>
@@ -4733,7 +4733,7 @@ export default function StudyQuiz() {
                   </span>
                   <span style={{fontSize:14,fontWeight:600,color:"#fff",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{username||user.email?.split("@")[0]||t.accountLbl}</span>
                   <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:15,lineHeight:1,flexShrink:0}} title={(t["rank_"+(RANKS[myRankInfo.index]?.key)])||RANKS[myRankInfo.index]?.name} aria-hidden="true">
-                    <span>{RANKS[myRankInfo.index]?.emoji}</span>
+                    <Icon name={RANKS[myRankInfo.index]?.icon} size={15} stroke={2} style={{color:"#fff"}}/>
                     {flairEquipped && <BadgeGlyph id={flairEquipped} size={16} t={t}/>}
                   </span>
                 </button>
@@ -4820,7 +4820,7 @@ export default function StudyQuiz() {
           </div>
           <div onClick={()=>setScreen("badges")} className="rv-tile" style={Sb.navTile}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
-              <Medallion color={RANKS[myRankInfo.index]?.color||"#4f46e5"}><span style={{fontSize:19}}>{RANKS[myRankInfo.index]?.emoji}</span></Medallion>
+              <Medallion color={RANKS[myRankInfo.index]?.color||"#4f46e5"}><Icon name={RANKS[myRankInfo.index]?.icon} size={19} stroke={2}/></Medallion>
               {flairEquipped && <BadgeGlyph id={flairEquipped} size={19} t={t}/>}
             </div>
             <div style={{minWidth:0}}>
@@ -6529,7 +6529,7 @@ export default function StudyQuiz() {
           return (
             <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:16,padding:"16px 16px 18px",marginBottom:16}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <div style={{width:52,height:52,borderRadius:"50%",background:r.color+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0}} aria-hidden="true">{r.emoji}</div>
+                <div style={{width:52,height:52,borderRadius:"50%",background:r.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} aria-hidden="true"><Icon name={r.icon} size={26} stroke={1.8} style={{color:r.color}}/></div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.yourRank||"Your rank"}</div>
                   <div style={{fontSize:20,fontWeight:800,color:r.color,fontFamily:"'Fraunces',Georgia,serif"}}>{nm}</div>

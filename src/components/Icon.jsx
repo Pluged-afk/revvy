@@ -204,6 +204,30 @@ const PATHS = {
       <path d="M12 13v3.2M9 20h6M9.8 17h4.4l.5 3H9.3z" />
     </>
   ),
+  // Rank icons (line-drawn to match the set, replacing emoji rank badges).
+  sprout: (
+    <>
+      <path d="M12 21v-6.6" />
+      <path d="M12 14.4c0-2.9 2.3-5.2 5.2-5.2 0 2.9-2.3 5.2-5.2 5.2z" />
+      <path d="M12 16.4c0-2.4-1.9-4.3-4.3-4.3 0 2.4 1.9 4.3 4.3 4.3z" />
+    </>
+  ),
+  book: (
+    <>
+      <path d="M12 6.6C10.4 5.4 8.1 4.9 5.2 5.1v12.3c2.9-.2 5.2.3 6.8 1.5" />
+      <path d="M12 6.6c1.6-1.2 3.9-1.7 6.8-1.5v12.3c-2.9-.2-5.2.3-6.8 1.5" />
+      <path d="M12 6.6V19.4" />
+    </>
+  ),
+  owl: (
+    <>
+      <path d="M6 10.5a6 6 0 0 1 12 0V14a6 6 0 0 1-12 0z" />
+      <path d="M6.6 8.6 5 5l3.3 1.9M17.4 8.6 19 5l-3.3 1.9" />
+      <circle cx="9.6" cy="11" r="1.7" />
+      <circle cx="14.4" cy="11" r="1.7" />
+      <path d="M12 12.7l-1.1 1.5h2.2z" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 24, stroke = 1.6, className, style }) {

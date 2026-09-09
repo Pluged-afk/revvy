@@ -13,14 +13,16 @@
 
 // The scholar-guild ladder. `min` is the XP floor for the tier; colors are used
 // for the rank pill in both the app and the public leaderboards.
+// `icon` is a name in the custom line-icon set (Icon.jsx) used across the UI;
+// `emoji` is kept only for the canvas-drawn share card, which can't render SVG.
 export const RANKS = [
-  { key: "novice",     name: "Novice",     min: 0,     emoji: "🌱", color: "#6b7280" },
-  { key: "apprentice", name: "Apprentice", min: 300,   emoji: "📖", color: "#0f6e56" },
-  { key: "adept",      name: "Adept",      min: 1200,  emoji: "🧭", color: "#185fa5" },
-  { key: "scholar",    name: "Scholar",    min: 3000,  emoji: "🎓", color: "#4f46e5" },
-  { key: "sage",       name: "Sage",       min: 7000,  emoji: "🦉", color: "#7c3aed" },
-  { key: "master",     name: "Master",     min: 15000, emoji: "📜", color: "#b45309" },
-  { key: "luminary",   name: "Luminary",   min: 30000, emoji: "☀️", color: "#a3762b" },
+  { key: "novice",     name: "Novice",     min: 0,     icon: "sprout",  emoji: "🌱", color: "#6b7280" },
+  { key: "apprentice", name: "Apprentice", min: 300,   icon: "book",    emoji: "📖", color: "#0f6e56" },
+  { key: "adept",      name: "Adept",      min: 1200,  icon: "compass", emoji: "🧭", color: "#185fa5" },
+  { key: "scholar",    name: "Scholar",    min: 3000,  icon: "cap",     emoji: "🎓", color: "#4f46e5" },
+  { key: "sage",       name: "Sage",       min: 7000,  icon: "owl",     emoji: "🦉", color: "#7c3aed" },
+  { key: "master",     name: "Master",     min: 15000, icon: "gem",     emoji: "📜", color: "#b45309" },
+  { key: "luminary",   name: "Luminary",   min: 30000, icon: "sun",     emoji: "☀️", color: "#a3762b" },
 ];
 
 // ── Difficulty-adaptive XP ──────────────────────────────────────────────
