@@ -864,6 +864,13 @@ async function arenaBoardGlobal() {
     return await res.json().catch(() => null);
   } catch { return null; }
 }
+async function arenaSeasonGlobal() {
+  try {
+    const res = await fetch("/api/study", { method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())}, body: JSON.stringify({ action:"arenaSeason" }) });
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  } catch { return null; }
+}
 
 // ── Friends + study groups (client fetch helpers) ──
 // One call for any social action; returns the parsed JSON or {error}.
@@ -2452,6 +2459,34 @@ const STARTER_SUBJECTS = [
   { id: "starter_gk", emoji: "💡", title: "General Knowledge", subject: "Trivia",
     summary: "A varied mix of common knowledge. Water is made of two hydrogen atoms and one oxygen atom. There are eight planets in the solar system; Jupiter is the largest and Mercury is closest to the Sun. Light travels faster than sound, which is why lightning is seen before thunder. The human body has 206 bones and the heart has four chambers. Shakespeare wrote Romeo and Juliet and Hamlet. The Mona Lisa was painted by Leonardo da Vinci. A triangle's angles add up to 180 degrees. The freezing point of water is 0 degrees Celsius and boiling is 100. The speed of light is about 300,000 kilometres per second. Photosynthesis produces the oxygen we breathe." },
 ];
+
+// Competitive Arena tiers: a fixed skill ladder (so it works with any number
+// of players), each with its own colour and three divisions (III low → I high).
+// A learner's season-best run score maps to a tier + division here.
+const ARENA_TIERS = [
+  { name: "Bronze",   min: 0,    color: "#c08457" },
+  { name: "Silver",   min: 600,  color: "#9aa4b2" },
+  { name: "Gold",     min: 1500, color: "#e0a90a" },
+  { name: "Platinum", min: 3000, color: "#22b8cf" },
+  { name: "Diamond",  min: 6000, color: "#5b8def" },
+];
+function arenaTier(score) {
+  const s = Math.max(0, Math.round(Number(score) || 0));
+  let i = 0;
+  for (let k = 0; k < ARENA_TIERS.length; k++) if (s >= ARENA_TIERS[k].min) i = k;
+  const tier = ARENA_TIERS[i], next = ARENA_TIERS[i + 1] || null, romans = ["III", "II", "I"];
+  if (!next) return { name: tier.name, division: "", color: tier.color, pct: 1, toNext: 0, nextLabel: null, isMax: true };
+  const step = (next.min - tier.min) / 3;
+  const d = Math.min(2, Math.floor((s - tier.min) / step)); // 0..2 → III,II,I
+  const divFloor = tier.min + d * step, divCeil = tier.min + (d + 1) * step;
+  return {
+    name: tier.name, division: romans[d], color: tier.color,
+    pct: Math.max(0, Math.min(1, (s - divFloor) / step)),
+    toNext: Math.max(0, Math.ceil(divCeil - s)),
+    nextLabel: d < 2 ? `${tier.name} ${romans[d + 1]}` : `${next.name} III`,
+    isMax: false,
+  };
+}
 
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
@@ -4106,6 +4141,8 @@ export default function StudyQuiz() {
   const [arenaQs, setArenaQs] = useState([]);
   const [arenaResult, setArenaResult] = useState(null);
   const [arenaBoardData, setArenaBoardData] = useState(null);
+  const [arenaSeasonData, setArenaSeasonData] = useState(null);
+  const [arenaTab, setArenaTab] = useState("season"); // "season" (competitive ladder) | "all" (all-time)
   const [arenaBusy, setArenaBusy] = useState(false);
   const [arenaErr, setArenaErr] = useState("");
   // Global "best of the best" leaderboard (top 100 by lifetime XP/rank).
@@ -4506,9 +4543,9 @@ export default function StudyQuiz() {
     setArenaResult({ ...result, score: finalScore, best: (r && r.best) ?? result.score, isBest: !!(r && r.isBest), pending: false, earned });
   }, [srs]);
   const openArenaBoard = useCallback(async () => {
-    setArenaBusy(true); setArenaBoardData(null); setScreen("arena_board");
-    const b = await arenaBoardGlobal();
-    setArenaBusy(false); setArenaBoardData(b);
+    setArenaBusy(true); setArenaBoardData(null); setArenaSeasonData(null); setScreen("arena_board");
+    const [b, s] = await Promise.all([arenaBoardGlobal(), arenaSeasonGlobal()]);
+    setArenaBusy(false); setArenaBoardData(b); setArenaSeasonData(s);
   }, []);
   const openGlobalBoard = useCallback(async () => {
     setGlobalBusy(true); setGlobalBoardData(null); setScreen("global_board");
@@ -6838,39 +6875,82 @@ export default function StudyQuiz() {
         </div>
         <div className="rv-center-narrow" style={{padding:"20px 16px 40px"}}>
           {arenaBusy && <div style={{textAlign:"center",padding:"36px 0",color:"var(--color-text-tertiary)"}}><div className="spin-ring" style={{width:34,height:34,borderRadius:"50%",border:"3px solid var(--color-border-tertiary)",borderTopColor:"var(--color-accent)",margin:"0 auto"}}/></div>}
-          {!arenaBusy && b && b.locked && (
-            <div style={{textAlign:"center",padding:"26px 18px",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:16}}>
-              <div style={{display:"flex",justifyContent:"center",color:"var(--color-text-tertiary)",marginBottom:12}}><Icon name="lock" size={28}/></div>
-              <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif"}}>{t.arenaLockedTitle}</h3>
-              <p style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5,maxWidth:320,margin:"0 auto 16px"}}>{t.arenaLockedSub.replace("{need}",b.need).replace("{have}",b.players)}</p>
-              <div style={{height:8,borderRadius:4,background:"var(--color-background-secondary)",overflow:"hidden",maxWidth:260,margin:"0 auto"}}>
-                <div style={{height:"100%",width:`${Math.min(100,(b.players/b.need)*100)}%`,background:"var(--color-accent)",borderRadius:4}}/>
-              </div>
-              <div style={{fontSize:12,fontFamily:"monospace",color:"var(--color-text-tertiary)",marginTop:8}}>{b.players} / {b.need}</div>
-              {b.you && <div style={{marginTop:18,fontSize:13,color:"var(--color-text-secondary)"}}>{t.arenaBestIs.replace("{n}",(b.you.score||0).toLocaleString())}</div>}
-            </div>
-          )}
-          {!arenaBusy && b && !b.locked && (<>
-            {b.you && <div style={{background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"12px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontWeight:700,fontSize:14}}>{t.arenaYouRank.replace("{r}",b.you.rank||"—")}</span>
-              <span style={{fontFamily:"monospace",fontWeight:700,color:"var(--color-accent)"}}>{(b.you.score||0).toLocaleString()}</span>
-            </div>}
-            <p style={{fontSize:10.5,color:"var(--color-text-tertiary)",margin:"0 0 8px 2px"}}>{t.arenaBoardLegend}</p>
-            <div style={{border:"1px solid var(--color-border-secondary)",borderRadius:14,overflow:"hidden",background:"var(--color-background-primary)"}}>
-              {(b.top||[]).map((row,i)=>(
-                <div key={i} style={{display:"grid",gridTemplateColumns:"30px 1fr auto",gap:10,alignItems:"center",padding:"11px 14px",borderBottom:i<b.top.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
-                  <span style={{fontFamily:"monospace",fontWeight:700,fontSize:14,textAlign:"center",color:i===0?"#d97706":i===1?"#94a3b8":i===2?"#b45309":"var(--color-text-tertiary)"}}>{i+1}</span>
-                  <div style={{minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
-                      <span style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}</span>
-                      <Flair rank={row.rank} badge={row.badge} t={t} small/>
-                    </div>
-                    <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",fontFamily:"monospace"}}>{t.arenaQCount.replace("{n}",row.questions)} · {row.freeze}/{row.hint}/{row.skip}</div>
+          {!arenaBusy && (<>
+            {/* Competitive season tier: a fresh ranked ladder each month. */}
+            {arenaSeasonData && (()=>{ const st=arenaSeasonData; const tier=arenaTier(st.you?.score||0); const days=Math.max(0,Math.ceil((new Date(st.endsAt).getTime()-Date.now())/86400000)); return (
+              <div style={{background:`linear-gradient(135deg, ${tier.color}22, ${tier.color}0d)`,border:`1px solid ${tier.color}66`,borderRadius:16,padding:16,marginBottom:14}}>
+                <div style={{display:"flex",alignItems:"center",gap:13}}>
+                  <div style={{width:52,height:52,borderRadius:14,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:tier.color+"26"}} aria-hidden="true"><Icon name="trophy" size={26} stroke={1.8} style={{color:tier.color}}/></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.arenaSeasonRank||"Season rank"}</div>
+                    <div style={{fontSize:19,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:tier.color}}>{tier.name}{tier.division?" "+tier.division:""}</div>
+                    <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:1}}>{st.you?.rank?(t.arenaSeasonPos||"#{r} of {n} this season").replace("{r}",st.you.rank).replace("{n}",st.players):(t.arenaSeasonUnranked||"Play a run to join the ladder")}</div>
                   </div>
-                  <span style={{fontFamily:"monospace",fontWeight:700,fontSize:15}}>{(row.score||0).toLocaleString()}</span>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"var(--color-text-secondary)"}}>{days===0?(t.arenaSeasonEndsToday||"Ends today"):(t.arenaSeasonEnds||"{n}d left").replace("{n}",days)}</div>
+                    <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",fontFamily:"monospace",marginTop:2}}>{(st.you?.score||0).toLocaleString()} pts</div>
+                  </div>
                 </div>
-              ))}
-            </div>
+                {!tier.isMax ? (<>
+                  <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:13,overflow:"hidden"}}><div style={{width:`${Math.round(tier.pct*100)}%`,height:"100%",background:tier.color}}/></div>
+                  <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:6}}>{(t.arenaToNextTier||"+{n} pts to {r}").replace("{n}",tier.toNext.toLocaleString()).replace("{r}",tier.nextLabel)}</div>
+                </>) : <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:12}}>{t.arenaTopTier||"Top tier, you're at the summit this season."}</div>}
+              </div>
+            ); })()}
+            <div style={{marginBottom:12}}><Seg options={[["season",t.arenaThisSeason||"This season"],["all",t.arenaAllTime||"All time"]]} value={arenaTab} onChange={setArenaTab}/></div>
+
+            {arenaTab==="season" && ((arenaSeasonData?.top?.length) ? (
+              <div style={{border:"1px solid var(--color-border-secondary)",borderRadius:14,overflow:"hidden",background:"var(--color-background-primary)"}}>
+                {arenaSeasonData.top.map((row,i)=>(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"30px 1fr auto",gap:10,alignItems:"center",padding:"11px 14px",borderBottom:i<arenaSeasonData.top.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
+                    <span style={{fontFamily:"monospace",fontWeight:700,fontSize:14,textAlign:"center",color:i===0?"#d97706":i===1?"#94a3b8":i===2?"#b45309":"var(--color-text-tertiary)"}}>{i+1}</span>
+                    <div style={{minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                        <span style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}</span>
+                        <Flair rank={row.rank} badge={row.badge} t={t} small/>
+                      </div>
+                      <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",fontFamily:"monospace"}}>{t.arenaQCount.replace("{n}",row.questions)}</div>
+                    </div>
+                    <span style={{fontFamily:"monospace",fontWeight:700,fontSize:15}}>{(row.score||0).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <div style={{textAlign:"center",padding:"26px 18px",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:16,fontSize:13,color:"var(--color-text-secondary)"}}>{t.arenaSeasonEmpty||"No scores yet this season. Play a run to claim the top spot."}</div>)}
+
+            {arenaTab==="all" && b && b.locked && (
+              <div style={{textAlign:"center",padding:"26px 18px",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:16}}>
+                <div style={{display:"flex",justifyContent:"center",color:"var(--color-text-tertiary)",marginBottom:12}}><Icon name="lock" size={28}/></div>
+                <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif"}}>{t.arenaLockedTitle}</h3>
+                <p style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5,maxWidth:320,margin:"0 auto 16px"}}>{t.arenaLockedSub.replace("{need}",b.need).replace("{have}",b.players)}</p>
+                <div style={{height:8,borderRadius:4,background:"var(--color-background-secondary)",overflow:"hidden",maxWidth:260,margin:"0 auto"}}>
+                  <div style={{height:"100%",width:`${Math.min(100,(b.players/b.need)*100)}%`,background:"var(--color-accent)",borderRadius:4}}/>
+                </div>
+                <div style={{fontSize:12,fontFamily:"monospace",color:"var(--color-text-tertiary)",marginTop:8}}>{b.players} / {b.need}</div>
+                {b.you && <div style={{marginTop:18,fontSize:13,color:"var(--color-text-secondary)"}}>{t.arenaBestIs.replace("{n}",(b.you.score||0).toLocaleString())}</div>}
+              </div>
+            )}
+            {arenaTab==="all" && b && !b.locked && (<>
+              {b.you && <div style={{background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"12px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontWeight:700,fontSize:14}}>{t.arenaYouRank.replace("{r}",b.you.rank||"—")}</span>
+                <span style={{fontFamily:"monospace",fontWeight:700,color:"var(--color-accent)"}}>{(b.you.score||0).toLocaleString()}</span>
+              </div>}
+              <p style={{fontSize:10.5,color:"var(--color-text-tertiary)",margin:"0 0 8px 2px"}}>{t.arenaBoardLegend}</p>
+              <div style={{border:"1px solid var(--color-border-secondary)",borderRadius:14,overflow:"hidden",background:"var(--color-background-primary)"}}>
+                {(b.top||[]).map((row,i)=>(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"30px 1fr auto",gap:10,alignItems:"center",padding:"11px 14px",borderBottom:i<b.top.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
+                    <span style={{fontFamily:"monospace",fontWeight:700,fontSize:14,textAlign:"center",color:i===0?"#d97706":i===1?"#94a3b8":i===2?"#b45309":"var(--color-text-tertiary)"}}>{i+1}</span>
+                    <div style={{minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                        <span style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}</span>
+                        <Flair rank={row.rank} badge={row.badge} t={t} small/>
+                      </div>
+                      <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",fontFamily:"monospace"}}>{t.arenaQCount.replace("{n}",row.questions)} · {row.freeze}/{row.hint}/{row.skip}</div>
+                    </div>
+                    <span style={{fontFamily:"monospace",fontWeight:700,fontSize:15}}>{(row.score||0).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </>)}
           </>)}
         </div>
       </div>

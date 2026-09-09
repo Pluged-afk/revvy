@@ -92,6 +92,17 @@ function ensureTables() {
         skip_used     INT         NOT NULL DEFAULT 0,
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
+      // Competitive Arena seasons: each month is a fresh ladder. We keep each
+      // player's best run score for the season; the client maps it to a tier
+      // (Bronze..Diamond) and a season leaderboard is ranked from it.
+      sql`CREATE TABLE IF NOT EXISTS arena_season (
+        season        TEXT        NOT NULL,
+        clerk_user_id TEXT        NOT NULL,
+        best_score    INT         NOT NULL DEFAULT 0,
+        questions     INT         NOT NULL DEFAULT 0,
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (season, clerk_user_id)
+      )`,
       // ── Friends + study groups ──
       // One row per relationship: a directed request that becomes mutual once
       // accepted. Friends of X = rows where X is requester or addressee and
@@ -206,6 +217,7 @@ function ensureTables() {
       .then(() => sql`ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 1`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS arena_board ON arena_score (best_score DESC)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS arena_season_board ON arena_season (season, best_score DESC)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS friend_msg_thread ON friend_messages (sender, recipient, id)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS friend_msg_inbox ON friend_messages (recipient, sender)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS gk_pool_diff ON gk_pool (difficulty)`)
@@ -489,6 +501,11 @@ function aDifficulty(base, plays, cc) {
   const w = Math.min(1, p / 60);
   return aclamp(b * (1 - w) + observed * w, ADIFF_MIN, ADIFF_MAX);
 }
+// Competitive Arena season = one calendar month (UTC); the ladder resets each
+// month. `arenaSeasonId` labels the current season; `arenaSeasonEnd` is the
+// first instant of next month (when this season closes).
+const arenaSeasonId = (d = new Date()) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+const arenaSeasonEnd = (d = new Date()) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString();
 
 // Lazy self-heal of the public-username column + case-insensitive unique index.
 let unameReady = false;
@@ -569,6 +586,16 @@ async function arenaSubmit(req, res, body, userId) {
     await sql`INSERT INTO arena_score (clerk_user_id, best_score, questions) VALUES (${userId}, ${score}, ${questions})
               ON CONFLICT (clerk_user_id) DO NOTHING`;
   }
+  // Competitive season: keep this month's best run for the seasonal ladder.
+  if (score > 0) {
+    const season = arenaSeasonId();
+    await sql`INSERT INTO arena_season (season, clerk_user_id, best_score, questions, updated_at)
+              VALUES (${season}, ${userId}, ${score}, ${questions}, NOW())
+              ON CONFLICT (season, clerk_user_id) DO UPDATE SET
+                questions = CASE WHEN EXCLUDED.best_score > arena_season.best_score THEN EXCLUDED.questions ELSE arena_season.questions END,
+                best_score = GREATEST(arena_season.best_score, EXCLUDED.best_score),
+                updated_at = NOW()`;
+  }
   return res.status(200).json({ ok: true, score, best: Math.max(prev, score), isBest });
 }
 
@@ -588,6 +615,26 @@ async function arenaBoard(req, res, userId) {
   return res.status(200).json({
     locked: false, players, you,
     top: top.map((r) => ({ name: r.username || "player", score: r.best_score, questions: r.questions, freeze: r.freeze_used, hint: r.hint_used, skip: r.skip_used, badge: publicBadge(r), rank: publicRank(r) })),
+  });
+}
+
+// Competitive season ladder: this month's best-run leaderboard + where you
+// stand. The client maps `you.score` to a tier (Bronze..Diamond). Not gated,
+// so the ladder works from day one of each fresh season.
+async function arenaSeasonBoard(req, res, userId) {
+  await ensureUsernameCol();
+  const season = arenaSeasonId();
+  const players = (await sql`SELECT COUNT(*)::int AS n FROM arena_season WHERE season = ${season}`)[0]?.n || 0;
+  const mine = (await sql`SELECT best_score, questions FROM arena_season WHERE season = ${season} AND clerk_user_id = ${userId}`)[0] || null;
+  const rank = mine ? ((await sql`SELECT COUNT(*)::int AS n FROM arena_season WHERE season = ${season} AND best_score > ${mine.best_score}`)[0]?.n || 0) + 1 : null;
+  const top = await sql`
+    SELECT a.best_score, a.questions, p.username, p.equipped_badge, p.rank
+    FROM arena_season a LEFT JOIN profiles p ON p.clerk_user_id = a.clerk_user_id
+    WHERE a.season = ${season} ORDER BY a.best_score DESC, a.updated_at ASC LIMIT 100`;
+  return res.status(200).json({
+    season, endsAt: arenaSeasonEnd(), players,
+    you: mine ? { rank, score: mine.best_score, questions: mine.questions } : null,
+    top: top.map((r, i) => ({ pos: i + 1, name: r.username || "player", score: r.best_score, questions: r.questions, badge: publicBadge(r), rank: publicRank(r) })),
   });
 }
 
@@ -1119,6 +1166,7 @@ export default async function handler(req, res) {
       if (body?.action === "arenaDraw") return arenaDraw(req, res, body);
       if (body?.action === "arenaSubmit") return arenaSubmit(req, res, body, userId);
       if (body?.action === "arenaBoard") return arenaBoard(req, res, userId);
+      if (body?.action === "arenaSeason") return arenaSeasonBoard(req, res, userId);
       if (body?.action === "setBadge") return setBadge(req, res, body, userId);
       if (body?.action === "globalBoard") return globalBoard(req, res, userId);
       // Friends + study groups
