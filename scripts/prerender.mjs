@@ -40,7 +40,7 @@ for (const p of POSTS) {
     "@context": "https://schema.org",
     "@graph": [
       { "@type": "BlogPosting", headline: p.title, description: p.description, url, mainEntityOfPage: url,
-        datePublished: p.date, dateModified: p.date, image: `${SITE}/og-image.svg`,
+        datePublished: p.date, dateModified: p.date, image: `${SITE}/og-image.png`,
         author: { "@type": "Person", name: "Plug", url: `${SITE}/about` },
         publisher: { "@type": "Organization", name: "Revyy", logo: { "@type": "ImageObject", url: `${SITE}/favicon.svg` } } },
       { "@type": "BreadcrumbList", itemListElement: [

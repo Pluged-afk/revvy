@@ -32,7 +32,7 @@ function useArticleJsonLd(post) {
           "mainEntityOfPage": url,
           "datePublished": post.date,
           "dateModified": post.date,
-          "image": `${SITE}/og-image.svg`,
+          "image": `${SITE}/og-image.png`,
           "author": { "@type": "Person", "name": "Plug", "url": `${SITE}/about` },
           "publisher": {
             "@type": "Organization",

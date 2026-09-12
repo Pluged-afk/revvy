@@ -21,7 +21,7 @@ function setMeta(attr, key, content) {
 export default function usePageMeta(title, description, image) {
   useEffect(() => {
     const url = SITE + window.location.pathname;
-    const img = image || `${SITE}/og-image.svg`;
+    const img = image || `${SITE}/og-image.png`;
 
     if (title) document.title = title;
     if (description) setMeta("name", "description", description);
