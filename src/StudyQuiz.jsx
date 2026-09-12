@@ -1480,7 +1480,7 @@ function RanksModal({ currentIndex, xp, t, onClose }) {
           <div style={{ fontSize: 17, fontWeight: 800, fontFamily: "'Fraunces',Georgia,serif", color: "var(--color-text-primary)" }}>{t.rankAllTitle || "Ranks"}</div>
           <button onClick={onClose} aria-label={t.scoreCardClose || "Close"} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", display: "flex", padding: 4 }}><Icon name="x" size={18} /></button>
         </div>
-        <div style={{ fontSize: 12.5, color: "var(--color-text-secondary)", marginBottom: 14 }}>{t.rankAllSub || "Earn XP to climb. Harder questions are worth more."}</div>
+        <div style={{ fontSize: 12.5, color: "var(--color-text-secondary)", marginBottom: 14 }}>{t.rankAllSub || "Climb by scoring higher in the Endless Arena."}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {RANKS.map((r, i) => {
             const reached = currentIndex >= i, current = currentIndex === i;
