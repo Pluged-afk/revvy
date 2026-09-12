@@ -9,6 +9,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { render } from "../dist-ssr/entry-server.js";
 import { POSTS } from "../src/data/posts.js";
+import { EXAM_SEO, EXAM_SEO_ORDER } from "../src/data/examSeo.js";
+import { getMock } from "../src/lib/mockExams.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = join(__dirname, "..", "dist");
@@ -48,6 +50,37 @@ for (const p of POSTS) {
   };
   routes.push({
     path: `/blog/${p.slug}`, title: `${p.title} · Revyy`, desc: p.description,
+    extraHead: `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>`,
+  });
+}
+
+// Practice-test hub + one landing page per standardized exam. Titles and
+// descriptions come from src/data/examSeo.js (the same source the page renders
+// from), so the prerendered <head> can never drift from what a visitor sees.
+routes.push({
+  path: "/practice",
+  title: "Free Practice Tests: SAT, ACT, GRE, GMAT, LSAT, MCAT and More | Revyy",
+  desc: "Free online practice tests for eight standardized exams: SAT, ACT, PSAT, GRE, GMAT, LSAT, MCAT and UCAT. Real sections and scoring, timed, with an explanation for every question.",
+});
+for (const id of EXAM_SEO_ORDER) {
+  const seo = EXAM_SEO[id];
+  const mock = getMock(id);
+  if (!seo || !mock) continue;
+  const url = `${SITE}/practice/${id}`;
+  const jsonld = {
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "FAQPage", mainEntity: seo.faqs.map((f) => ({
+        "@type": "Question", name: f.q,
+        acceptedAnswer: { "@type": "Answer", text: f.a },
+      })) },
+      { "@type": "BreadcrumbList", itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Practice tests", item: `${SITE}/practice` },
+        { "@type": "ListItem", position: 2, name: `${mock.name} practice test`, item: url } ] },
+    ],
+  };
+  routes.push({
+    path: `/practice/${id}`, title: seo.title, desc: seo.desc,
     extraHead: `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>`,
   });
 }

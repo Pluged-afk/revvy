@@ -95,13 +95,18 @@ export default function Features() {
           </div>
           <div className="exam-grid">
             {EXAMS.map((e) => (
-              <div key={e.id} className="exam-card">
+              <Link key={e.id} to={`/practice/${e.id}`} className="exam-card" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
                 <div className="exam-name">{e.name}</div>
                 <div className="exam-blurb">{e.blurb}</div>
                 <div className="exam-note">{e.note}</div>
-              </div>
+              </Link>
             ))}
           </div>
+          <p className="hero-note" style={{ marginTop: 20, textAlign: "center" }}>
+            Tap any test for a{" "}
+            <Link to="/practice" className="inline-link">free practice test</Link>{" "}
+            built to its real format.
+          </p>
         </div>
       </section>
 

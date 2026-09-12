@@ -4,8 +4,16 @@ import usePageMeta from "../lib/usePageMeta.js";
 import AdSlot from "../components/AdSlot.jsx";
 import Icon from "../components/Icon.jsx";
 import { getPost, readTime, POSTS } from "../data/posts.js";
+import { EXAM_SEO } from "../data/examSeo.js";
+import { getMock } from "../lib/mockExams.js";
 
 const SITE = "https://revyy.app";
+
+// Blog slug -> exam id, so an exam study guide can point readers straight to its
+// matching practice test (and Google sees the two pages cross-linked).
+const GUIDE_TO_EXAM = Object.fromEntries(
+  Object.entries(EXAM_SEO).map(([id, s]) => [s.guide, id])
+);
 
 // Inject (and keep updated) Article + Breadcrumb structured data for the post
 // so Google can show it as a rich result. Removed when leaving the page.
@@ -94,6 +102,10 @@ export default function BlogPost() {
   // Suggest a few other articles to read next.
   const more = POSTS.filter((p) => p.slug !== post.slug).slice(0, 3);
 
+  // If this is an exam study guide, offer its matching practice test.
+  const examId = GUIDE_TO_EXAM[post.slug];
+  const examMock = examId ? getMock(examId) : null;
+
   return (
     <>
       <article className="section section-tight">
@@ -115,6 +127,18 @@ export default function BlogPost() {
           {post.body.map((block, i) => (
             <Block key={i} block={block} />
           ))}
+
+          {examMock && (
+            <div style={{ marginTop: 32, padding: "22px 24px", background: "var(--paper-2)", border: "1px solid var(--line)", borderRadius: "var(--radius)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".4px", textTransform: "uppercase", color: "var(--indigo)", marginBottom: 6 }}>Ready to practise?</div>
+              <p style={{ margin: "0 0 14px", fontSize: 15.5, color: "var(--ink-soft)", lineHeight: 1.6 }}>
+                Put this into practice with a free {examMock.name} practice test, built to the real format with an explanation on every question.
+              </p>
+              <Link to={`/practice/${examId}`} className="btn btn-primary">
+                Try the {examMock.name} practice test <Icon name="arrow" size={17} />
+              </Link>
+            </div>
+          )}
 
           <div style={{ marginTop: 40 }}>
             <Link to="/app" className="btn btn-primary btn-lg">Turn your notes into a quiz <Icon name="arrow" size={18} /></Link>

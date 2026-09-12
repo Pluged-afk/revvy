@@ -12,7 +12,7 @@ const EXAM_ORDER = ["sat", "act", "psat", "gre", "gmat", "lsat", "mcat", "ucat"]
 const EXAMS = EXAM_ORDER
   .map((id) => MOCK_EXAMS.find((e) => e.id === id))
   .filter(Boolean)
-  .map((e) => ({ name: e.name, blurb: e.blurb, note: e.note }));
+  .map((e) => ({ id: e.id, name: e.name, blurb: e.blurb, note: e.note }));
 
 // A faithful, static replica of the app's real quiz screen: same topbar,
 // progress bar, difficulty/type pills, Fraunces question, lettered options,
@@ -336,16 +336,17 @@ export default function Home() {
           </div>
           <div className="exam-grid">
             {EXAMS.map((e) => (
-              <div key={e.name} className="exam-card">
+              <Link key={e.name} to={`/practice/${e.id}`} className="exam-card" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
                 <div className="exam-name">{e.name}</div>
                 <div className="exam-blurb">{e.blurb}</div>
                 <div className="exam-note">{e.note}</div>
-              </div>
+              </Link>
             ))}
           </div>
           <p className="hero-note" style={{ marginTop: 22 }}>
             Mock tests are a Pro feature, up to two full papers a day. Timed exams
-            built from your own notes are on every plan.
+            built from your own notes are on every plan. See all{" "}
+            <Link to="/practice" className="inline-link">free practice tests</Link>.
           </p>
         </div>
       </section>

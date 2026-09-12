@@ -20,6 +20,14 @@ export default function Footer() {
           </div>
 
           <div className="footer-col">
+            <h4>Practice tests</h4>
+            <Link to="/practice/sat">SAT practice test</Link>
+            <Link to="/practice/act">ACT practice test</Link>
+            <Link to="/practice/gre">GRE practice test</Link>
+            <Link to="/practice">All practice tests</Link>
+          </div>
+
+          <div className="footer-col">
             <h4>Company</h4>
             <Link to="/about">About</Link>
             <Link to="/blog">Blog</Link>

@@ -75,6 +75,8 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 .btn-amber:hover { background: #8a6323; }
 .btn-clay { background: var(--clay); color: #fff; }
 .btn-clay:hover { background: #983f22; }
+.inline-link { color: var(--indigo); text-decoration: underline; text-underline-offset: 2px; }
+.inline-link:hover { color: var(--indigo-ink); }
 .btn-light { background: var(--ink); color: var(--paper); }   /* on light hero now: solid ink */
 .btn-light:hover { background: #38322a; }
 .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
@@ -348,7 +350,7 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 
 /* ── Footer ──────────────────────────────────────────────────── */
 .footer { background: #1c1913; color: #cfc7b8; padding: 56px 0 26px; }
-.footer-top { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 32px; margin-bottom: 38px; }
+.footer-top { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr; gap: 32px; margin-bottom: 38px; }
 .footer-brand .nav-logo { color: #fff; margin-bottom: 12px; }
 .footer-brand p { font-size: 14px; color: #a49c8d; line-height: 1.62; max-width: 280px; margin: 0 0 14px; }
 .footer-col h4 { font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: #fff; margin-bottom: 14px; }
