@@ -22,10 +22,19 @@ need to be signed in on revyy.app to generate.
 4. Pin it, open any article, click the icon, then **Make a quiz from this page**.
 
 ## Files
-- `manifest.json` — MV3 manifest (activeTab + scripting + storage; host access to revyy.app only).
+- `manifest.json` — MV3 manifest (activeTab + scripting + storage; host access to revyy.app only; icons 16/48/128 wired for the toolbar + store).
 - `popup.html` / `popup.js` — the button + page-text extraction + handoff.
 - `bridge.js` — content script on revyy.app that feeds the text into the app.
+- `icon16/48/128.png` — the toolbar and store icons (regenerate with `node _geticon.mjs`).
 
-## Before publishing to the Chrome Web Store
-- Add `icons` (16/48/128 px) to the manifest and an `action.default_icon`.
-- Optionally support more sites/PDF pages and a "choose question count" control.
+## Publish it to the Chrome Web Store
+The extension is publish-ready (valid MV3 manifest, icons wired, verified end
+to end against revyy.app's import hook). To ship it to real users:
+1. Zip the contents of this `extension/` folder (the files, not the folder itself).
+2. Create a Chrome Web Store developer account (one-time $5 fee) at
+   https://chrome.google.com/webstore/devconsole and click **New item**.
+3. Upload the zip, fill in the listing (screenshots, description, a privacy note
+   saying it only reads the active tab's text when you click it and sends it to
+   revyy.app), and submit for review.
+- Edge users can install the same package via the Microsoft Partner Center.
+- Ideas for later: support PDF pages and a "choose question count" control.
