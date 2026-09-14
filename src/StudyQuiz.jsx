@@ -15,6 +15,7 @@ import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
 import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/studentModel.js";
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
+import { previewInterval } from "./lib/fsrs.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
 import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
@@ -5728,7 +5729,7 @@ export default function StudyQuiz() {
     const gradeCard = (ok) => { if(card) srs.grade(card.id, ok); setReviewShown(false); setReviewPos(p=>p+1); };
     // Feature H, explainable SRS: mirror the SM-2 schedule so the learner can see
     // WHY this card is up and WHEN a "Got it" sends it back (no more black box).
-    const goodDays = card ? (card.reps===0 ? 1 : card.reps===1 ? 3 : Math.max(1, Math.round((card.interval||1) * (card.ease||2.3)))) : 0;
+    const goodDays = card ? previewInterval(card, 3) : 0; // FSRS: days until the next review if you get it right
     const whyLabel = card ? (card.lapses>0 ? t.srsWhyMissed : card.reps===0 ? t.srsWhyNew : t.srsWhySeen.replace("{n}",card.reps).replace("{s}",card.reps>1?"s":"")) : "";
     const whyMissed = !!(card && card.lapses>0);
     return (

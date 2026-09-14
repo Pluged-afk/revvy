@@ -4,6 +4,7 @@
 // Run: node scripts/smoke-test.mjs
 import { RANKS, rankFor, rankOf } from "../src/lib/badges.js";
 import { ARENA, comboMult, basePoints, questionPoints, timerFor, boardUnlocked, serveDifficulty } from "../src/lib/arena.js";
+import { reviewCard, previewInterval, initStability } from "../src/lib/fsrs.js";
 
 let passed = 0, failed = 0;
 const eq = (got, want, msg) => {
@@ -44,6 +45,24 @@ ok(serveDifficulty(1, 1) > serveDifficulty(1, 0), "confusing distractors raise s
 ok(serveDifficulty(5, 1) <= ARENA.DIFF_MAX, "serve difficulty clamped to max");
 eq(boardUnlocked(ARENA.GATE_PLAYERS), true, "board unlocks at the gate");
 eq(boardUnlocked(ARENA.GATE_PLAYERS - 1), false, "board locked below the gate");
+
+// ── FSRS spaced repetition ───────────────────────────────────────────────
+const NOW = 1_700_000_000_000, DAY = 86400000;
+const rNew = reviewCard({ reps: 0, interval: 0, lapses: 0 }, 3, NOW);
+ok(rNew.interval >= 1 && rNew.interval <= 7, "new card + Good schedules a small first interval");
+eq(rNew.reps, 1, "new card + Good sets reps to 1");
+ok(rNew.stability > 0 && rNew.difficulty >= 1 && rNew.difficulty <= 10, "new card has valid stability + difficulty");
+const rGrow = reviewCard({ ...rNew }, 3, rNew.due);
+ok(rGrow.interval > rNew.interval, "recall grows the interval");
+const rLapse = reviewCard({ ...rGrow }, 1, rGrow.due);
+eq(rLapse.reps, 0, "Again resets reps");
+ok(rLapse.due - rGrow.due < DAY, "Again brings the card back within the day");
+ok(rLapse.lapses === (rGrow.lapses || 0) + 1, "Again increments lapses");
+ok(reviewCard({ reps: 3, interval: 7, ease: 2.3, due: NOW - 7 * DAY, lastReview: NOW - 7 * DAY }, 3, NOW).stability > 7, "legacy SM-2 card migrates (stability seeded from its interval, then grows)");
+let sc = { reps: 0, interval: 0, lapses: 0 }, tt = NOW, bounded = true;
+for (let i = 0; i < 15; i++) { const rr = reviewCard(sc, 3, tt); if (rr.difficulty < 1 || rr.difficulty > 10 || rr.stability <= 0) bounded = false; sc = { ...sc, ...rr }; tt = rr.due; }
+ok(bounded, "difficulty stays in 1..10 and stability positive across many reviews");
+ok(previewInterval({ reps: 0, interval: 0 }, 3) === reviewCard({ reps: 0, interval: 0 }, 3).interval, "previewInterval matches reviewCard");
 
 console.log(`\nSmoke tests: ${passed} passed, ${failed} failed.`);
 process.exit(failed ? 1 : 0);

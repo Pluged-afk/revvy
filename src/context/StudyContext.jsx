@@ -5,6 +5,7 @@ import { normBank, bankAddItems, bankRejectQ, bankMarkUsed, bankMerge } from "..
 import { normLibrary, libraryAddDoc, libraryRemove, libraryMerge } from "../lib/studyLibrary.js";
 import { normWallet, walletAdd, addSaverProgress, tickStreak, arenaEarn, passEarn, POWERUP_CAP, SAVER_CAP } from "../lib/rewards.js";
 import { evaluateBadges } from "../lib/badges.js";
+import { reviewCard } from "../lib/fsrs.js";
 
 // ── Server-synced study data ──────────────────────────────────────────
 // Single source of truth for the spaced-repetition deck, lifetime stats +
@@ -15,7 +16,6 @@ import { evaluateBadges } from "../lib/badges.js";
 // state in srs.js / stats.js, those now read from here.
 
 const LS_KEY = "revyy_study_v1";
-const DAY = 86400000;
 
 const uid = () =>
   globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -184,13 +184,15 @@ function mergeStudy(server, local) {
     server.examDate;
   if (!hasServer) return local; // fresh account → push local up
 
-  // Cards: union by front text; keep the more-progressed copy for duplicates.
+  // Cards: union by front text; keep the more-progressed copy for duplicates
+  // (higher FSRS stability wins, then reps as a tiebreak for legacy cards).
+  const cardProgress = (x) => (Number(x?.stability) || 0) * 1000 + (Number(x?.reps) || 0);
   const byFront = new Map();
   for (const c of server.cards || []) byFront.set((c.front || "").toLowerCase(), c);
   for (const c of local.cards || []) {
     const k = (c.front || "").toLowerCase();
     const ex = byFront.get(k);
-    if (!ex || (c.reps || 0) > (ex.reps || 0)) byFront.set(k, c);
+    if (!ex || cardProgress(c) > cardProgress(ex)) byFront.set(k, c);
   }
   // Plans: union by id; server wins on conflict.
   const byId = new Map();
@@ -313,18 +315,15 @@ function mergeNotif(a, b) {
   };
 }
 
-// SM-2-flavoured scheduling for a graded card.
+// FSRS-5 scheduling for a graded card (see lib/fsrs.js). The two review buttons
+// map to Again(1) / Got it = Good(3); the model adapts each card's stability
+// from how late it was answered. Legacy SM-2 cards migrate on their next review.
 function schedule(card, ok, examDate) {
-  if (ok) {
-    const reps = card.reps + 1;
-    const interval = reps === 1 ? 1 : reps === 2 ? 3 : Math.max(1, Math.round(card.interval * card.ease));
-    const ease = Math.min(2.7, card.ease + 0.05);
-    let due = Date.now() + interval * DAY;
-    const ex = examDate ? new Date(examDate).getTime() : 0; // never schedule past the exam
-    if (ex && ex > Date.now() && due > ex) due = ex;
-    return { ...card, reps, interval, ease, due };
-  }
-  return { ...card, reps: 0, interval: 0, lapses: card.lapses + 1, ease: Math.max(1.3, card.ease - 0.2), due: Date.now() + 10 * 60000 };
+  const r = reviewCard(card, ok ? 3 : 1, Date.now());
+  let due = r.due;
+  const ex = examDate ? new Date(examDate).getTime() : 0; // never schedule past the exam
+  if (ex && ex > Date.now() && due > ex && r.interval > 0) due = ex;
+  return { ...card, ...r, due };
 }
 
 const StudyContext = createContext(null);

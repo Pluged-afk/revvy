@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useStudy } from "../context/StudyContext.jsx";
 
-// Spaced-repetition (SM-2-flavoured) review deck. The state + scheduling now
+// Spaced-repetition (FSRS-5) review deck. The state + scheduling now
 // live in StudyContext (server-synced when signed in); this hook is a thin,
 // backwards-compatible view over it, call sites are unchanged. Missed
 // questions become review cards resurfaced on expanding intervals until they
