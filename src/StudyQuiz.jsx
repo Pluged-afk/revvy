@@ -896,6 +896,19 @@ async function arenaSeasonGlobal() {
   } catch { return null; }
 }
 
+// Convert a generated MCQ into the Endless-Arena question shape: the fixed
+// correct answer + a small distractor pool, plus a per-question difficulty that
+// ramps up with position so a subject run gets harder as it goes. Null if malformed.
+function toArenaQ(q, i, total, category) {
+  const opts = Array.isArray(q?.options) ? q.options.filter((o) => typeof o === "string" && o.trim()) : [];
+  const ci = Number(q?.correct);
+  if (opts.length < 3 || !Number.isInteger(ci) || ci < 0 || ci >= opts.length) return null;
+  const correct = opts[ci];
+  const distractors = opts.filter((_, idx) => idx !== ci).map((text) => ({ text, close: 0.55 }));
+  const difficulty = Math.max(1, Math.min(5, 1.6 + (total > 1 ? i / (total - 1) : 0) * 2.8)); // ~1.6 -> ~4.4 ramp
+  return { id: "subj_" + i, category: category || "", question: String(q?.question || ""), correct, distractors, difficulty: Math.round(difficulty * 100) / 100 };
+}
+
 // ── Friends + study groups (client fetch helpers) ──
 // One call for any social action; returns the parsed JSON or {error}.
 async function socialApi(action, payload = {}) {
@@ -4175,6 +4188,8 @@ export default function StudyQuiz() {
   // ── Endless Arena (client) ──
   const [arenaQs, setArenaQs] = useState([]);
   const [arenaResult, setArenaResult] = useState(null);
+  const [arenaMode, setArenaMode] = useState("gk");     // "gk" (pooled) | "subject" (your material)
+  const [arenaSubject, setArenaSubject] = useState(null); // {key,title,subject} for a subject run
   const [arenaBoardData, setArenaBoardData] = useState(null);
   const [arenaSeasonData, setArenaSeasonData] = useState(null);
   const [arenaTab, setArenaTab] = useState("season"); // "season" (competitive ladder) | "all" (all-time)
@@ -4568,10 +4583,58 @@ export default function StudyQuiz() {
       const qs = await arenaDrawGlobal();
       setArenaBusy(false);
       if (qs.length < 5) { setArenaErr(t.arenaNoQs); setScreen("arena_intro"); return; }
+      setArenaMode("gk"); setArenaSubject(null);
       setArenaQs(qs); setScreen("arena_play");
     });
   }, [requireUsername, t]);
+  // Subject arena: the same fast, sudden-death game, but questions are generated
+  // from a chosen subject (or your own material) instead of the pooled GK bank.
+  // A personal challenge on your moat; it earns streak + power-ups + a personal
+  // best per subject, but stays off the GK leaderboard/rank (those aren't
+  // comparable across different question sets).
+  const startSubjectArena = useCallback((set) => {
+    if (!set) return;
+    const material = set.material || (set.summary ? `${set.title || set.subject || "Subject"} (${set.subject || ""})\n\n${set.summary}` : "");
+    if (!material.trim()) return;
+    requireUsername(async () => {
+      const N = 20;
+      const consumed = await consumeQuestions(N);
+      if (consumed && consumed.allowed === false) { setArenaErr(isPro ? (t.dailyLimit || "Daily limit reached.") : (t.dailyLimitFree || "Daily limit reached. Watch an ad or upgrade.")); setScreen("arena_intro"); return; }
+      setArenaErr(""); setArenaBusy(true); setScreen("arena_gen");
+      try {
+        const blocks = [{ type: "text", text: material.slice(0, 12000) }];
+        let res = null, lastErr = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try { const r = await callClaude({ blocks, numQ: N, diff: "normal", type: "mcq", uiLangName: LANGS[lang]?.name }); if (r?.questions?.length) { res = r; break; } }
+          catch (e) { lastErr = e; }
+        }
+        if (!res?.questions?.length) throw (lastErr || new Error("No questions returned"));
+        const qs = res.questions.map((q, i, arr) => toArenaQ(q, i, arr.length, set.subject || set.title)).filter(Boolean);
+        setArenaBusy(false);
+        if (qs.length < 5) { setArenaErr(t.arenaNoQs); setScreen("arena_intro"); return; }
+        setArenaMode("subject"); setArenaSubject({ key: set.id || set.subject || set.title, title: set.title || set.subject, subject: set.subject || "", set });
+        setArenaQs(qs); setScreen("arena_play");
+      } catch (err) {
+        setArenaBusy(false);
+        setArenaErr(err?.message?.includes("parse") ? (t.errAiFormat || "Generation error, try again.") : (err?.message || t.arenaNoQs));
+        setScreen("arena_intro");
+      }
+    });
+  }, [requireUsername, consumeQuestions, isPro, lang, t]);
   const onArenaEnd = useCallback(async (result) => {
+    if (arenaMode === "subject") {
+      // Personal challenge on your own material: streak + power-ups + a personal
+      // best per subject. Deliberately does NOT touch the GK leaderboard, rank
+      // or leagues (scores on different question sets aren't comparable).
+      const score = Math.max(0, Math.round(Number(result.score) || 0));
+      const key = arenaSubject?.key || "subject";
+      const prevBest = Math.max(0, Math.round(Number(srs.subjectArena?.[key]) || 0));
+      const earned = srs.completeActivity({ mode: "arena", score });
+      srs.recordSubjectArena(key, score);
+      setArenaResult({ ...result, score, best: Math.max(prevBest, score), isBest: score > prevBest, subject: arenaSubject, pending: false, earned });
+      setScreen("arena_over");
+      return;
+    }
     setScreen("arena_over"); setArenaResult({ ...result, best: result.score, isBest: false, pending: true });
     // Rank BEFORE this run (rank is your best Arena score), captured before the
     // blob updates, so we can tell if this run PROMOTED you.
@@ -4594,7 +4657,7 @@ export default function StudyQuiz() {
       SoundEngine.rankUp(); fireBurst();
       setPromotion({ fromIdx, toIdx, best: newBest });
     }
-  }, [srs, fireBurst]);
+  }, [srs, fireBurst, arenaMode, arenaSubject]);
   const openArenaBoard = useCallback(async () => {
     setArenaBusy(true); setArenaBoardData(null); setArenaSeasonData(null); setScreen("arena_board");
     const [b, s] = await Promise.all([arenaBoardGlobal(), arenaSeasonGlobal()]);
@@ -6936,6 +6999,12 @@ export default function StudyQuiz() {
   // ── ENDLESS ARENA ─────────────────────────────────────────────────
   if (screen==="arena_intro") {
     const best = arenaBoardData?.you?.score ?? arenaResult?.best ?? null;
+    // Subject-arena options: your own uploaded material first (the moat), then
+    // the ready-made subjects. Each shows your personal best for that subject.
+    const subjectSets = [
+      ...(librarySize(srs.library) > 0 ? [{ id: "library", title: t.arenaYourMaterial || "Your material", subject: "", material: buildLibraryMaterial(srs.library) }] : []),
+      ...STARTER_SUBJECTS,
+    ];
     return (
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
@@ -6958,6 +7027,20 @@ export default function StudyQuiz() {
           {arenaErr && <div style={{background:"var(--color-background-danger)",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"var(--color-text-danger)",marginBottom:14}}>{arenaErr}</div>}
           <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,fontSize:16}} onClick={startArena}><Icon name="bolt" size={17}/>{t.arenaPlay}</button>
           {SHOW_ARENA_LEADERBOARD && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
+          <div style={{marginTop:24}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:10,textAlign:"center"}}>{t.arenaSubjectLabel||"Or race on your subject"}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {subjectSets.map(s=>{ const sb=srs.subjectArena?.[s.id||s.subject||s.title];
+                return (
+                  <button key={s.id||s.title} onClick={()=>startSubjectArena(s)} className="rv-tile" style={{...Sb.navTile,padding:"12px 13px",gap:3,cursor:"pointer",textAlign:"left",alignItems:"flex-start"}}>
+                    <div style={{fontWeight:700,fontSize:13,color:"var(--color-text-primary)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}>{s.title}</div>
+                    <div style={{fontSize:10.5,color: sb?"var(--color-accent)":"var(--color-text-secondary)",fontWeight:sb?700:400}}>{sb?`${t.arenaBestShort||"Best"} ${sb.toLocaleString()}`:(s.subject||t.arenaSubjectGo||"Play")}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:9,textAlign:"center",lineHeight:1.5}}>{t.arenaSubjectNote||"Questions are generated from the subject, so it counts toward your daily limit. Personal challenge, not the global board."}</p>
+          </div>
           <div style={{marginTop:22,display:"flex",flexDirection:"column",gap:11}}>
             {[["bolt",t.arenaHow1],["target",t.arenaHow2],["gem",t.arenaHow3]].map(([ic,tx],i)=>(
               <div key={i} style={{display:"flex",gap:11,alignItems:"flex-start",fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5}}>
@@ -6992,6 +7075,7 @@ export default function StudyQuiz() {
         {badgeToastEl}{rankToastEl}{promotionEl}{notifToastEl}{burstConfetti&&<Confetti/>}
         <AdBanners isPro={isPro}/>
         <div style={{background:"#312e81",padding:"36px 20px 28px",textAlign:"center"}}>
+          {r.subject && <div style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.75)",marginBottom:8,display:"inline-flex",alignItems:"center",gap:6}}><Icon name="bolt" size={13}/>{r.subject.title}</div>}
           {r.isBest && <div style={{fontSize:12,fontWeight:800,letterSpacing:1,color:"#fcd34d",textTransform:"uppercase",marginBottom:6}}>{t.arenaNewBest}</div>}
           <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"rgba(255,255,255,0.7)",textTransform:"uppercase"}}>{r.isBest?t.arenaScoreLbl:t.arenaRunScore}</div>
           <div style={{fontSize:58,fontWeight:800,color:"#fff",fontFamily:"'Fraunces',Georgia,serif",lineHeight:1.1}}>{(r.score||0).toLocaleString()}</div>
@@ -7013,8 +7097,9 @@ export default function StudyQuiz() {
               </div>
             ))}
           </div>
-          <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={startArena}><Icon name="repeat" size={16}/>{t.arenaPlayAgain}</button>
-          {SHOW_ARENA_LEADERBOARD && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
+          <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>{ if(r.subject?.set) startSubjectArena(r.subject.set); else startArena(); }}><Icon name="repeat" size={16}/>{t.arenaPlayAgain}</button>
+          {!r.subject && SHOW_ARENA_LEADERBOARD && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
+          {r.subject && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={()=>setScreen("arena_intro")}><Icon name="bolt" size={16}/>{t.arenaOtherSubjects||"Pick another subject"}</button>}
           <button style={{width:"100%",background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit",padding:"14px 4px 0"}} onClick={()=>setScreen("upload")}>{t.arenaHome}</button>
         </div>
       </div>

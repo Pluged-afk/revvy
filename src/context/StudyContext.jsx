@@ -90,7 +90,7 @@ function normNotif(n) {
   };
 }
 function emptyData() {
-  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), notif: normNotif({}), starterSeen: false, daily: { date: null, count: 0 }, updatedAt: 0 };
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), notif: normNotif({}), starterSeen: false, daily: { date: null, count: 0 }, subjectArena: {}, updatedAt: 0 };
 }
 const asTopicStats = (t) => (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
 
@@ -144,6 +144,7 @@ function loadLocal() {
       // starter card would resurface every time a guest reopens the app.
       starterSeen: !!blob.starterSeen,
       daily: (blob.daily && typeof blob.daily === "object") ? { date: blob.daily.date || null, count: Math.max(0, Math.round(Number(blob.daily.count) || 0)) } : { date: null, count: 0 },
+      subjectArena: (blob.subjectArena && typeof blob.subjectArena === "object" && !Array.isArray(blob.subjectArena)) ? blob.subjectArena : {},
       updatedAt: blob.updatedAt || 0,
     };
   }
@@ -165,6 +166,7 @@ function loadLocal() {
     notif: normNotif({}),
     starterSeen: false,
     daily: { date: null, count: 0 },
+    subjectArena: {},
     updatedAt: 0,
   };
 }
@@ -250,6 +252,12 @@ function mergeStudy(server, local) {
       const bt = b.date === today ? Math.max(0, Number(b.count) || 0) : 0;
       if (at || bt) return { date: today, count: Math.max(at, bt) };
       return (a.date || "") >= (b.date || "") ? { date: a.date || null, count: Math.max(0, Number(a.count) || 0) } : { date: b.date || null, count: Math.max(0, Number(b.count) || 0) };
+    })(),
+    // Subject-arena personal bests: keep the higher score per subject across devices.
+    subjectArena: (() => {
+      const out = { ...(server.subjectArena || {}) };
+      for (const [k, v] of Object.entries(local.subjectArena || {})) out[k] = Math.max(Number(out[k]) || 0, Number(v) || 0);
+      return out;
     })(),
     updatedAt: Date.now(),
   };
@@ -590,6 +598,16 @@ export function StudyProvider({ children }) {
   const markStarterSeen = useCallback(() => {
     commit((p) => (p.starterSeen ? p : { ...p, starterSeen: true }));
   }, [commit]);
+  // Subject-arena best: keep the higher score for a subject key.
+  const recordSubjectArena = useCallback((key, score) => {
+    const k = String(key || "").trim(); const s = Math.max(0, Math.round(Number(score) || 0));
+    if (!k) return;
+    commit((p) => {
+      const cur = Math.max(0, Number(p.subjectArena?.[k]) || 0);
+      if (s <= cur) return p;
+      return { ...p, subjectArena: { ...(p.subjectArena || {}), [k]: s } };
+    });
+  }, [commit]);
 
   // Record per-topic outcomes (seen + correct) from a finished quiz/exam. Powers
   // the mastery view and "drill weak spots". Ignores blank / "general" topics.
@@ -687,6 +705,7 @@ export function StudyProvider({ children }) {
     syncBadges, equipBadge, setBadgesPublic, markBadgesSeen,
     notif: data.notif, markNotifSeen, setNotifPref,
     starterSeen: data.starterSeen, markStarterSeen, loaded, daily: data.daily,
+    subjectArena: data.subjectArena, recordSubjectArena,
     bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc, recordMockScore,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
   };
