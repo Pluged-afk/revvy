@@ -134,6 +134,7 @@ const T_EN = {
   dmChalWaiting:"You scored {s}/{n} · {p}%. Waiting for {name} to play…",
   rankUpLabel:"Rank up!", rankUpSub:"You've leveled up. Keep climbing.", dayStreakLabel:"day streak",
   rankPromoted:"Promoted", rankPromoReached:"You've climbed to a new rank. Keep going.", rankPromoBest:"New best: {n} pts", rankPromoContinue:"Continue", rankPromoSeeRanks:"See all ranks",
+  leagueTitle:"Weekly League", leagueTileSub:"Race your cohort, promote each week", leagueTierLabel:"This week's league", leagueRule:"Top {p} promote, bottom {d} drop at week's end. Play the Arena to earn league points.", leaguePromote:"Promotion", leagueDemote:"Demotion", leagueDayWord:"day left", leagueDaysWord:"days left", leagueLockedTitle:"Leagues open soon", leagueLockedSub:"Weekly leagues unlock once {need} players are in the Arena, so cohorts have real competition. {have} so far.", leagueEmpty:"No one has scored in your league yet. Play the Arena to get on the board.", league_bronze:"Bronze", league_silver:"Silver", league_gold:"Gold", league_sapphire:"Sapphire", league_ruby:"Ruby", league_diamond:"Diamond",
   notifOnTitle:"Reminders on", notifOnBody:"We'll nudge you to keep your streak and review what's due.",
   notifStudyTime:"Time to study", notifStreakTitle:"Keep your streak alive",
   notifStreakBody:"Your {n}-day streak breaks tonight. A quick review keeps it going.",

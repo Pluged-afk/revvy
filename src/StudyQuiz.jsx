@@ -344,6 +344,16 @@ const SoundEngine = (() => {
 let _celebratedRankIdx = -1;
 let _celebratedStreak = -1;
 
+// Weekly League tiers (display only; mirrors the server's LEAGUE_TIERS order).
+const LEAGUE_TIERS = [
+  { key: "bronze",   name: "Bronze",   color: "#b45309" },
+  { key: "silver",   name: "Silver",   color: "#9aa3ad" },
+  { key: "gold",     name: "Gold",     color: "#c99a3b" },
+  { key: "sapphire", name: "Sapphire", color: "#2f6fed" },
+  { key: "ruby",     name: "Ruby",     color: "#c02749" },
+  { key: "diamond",  name: "Diamond",  color: "#22b8c4" },
+];
+
 // Cool, modern product palette (Aug 2026 redesign): neutral slate/gray base,
 // hairline borders, a confident indigo accent. Replaces the earlier warm ivory
 // theme so the app reads as a serious study tool.
@@ -4175,6 +4185,10 @@ export default function StudyQuiz() {
   const [globalBusy, setGlobalBusy] = useState(false);
   const [globalUnlocked, setGlobalUnlocked] = useState(false); // hide the home tile until the board fills
   const globalCheckedRef = useRef(false);
+  const [leagueData, setLeagueData] = useState(null);
+  const [leagueBusy, setLeagueBusy] = useState(false);
+  const [leagueUnlocked, setLeagueUnlocked] = useState(false); // hide the League entry until cohorts can fill
+  const leagueCheckedRef = useRef(false);
   // ── Friends + study groups ──
   const [social, setSocial] = useState(null);      // {friends, incoming, outgoing, groups}
   const [socialBusy, setSocialBusy] = useState(false);
@@ -4591,6 +4605,11 @@ export default function StudyQuiz() {
     const b = await socialApi("globalBoard");
     setGlobalBusy(false); setGlobalBoardData(b && !b.error ? b : { players: 0, top: [], you: null });
   }, []);
+  const openLeague = useCallback(async () => {
+    setLeagueBusy(true); setLeagueData(null); setScreen("league");
+    const b = await socialApi("leagueBoard");
+    setLeagueBusy(false); setLeagueData(b && !b.error ? b : { locked: true, players: 0, need: 100 });
+  }, []);
 
   // ── Badges wiring ────────────────────────────────────────────────────
   // Retroactively grant any badges the learner already qualifies for (existing
@@ -4609,6 +4628,16 @@ export default function StudyQuiz() {
     (async () => {
       const b = await socialApi("globalBoard");
       if (b && !b.error && !b.locked) { setGlobalUnlocked(true); setGlobalBoardData(b); }
+    })();
+  }, [user]);
+  // Same gate for Weekly Leagues: only surface the entry once there are enough
+  // players to form real cohorts (mirrors the leaderboard's reveal).
+  useEffect(() => {
+    if (!user || leagueCheckedRef.current) return;
+    leagueCheckedRef.current = true;
+    (async () => {
+      const b = await socialApi("leagueBoard");
+      if (b && !b.error && !b.locked) { setLeagueUnlocked(true); setLeagueData(b); }
     })();
   }, [user]);
   // ── Social notifications ────────────────────────────────────────────────
@@ -4953,6 +4982,15 @@ export default function StudyQuiz() {
             <div style={{minWidth:0}}>
               <div style={Sb.navTileTitle}>{t.globalBoardTitle||"Global leaderboard"}</div>
               <div style={Sb.navTileSub}>{t.globalTileSub||"Top 100 by rank, best of the best"}</div>
+            </div>
+          </div>
+          )}
+          {leagueUnlocked && (
+          <div onClick={()=>{ if(requireLogin()) return; openLeague(); }} className="rv-tile" style={Sb.navTile}>
+            <Medallion color="#7c3aed"><Icon name="trophy" size={18}/></Medallion>
+            <div style={{minWidth:0}}>
+              <div style={Sb.navTileTitle}>{t.leagueTitle||"Weekly League"}</div>
+              <div style={Sb.navTileSub}>{t.leagueTileSub||"Race your cohort, promote each week"}</div>
             </div>
           </div>
           )}
@@ -6633,6 +6671,78 @@ export default function StudyQuiz() {
       </div>
     </div>
   );
+
+  if (screen==="league") {
+    const lg = leagueData;
+    const tier = LEAGUE_TIERS[Math.max(0, Math.min(LEAGUE_TIERS.length - 1, lg?.tier || 0))];
+    const board = lg?.board || [];
+    const daysLeft = lg?.endsAt ? Math.max(0, Math.ceil((new Date(lg.endsAt).getTime() - Date.now()) / 86400000)) : null;
+    const full = !!lg && board.length >= (lg.size || 30);
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        <AdBanners isPro={isPro}/>
+        <div style={Sb.topbar} className="rv-topbar">
+          <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.backWord||"Back"}</button>
+          <span style={Sb.brand}>{t.leagueTitle||"Weekly League"}</span><span/>
+        </div>
+        <div className="rv-center-narrow" style={{padding:"18px 16px 40px"}}>
+          {leagueBusy && <div style={{textAlign:"center",padding:"36px 0"}}><div className="spin-ring" style={{width:34,height:34,borderRadius:"50%",border:"3px solid var(--color-border-tertiary)",borderTopColor:"var(--color-accent)",margin:"0 auto"}}/></div>}
+          {!leagueBusy && lg && lg.locked && (
+            <div style={{textAlign:"center",padding:"26px 18px",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:16}}>
+              <div style={{display:"flex",justifyContent:"center",color:"var(--color-text-tertiary)",marginBottom:12}}><Icon name="lock" size={28}/></div>
+              <h3 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,fontFamily:"'Fraunces',Georgia,serif"}}>{t.leagueLockedTitle||"Leagues open soon"}</h3>
+              <p style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5,maxWidth:340,margin:"0 auto 16px"}}>{(t.leagueLockedSub||"Weekly leagues unlock once {need} players are in the Arena, so cohorts have real competition. {have} so far.").replace("{need}",lg.need).replace("{have}",lg.players)}</p>
+              <div style={{height:8,borderRadius:4,background:"var(--color-background-secondary)",overflow:"hidden",maxWidth:260,margin:"0 auto"}}>
+                <div style={{height:"100%",width:`${Math.min(100,(lg.players/(lg.need||1))*100)}%`,background:"var(--color-accent)",borderRadius:4}}/>
+              </div>
+              <div style={{fontSize:12,fontFamily:"monospace",color:"var(--color-text-tertiary)",marginTop:8}}>{lg.players} / {lg.need}</div>
+            </div>
+          )}
+          {!leagueBusy && lg && !lg.locked && (<>
+            <div style={{background:`linear-gradient(135deg, ${tier.color}22, ${tier.color}0d)`,border:`1px solid ${tier.color}66`,borderRadius:16,padding:16,marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",gap:13}}>
+                <div style={{width:52,height:52,borderRadius:14,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:tier.color+"26"}} aria-hidden="true"><Icon name="trophy" size={26} stroke={1.8} style={{color:tier.color}}/></div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.leagueTierLabel||"This week's league"}</div>
+                  <div style={{fontSize:20,fontWeight:800,color:tier.color,fontFamily:"'Fraunces',Georgia,serif"}}>{(t["league_"+tier.key])||tier.name}</div>
+                </div>
+                {daysLeft!=null && <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:"var(--color-text-primary)"}}>{daysLeft}</div>
+                  <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>{daysLeft===1?(t.leagueDayWord||"day left"):(t.leagueDaysWord||"days left")}</div>
+                </div>}
+              </div>
+              <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:12,lineHeight:1.5}}>{(t.leagueRule||"Top {p} promote, bottom {d} drop at week's end. Play the Arena to earn league points.").replace("{p}",lg.promote).replace("{d}",lg.demote)}</div>
+            </div>
+            {board.length ? (
+              <div style={{border:"1px solid var(--color-border-secondary)",borderRadius:14,overflow:"hidden",background:"var(--color-background-primary)"}}>
+                {board.map((row,i)=>{
+                  const promo=(i+1)<=lg.promote, demo=full&&(i+1)>((lg.size||30)-lg.demote);
+                  const accent=promo?"#22c55e":demo?"#ef4444":"transparent";
+                  return (
+                    <div key={i} style={{display:"grid",gridTemplateColumns:"30px 1fr auto",gap:10,alignItems:"center",padding:"11px 13px",borderLeft:`3px solid ${accent}`,background:row.you?"var(--color-sel-tint)":"transparent",borderBottom:i<board.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
+                      <span style={{fontFamily:"monospace",fontWeight:800,fontSize:14,textAlign:"center",color:"var(--color-text-tertiary)"}}>{i+1}</span>
+                      <div style={{minWidth:0,display:"flex",alignItems:"center",gap:9}}>
+                        <AvatarInitial name={row.name} size={28}/>
+                        <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                          <span style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}{row.you?` · ${t.youWord||"you"}`:""}</span>
+                          <Flair rank={row.rank} badge={row.badge} t={t} small/>
+                        </div>
+                      </div>
+                      <span style={{fontFamily:"monospace",fontWeight:700,fontSize:14}}>{(row.points||0).toLocaleString()}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : <div style={{textAlign:"center",padding:"30px 0",fontSize:13,color:"var(--color-text-tertiary)"}}>{t.leagueEmpty||"No one has scored in your league yet. Play the Arena to get on the board."}</div>}
+            <div style={{display:"flex",gap:16,justifyContent:"center",marginTop:12,fontSize:11.5,color:"var(--color-text-secondary)"}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:2,background:"#22c55e",display:"inline-block"}}/>{t.leaguePromote||"Promotion"}</span>
+              <span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:2,background:"#ef4444",display:"inline-block"}}/>{t.leagueDemote||"Demotion"}</span>
+            </div>
+          </>)}
+        </div>
+      </div>
+    );
+  }
 
   if (screen==="badges") return (
     <div style={Sb.root}><style>{CSS}</style>

@@ -103,6 +103,19 @@ function ensureTables() {
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (season, clerk_user_id)
       )`,
+      // Weekly Leagues: small winnable cohorts. Each ISO week, a player sits in
+      // one cohort (~30 peers) at a tier; league points accumulate from arena
+      // runs that week; at the next week's first visit they promote/demote by
+      // where they finished (lazy rollover, no cron needed).
+      sql`CREATE TABLE IF NOT EXISTS arena_league (
+        week          TEXT        NOT NULL,
+        clerk_user_id TEXT        NOT NULL,
+        cohort        INT         NOT NULL DEFAULT 0,
+        tier          INT         NOT NULL DEFAULT 0,
+        points        INT         NOT NULL DEFAULT 0,
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (week, clerk_user_id)
+      )`,
       // ── Friends + study groups ──
       // One row per relationship: a directed request that becomes mutual once
       // accepted. Friends of X = rows where X is requester or addressee and
@@ -218,6 +231,8 @@ function ensureTables() {
       .then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS arena_board ON arena_score (best_score DESC)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS arena_season_board ON arena_season (season, best_score DESC)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS arena_league_board ON arena_league (week, cohort, points DESC)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS arena_league_tier ON arena_league (week, tier, cohort)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS friend_msg_thread ON friend_messages (sender, recipient, id)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS friend_msg_inbox ON friend_messages (recipient, sender)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS gk_pool_diff ON gk_pool (difficulty)`)
@@ -507,6 +522,96 @@ function aDifficulty(base, plays, cc) {
 const arenaSeasonId = (d = new Date()) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 const arenaSeasonEnd = (d = new Date()) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString();
 
+// ── Weekly Leagues ──────────────────────────────────────────────────────────
+// Small, winnable cohorts (Duolingo-style). Gated like the leaderboard: below
+// LEAGUE_GATE distinct arena players there aren't enough people to form real
+// cohorts, so the whole feature stays locked and shows a progress card instead.
+const LEAGUE_GATE = 100;     // distinct arena players before leagues unlock (mirrors the board)
+const LEAGUE_COHORT = 30;    // players per cohort
+const LEAGUE_PROMOTE = 7;    // top N of a cohort promote a tier each week
+const LEAGUE_DEMOTE = 5;     // bottom N demote a tier each week
+const LEAGUE_TIERS = ["bronze", "silver", "gold", "sapphire", "ruby", "diamond"]; // index 0..5
+// ISO week id (YYYY-Www, UTC) + the instant it closes (next Monday 00:00 UTC).
+function isoWeekId(d = new Date()) {
+  const dt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - day);          // shift to the week's Thursday
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+  return `${dt.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+function leagueWeekEnd(d = new Date()) {
+  const day = d.getUTCDay() || 7;                     // 1=Mon..7=Sun
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + (8 - day))).toISOString();
+}
+
+// Ensure the player is placed in a cohort for the CURRENT week, rolling last
+// week's result into a promotion/demotion first (lazy, so no cron is needed).
+// Returns { week, cohort, tier }.
+async function leaguePlacement(userId) {
+  const wk = isoWeekId();
+  const cur = (await sql`SELECT cohort, tier FROM arena_league WHERE week = ${wk} AND clerk_user_id = ${userId}`)[0];
+  if (cur) return { week: wk, cohort: cur.cohort, tier: cur.tier };
+
+  // First visit this week: derive the new tier from last week's finish.
+  let tier = 0;
+  const last = (await sql`SELECT week, cohort, tier, points FROM arena_league
+                          WHERE clerk_user_id = ${userId} AND week <> ${wk} ORDER BY week DESC LIMIT 1`)[0];
+  if (last) {
+    tier = aclamp(Number(last.tier) || 0, 0, LEAGUE_TIERS.length - 1);
+    const ahead = (await sql`SELECT COUNT(*)::int AS n FROM arena_league
+                             WHERE week = ${last.week} AND cohort = ${last.cohort}
+                               AND (points > ${last.points} OR (points = ${last.points} AND clerk_user_id < ${userId}))`)[0]?.n || 0;
+    const size = (await sql`SELECT COUNT(*)::int AS n FROM arena_league WHERE week = ${last.week} AND cohort = ${last.cohort}`)[0]?.n || 1;
+    const rank = ahead + 1;
+    if (rank <= LEAGUE_PROMOTE && tier < LEAGUE_TIERS.length - 1) tier += 1;
+    else if (rank > size - LEAGUE_DEMOTE && tier > 0) tier -= 1;
+  }
+  // Slot into an open cohort at this tier (else start a new one). Racy under
+  // load but a slightly over/under-full cohort is harmless.
+  const open = (await sql`SELECT cohort FROM arena_league WHERE week = ${wk} AND tier = ${tier}
+                          GROUP BY cohort HAVING COUNT(*) < ${LEAGUE_COHORT} ORDER BY cohort ASC LIMIT 1`)[0]?.cohort;
+  const cohort = open ?? ((await sql`SELECT COALESCE(MAX(cohort), -1) + 1 AS c FROM arena_league WHERE week = ${wk} AND tier = ${tier}`)[0]?.c ?? 0);
+  await sql`INSERT INTO arena_league (week, clerk_user_id, cohort, tier, points)
+            VALUES (${wk}, ${userId}, ${cohort}, ${tier}, 0) ON CONFLICT (week, clerk_user_id) DO NOTHING`;
+  const row = (await sql`SELECT cohort, tier FROM arena_league WHERE week = ${wk} AND clerk_user_id = ${userId}`)[0] || { cohort, tier };
+  return { week: wk, cohort: row.cohort, tier: row.tier };
+}
+
+// Add a finished arena run's points to the player's weekly league total.
+async function leagueAddPoints(userId, pts) {
+  const p = Math.max(0, Math.round(Number(pts) || 0));
+  if (!p) return;
+  try {
+    const pl = await leaguePlacement(userId);
+    await sql`UPDATE arena_league SET points = points + ${p}, updated_at = NOW()
+              WHERE week = ${pl.week} AND clerk_user_id = ${userId}`;
+  } catch (e) { console.error("[league] add points:", e.message); }
+}
+
+// This week's cohort standings + where the player sits, with the promotion and
+// demotion zones. Locked (like the board) until LEAGUE_GATE players exist.
+async function leagueBoard(req, res, userId) {
+  await ensureUsernameCol();
+  const players = (await sql`SELECT COUNT(*)::int AS n FROM arena_score`)[0]?.n || 0;
+  if (players < LEAGUE_GATE) return res.status(200).json({ locked: true, players, need: LEAGUE_GATE });
+  const pl = await leaguePlacement(userId);
+  const rows = await sql`
+    SELECT a.clerk_user_id, a.points, p.username, p.equipped_badge, p.rank
+    FROM arena_league a LEFT JOIN profiles p ON p.clerk_user_id = a.clerk_user_id
+    WHERE a.week = ${pl.week} AND a.cohort = ${pl.cohort}
+    ORDER BY a.points DESC, a.updated_at ASC LIMIT ${LEAGUE_COHORT}`;
+  return res.status(200).json({
+    locked: false, week: pl.week, endsAt: leagueWeekEnd(),
+    tier: pl.tier, tierName: LEAGUE_TIERS[pl.tier], tiers: LEAGUE_TIERS,
+    promote: LEAGUE_PROMOTE, demote: LEAGUE_DEMOTE, size: LEAGUE_COHORT,
+    board: rows.map((r, i) => ({
+      pos: i + 1, name: r.username || "player", points: Number(r.points) || 0,
+      badge: publicBadge(r), rank: publicRank(r), you: r.clerk_user_id === userId,
+    })),
+  });
+}
+
 // Lazy self-heal of the public-username column + case-insensitive unique index.
 let unameReady = false;
 async function ensureUsernameCol() {
@@ -604,6 +709,9 @@ async function arenaSubmit(req, res, body, userId) {
                 best_score = GREATEST(arena_season.best_score, EXCLUDED.best_score),
                 updated_at = NOW()`;
   }
+  // Weekly league: this run's points add to your cohort standing for the week
+  // (best-effort; a league hiccup must never fail a submitted arena run).
+  await leagueAddPoints(userId, score);
   return res.status(200).json({ ok: true, score, best: Math.max(prev, score), isBest });
 }
 
@@ -1175,6 +1283,7 @@ export default async function handler(req, res) {
       if (body?.action === "arenaSubmit") return arenaSubmit(req, res, body, userId);
       if (body?.action === "arenaBoard") return arenaBoard(req, res, userId);
       if (body?.action === "arenaSeason") return arenaSeasonBoard(req, res, userId);
+      if (body?.action === "leagueBoard") return leagueBoard(req, res, userId);
       if (body?.action === "setBadge") return setBadge(req, res, body, userId);
       if (body?.action === "globalBoard") return globalBoard(req, res, userId);
       // Friends + study groups
