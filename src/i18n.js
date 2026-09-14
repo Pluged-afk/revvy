@@ -133,6 +133,7 @@ const T_EN = {
   dmYouLabel:"You", dmYouWon:"You won 🏆", dmTheyWon:"{name} won", dmTie:"It's a tie!",
   dmChalWaiting:"You scored {s}/{n} · {p}%. Waiting for {name} to play…",
   rankUpLabel:"Rank up!", rankUpSub:"You've leveled up. Keep climbing.", dayStreakLabel:"day streak",
+  rankPromoted:"Promoted", rankPromoReached:"You've climbed to a new rank. Keep going.", rankPromoBest:"New best: {n} pts", rankPromoContinue:"Continue", rankPromoSeeRanks:"See all ranks",
   notifOnTitle:"Reminders on", notifOnBody:"We'll nudge you to keep your streak and review what's due.",
   notifStudyTime:"Time to study", notifStreakTitle:"Keep your streak alive",
   notifStreakBody:"Your {n}-day streak breaks tonight. A quick review keeps it going.",

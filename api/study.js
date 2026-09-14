@@ -530,11 +530,19 @@ async function ensureUsernameCol() {
 // assembles each serve (3 random relevant distractors) and shows instant verdict.
 async function arenaDraw(req, res, body) {
   void body;
-  // A random spread across difficulties; the client sorts ascending so the run
-  // ramps easy -> hard.
+  // STRATIFIED easy-first draw: sample within difficulty bands so every run is
+  // GUARANTEED to open with general, easy questions and ramp up, instead of a
+  // flat random spread that could start hard. Counts thin out toward the top so
+  // the curve stays gentle early and only the deepest questions are brutal. The
+  // client then sorts ascending by the crowd-calibrated difficulty for a smooth
+  // ramp. Bands use the generator's base difficulty (1..5); a thin band just
+  // contributes fewer rows.
   const rows = await sql`
-    SELECT id, category, question, correct, distractors, difficulty, plays, correct_count
-    FROM gk_pool ORDER BY random() LIMIT 60`;
+    (SELECT id, category, question, correct, distractors, difficulty, plays, correct_count FROM gk_pool WHERE difficulty < 1.5 ORDER BY random() LIMIT 16)
+    UNION ALL (SELECT id, category, question, correct, distractors, difficulty, plays, correct_count FROM gk_pool WHERE difficulty >= 1.5 AND difficulty < 2.5 ORDER BY random() LIMIT 18)
+    UNION ALL (SELECT id, category, question, correct, distractors, difficulty, plays, correct_count FROM gk_pool WHERE difficulty >= 2.5 AND difficulty < 3.5 ORDER BY random() LIMIT 14)
+    UNION ALL (SELECT id, category, question, correct, distractors, difficulty, plays, correct_count FROM gk_pool WHERE difficulty >= 3.5 AND difficulty < 4.5 ORDER BY random() LIMIT 9)
+    UNION ALL (SELECT id, category, question, correct, distractors, difficulty, plays, correct_count FROM gk_pool WHERE difficulty >= 4.5 ORDER BY random() LIMIT 3)`;
   return res.status(200).json({ questions: rows.map((r) => ({
     id: String(r.id), category: r.category, question: r.question, correct: r.correct,
     distractors: Array.isArray(r.distractors) ? r.distractors : [],

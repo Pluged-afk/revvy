@@ -16,7 +16,7 @@ import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/stude
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
-import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
+import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
 import ArenaGame from "./components/ArenaGame.jsx";
 import Icon from "./components/Icon.jsx";
@@ -2357,6 +2357,45 @@ function Confetti() {
   );
 }
 
+// ── Rank promotion celebration ───────────────────────────────────────
+// A one-time, full-screen moment shown when an Arena run pushes the player's
+// best score into a higher rank tier. Purely presentational: the parent mounts
+// it ONLY on a genuine promotion (so it never replays on reopen) and dismisses
+// it. The insignia pops in over rotating rays + a pulsing glow in the rank's
+// colour, with a from -> to strip so the climb is legible.
+function RankPromotion({ fromIdx, toIdx, best, t, onClose, onSeeRanks }) {
+  const to = RANKS[toIdx] || RANKS[RANKS.length - 1];
+  const from = RANKS[Math.max(0, fromIdx)] || RANKS[0];
+  const c = to.color;
+  const nm = (t["rank_" + to.key]) || to.name;
+  const fromNm = (t["rank_" + from.key]) || from.name;
+  return (
+    <div className="rv-promo-wrap" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 960, display: "flex", alignItems: "center", justifyContent: "center", padding: 18, background: "rgba(20,16,10,0.62)" }}>
+      <div className="rv-promo-card" onClick={(e) => e.stopPropagation()} style={{ position: "relative", overflow: "hidden", width: "100%", maxWidth: 342, textAlign: "center", background: "var(--color-background-primary)", border: `2px solid ${c}`, borderRadius: 24, padding: "34px 26px 24px", boxShadow: `0 30px 80px ${c}66, 0 0 0 6px ${c}14` }}>
+        <div style={{ position: "relative", width: 150, height: 150, margin: "0 auto 4px" }}>
+          <div className="rv-promo-rays" aria-hidden="true" style={{ background: `conic-gradient(from 0deg, ${c}00, ${c}55, ${c}00, ${c}55, ${c}00, ${c}55, ${c}00, ${c}55, ${c}00)` }} />
+          <div className="rv-promo-glow" aria-hidden="true" style={{ background: `radial-gradient(circle, ${c}55, ${c}00 70%)` }} />
+          <div className="rv-promo-disc" style={{ background: `${c}1f`, border: `2px solid ${c}` }}>
+            <div className="rv-promo-badge"><Icon name={to.icon} size={62} stroke={1.7} style={{ color: c }} /></div>
+          </div>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: c }}>{t.rankPromoted || "Promoted"}</div>
+        <div style={{ fontSize: 30, fontWeight: 800, fontFamily: "'Fraunces',Georgia,serif", color: c, margin: "3px 0 2px" }}>{nm}</div>
+        <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 14 }}>{t.rankPromoReached || "You've climbed to a new rank. Keep going."}</div>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "var(--color-background-secondary)", borderRadius: 999, padding: "6px 14px", marginBottom: 14 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, opacity: 0.6 }}><Icon name={from.icon} size={16} stroke={1.7} style={{ color: from.color }} /><span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)" }}>{fromNm}</span></span>
+          <Icon name="arrow" size={14} style={{ color: "var(--color-text-tertiary)" }} />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name={to.icon} size={16} stroke={1.7} style={{ color: c }} /><span style={{ fontSize: 12, fontWeight: 800, color: c }}>{nm}</span></span>
+        </div>
+        {best != null && <div style={{ fontSize: 12.5, color: "var(--color-text-tertiary)", marginBottom: 16 }}>{(t.rankPromoBest || "New best: {n} pts").replace("{n}", (best || 0).toLocaleString())}</div>}
+        <button onClick={onClose} style={{ width: "100%", background: c, color: "#fff", border: "none", borderRadius: 12, padding: "12px", fontSize: 14.5, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>{t.rankPromoContinue || "Continue"}</button>
+        {onSeeRanks && <button onClick={onSeeRanks} style={{ width: "100%", background: "none", border: "none", color: "var(--color-text-tertiary)", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit", padding: "12px 4px 0" }}>{t.rankPromoSeeRanks || "See all ranks"}</button>}
+        <div className="rv-promo-shimmer" aria-hidden="true" />
+      </div>
+    </div>
+  );
+}
+
 // ── Ad placeholders (free users only) ─────────────────────────────────
 // Side 160x600 banners on desktop (where there's empty margin), a 320x50
 // bottom banner on mobile. Visibility is controlled by CSS media queries.
@@ -4165,6 +4204,7 @@ export default function StudyQuiz() {
   // Celebration effects (confetti burst + rank-up toast + streak-advance sound).
   const [burstConfetti, setBurstConfetti] = useState(false);
   const [rankToast, setRankToast] = useState(null);   // a RANKS entry when the tier goes up
+  const [promotion, setPromotion] = useState(null);   // {fromIdx,toIdx,best} when a run promotes you
   const prevRankRef = useRef(null);
   const prevStreakRef = useRef(null);
   const badgeBaselineRef = useRef(null); // ids the learner already qualified for at load (never celebrated)
@@ -4507,6 +4547,9 @@ export default function StudyQuiz() {
   }, [requireUsername, t]);
   const onArenaEnd = useCallback(async (result) => {
     setScreen("arena_over"); setArenaResult({ ...result, best: result.score, isBest: false, pending: true });
+    // Rank BEFORE this run (rank is your best Arena score), captured before the
+    // blob updates, so we can tell if this run PROMOTED you.
+    const prevBest = Math.max(0, Math.round(Number(srs.stats?.arenaBest) || 0));
     const r = await arenaSubmitGlobal(result);
     const finalScore = (r && r.score) ?? result.score;
     // Grant the run's reward from the AUTHORITATIVE score, and keep the streak
@@ -4515,7 +4558,17 @@ export default function StudyQuiz() {
     // Badge signals: track your best arena score + longest run for the arena badges.
     srs.syncBadges({ arenaScore: finalScore, arenaRun: result.questions || 0 });
     setArenaResult({ ...result, score: finalScore, best: (r && r.best) ?? result.score, isBest: !!(r && r.isBest), pending: false, earned });
-  }, [srs]);
+    // Promotion: did this run's authoritative best cross into a higher tier?
+    // Fire the one-time celebration here (only when a game is DONE) and mark the
+    // tier celebrated so the reactive rank-up effect below never double-fires.
+    const newBest = Math.max(prevBest, Math.round(Number((r && r.best) ?? finalScore) || 0));
+    const fromIdx = rankFor(prevBest).index, toIdx = rankFor(newBest).index;
+    if (toIdx > fromIdx) {
+      _celebratedRankIdx = toIdx; prevRankRef.current = toIdx;
+      SoundEngine.rankUp(); fireBurst();
+      setPromotion({ fromIdx, toIdx, best: newBest });
+    }
+  }, [srs, fireBurst]);
   const openArenaBoard = useCallback(async () => {
     setArenaBusy(true); setArenaBoardData(null); setArenaSeasonData(null); setScreen("arena_board");
     const [b, s] = await Promise.all([arenaBoardGlobal(), arenaSeasonGlobal()]);
@@ -4700,6 +4753,13 @@ export default function StudyQuiz() {
         <div style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{t.rankUpSub||"You've leveled up. Keep climbing."}</div>
       </div>
     </div>
+  ) : null;
+  // Rank promotion: the full one-time celebration shown after a run that climbs
+  // a tier (set only in onArenaEnd, so it never replays on reopen).
+  const promotionEl = promotion ? (
+    <RankPromotion fromIdx={promotion.fromIdx} toIdx={promotion.toIdx} best={promotion.best} t={t}
+      onClose={() => setPromotion(null)}
+      onSeeRanks={() => { setPromotion(null); setScreen("badges"); setShowRanks(true); }} />
   ) : null;
   // Shared group-invite confirmation (from a /app?join=CODE link).
   const joinPreviewEl = joinPreview ? (
@@ -6807,7 +6867,7 @@ export default function StudyQuiz() {
     const r = arenaResult;
     return (
       <div style={Sb.root}><style>{CSS}</style>
-        {badgeToastEl}{rankToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
+        {badgeToastEl}{rankToastEl}{promotionEl}{notifToastEl}{burstConfetti&&<Confetti/>}
         <AdBanners isPro={isPro}/>
         <div style={{background:"#312e81",padding:"36px 20px 28px",textAlign:"center"}}>
           {r.isBest && <div style={{fontSize:12,fontWeight:800,letterSpacing:1,color:"#fcd34d",textTransform:"uppercase",marginBottom:6}}>{t.arenaNewBest}</div>}
@@ -7255,6 +7315,21 @@ const CSS = `
   .rv-badge-pop{animation:badgePop 0.42s cubic-bezier(.34,1.56,.64,1) both}
   @keyframes rankBurst{0%{transform:scale(0.6);opacity:0}50%{transform:scale(1.12);opacity:1}100%{transform:scale(1);opacity:1}}
   .rv-rank-burst{animation:rankBurst 0.5s cubic-bezier(.34,1.56,.64,1) both}
+  /* Rank promotion celebration */
+  @keyframes rvPromoIn{from{opacity:0}to{opacity:1}}
+  @keyframes rvPromoCard{0%{transform:translateY(18px) scale(.9);opacity:0}60%{transform:translateY(0) scale(1.03)}100%{transform:translateY(0) scale(1);opacity:1}}
+  @keyframes rvPromoSpin{to{transform:rotate(360deg)}}
+  @keyframes rvPromoGlow{0%,100%{transform:scale(.9);opacity:.5}50%{transform:scale(1.12);opacity:.9}}
+  @keyframes rvPromoBadge{0%{transform:scale(0) rotate(-12deg)}55%{transform:scale(1.18) rotate(4deg)}100%{transform:scale(1) rotate(0)}}
+  @keyframes rvPromoShimmer{0%{transform:translateX(-140%) skewX(-16deg)}100%{transform:translateX(320%) skewX(-16deg)}}
+  .rv-promo-wrap{animation:rvPromoIn .28s ease both}
+  .rv-promo-card{animation:rvPromoCard .55s cubic-bezier(.34,1.56,.64,1) both}
+  .rv-promo-rays{position:absolute;inset:-6px;border-radius:50%;filter:blur(1.5px);opacity:.9;transform-origin:50% 50%;animation:rvPromoSpin 10s linear infinite,rvPromoIn .7s ease both}
+  .rv-promo-glow{position:absolute;inset:10px;border-radius:50%;animation:rvPromoGlow 2.3s ease-in-out infinite}
+  .rv-promo-disc{position:absolute;inset:38px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+  .rv-promo-badge{animation:rvPromoBadge .7s cubic-bezier(.34,1.7,.5,1) .14s both}
+  .rv-promo-shimmer{position:absolute;top:0;bottom:0;left:0;width:36%;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);animation:rvPromoShimmer 1.25s ease .4s both}
+  @media (prefers-reduced-motion: reduce){.rv-promo-rays,.rv-promo-glow,.rv-promo-badge,.rv-promo-shimmer,.rv-promo-card{animation-duration:.01ms!important;animation-iteration-count:1!important}}
   .step{animation:fadeIn 0.4s ease forwards;opacity:0}
   .step-0{animation-delay:0.3s}.step-1{animation-delay:0.8s}.step-2{animation-delay:1.3s}.step-3{animation-delay:1.8s}
   .exam-type-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(67,56,202,0.18)!important;border-color:#4f46e5!important;background:var(--color-hover-tint)!important}
