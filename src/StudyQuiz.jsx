@@ -347,42 +347,48 @@ let _celebratedStreak = -1;
 // Cool, modern product palette (Aug 2026 redesign): neutral slate/gray base,
 // hairline borders, a confident indigo accent. Replaces the earlier warm ivory
 // theme so the app reads as a serious study tool.
+// Warm-editorial palette, matched to the marketing site (src/site.css) so the
+// app and the site read as ONE product: paper/ink instead of the old clinical
+// slate-on-white (which also read as a generic Tailwind AI-build tell). Warm
+// off-whites are the 2026 education-UI norm; the ink/paper contrast stays high.
+// Elevation order is preserved: tertiary = page (most recessed) < secondary
+// (inset) < primary (cards, lightest). Indigo #4338ca is the brand accent.
 const THEME_LIGHT = `
   :root,[data-theme="light"] {
-    --color-background-primary:#ffffff !important;
-    --color-background-secondary:#f6f7f9 !important;
-    --color-background-tertiary:#eef1f5 !important;
-    --color-background-success:#f0fdf4 !important;
-    --color-text-primary:#0f172a !important;
-    --color-text-secondary:#475569 !important;
-    --color-text-tertiary:#94a3b8 !important;
-    --color-text-success:#15803d !important;
-    --color-border-primary:#cbd5e1 !important;
-    --color-border-secondary:#e2e8f0 !important;
-    --color-border-tertiary:#eef1f5 !important;
-    --color-border-success:#bbf7d0 !important;
-    --color-hover-tint:#f1f5f9 !important;
-    --color-sel-tint:#eef2ff !important;
-    --color-accent:#4f46e5 !important;
+    --color-background-primary:#fffdf9 !important;
+    --color-background-secondary:#f6f1e8 !important;
+    --color-background-tertiary:#f3ece0 !important;
+    --color-background-success:#edf4ec !important;
+    --color-text-primary:#231f1a !important;
+    --color-text-secondary:#544e45 !important;
+    --color-text-tertiary:#8a8478 !important;
+    --color-text-success:#3b7a5e !important;
+    --color-border-primary:#d8cfbd !important;
+    --color-border-secondary:#e6dfd2 !important;
+    --color-border-tertiary:#efe8db !important;
+    --color-border-success:#cbe3cf !important;
+    --color-hover-tint:#f3ede1 !important;
+    --color-sel-tint:#ece8f9 !important;
+    --color-accent:#4338ca !important;
   }
 `;
 const THEME_DARK = `
   :root,[data-theme="dark"] {
-    --color-background-primary:#161b24 !important;
-    --color-background-secondary:#1d2430 !important;
-    --color-background-tertiary:#0f141c !important;
-    --color-background-success:#0e2a1c !important;
-    --color-text-primary:#e8eaf0 !important;
-    --color-text-secondary:#98a2b3 !important;
-    --color-text-tertiary:#647087 !important;
-    --color-text-success:#4ade80 !important;
-    --color-border-primary:#2c3444 !important;
-    --color-border-secondary:#242c39 !important;
-    --color-border-tertiary:#1a2029 !important;
-    --color-border-success:#1f4535 !important;
-    --color-hover-tint:#1f2733 !important;
-    --color-sel-tint:#262a4d !important;
-    --color-accent:#818cf8 !important;
+    --color-background-primary:#1e1a14 !important;
+    --color-background-secondary:#262117 !important;
+    --color-background-tertiary:#14110c !important;
+    --color-background-success:#142a1a !important;
+    --color-text-primary:#ece6da !important;
+    --color-text-secondary:#b0a794 !important;
+    --color-text-tertiary:#857c6b !important;
+    --color-text-success:#5fca8f !important;
+    --color-border-primary:#3a3327 !important;
+    --color-border-secondary:#2c2619 !important;
+    --color-border-tertiary:#201c14 !important;
+    --color-border-success:#294536 !important;
+    --color-hover-tint:#2a2418 !important;
+    --color-sel-tint:#2b2740 !important;
+    --color-accent:#9a9cf6 !important;
   }
 `;
 
@@ -5358,7 +5364,7 @@ export default function StudyQuiz() {
               <div onClick={isPro?()=>setScreen("exam_setup"):(examUsed?undefined:enterExamMode)} style={{...tileShell,cursor:examUsed?"default":"pointer",opacity:examUsed?0.6:1}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
                   <span style={tile}><Icon name="cap" size={18}/></span>
-                  <span style={pill(isPro?"#4f46e5":examUsed?"#94a3b8":unlocks.examUnlocked()?"#4f46e5":"#f59e0b")}>{isPro?t.badgeUnlimited:examUsed?t.examBadgeUsed:unlocks.examUnlocked()?t.examBadgeReady:t.examBadgeFree}</span>
+                  <span style={pill(isPro?"#4338ca":examUsed?"#8a8478":unlocks.examUnlocked()?"#4338ca":"#b5502f")}>{isPro?t.badgeUnlimited:examUsed?t.examBadgeUsed:unlocks.examUnlocked()?t.examBadgeReady:t.examBadgeFree}</span>
                 </div>
                 <div style={{minWidth:0}}>
                   <div style={ttl}>{stripEmoji(t.examModeLabel)}</div>
@@ -5864,7 +5870,7 @@ export default function StudyQuiz() {
             <span style={{fontSize:11,color:answered===examQs.length?"#16a34a":"var(--color-text-tertiary)",fontWeight:600}}>{answered}/{examQs.length}</span>
           </div>
         </div>
-        <div style={{height:4,background:"var(--color-border-tertiary)"}}><div style={{height:"100%",background:"#94a3b8",width:((examIdx/examQs.length)*100)+"%",transition:"width 0.3s"}}/></div>
+        <div style={{height:4,background:"var(--color-border-tertiary)"}}><div style={{height:"100%",background:"var(--color-text-tertiary)",width:((examIdx/examQs.length)*100)+"%",transition:"width 0.3s"}}/></div>
         {examReview && (
           <div style={{background:"#f0fdf4",borderBottom:"1px solid #86efac",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
             <span style={{fontSize:12,color:"#15803d",fontWeight:600}}>{t.reviewModeNote}</span>
