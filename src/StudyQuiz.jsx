@@ -16,7 +16,7 @@ import { recommendDifficulty, buildLearnerBrief, resultNudge, recommendDailyGoal
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { previewInterval } from "./lib/fsrs.js";
-import { LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, THEME_LIGHT, THEME_DARK } from "./studyquiz/constants.js";
+import { LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, THEME_LIGHT, THEME_DARK, AI_MODEL, DIFFICULTY } from "./studyquiz/constants.js";
 import { Sb, CSS } from "./studyquiz/styles.js";
 import { stripEmoji, computeUnread, activityText, timeAgo, parseQuizlet, sectionPerQMarks, sectionMarksTotal, roundMarks, fmtMB, fmtDate, stripFences, shuffleMCQOptions, normalizeQuestion, safeSvg } from "./studyquiz/helpers.js";
 import { AvatarInitial, Medallion, NotifBubble, GroupAvatar, StreakFlame, RankPill, BadgeGlyph, Flair, Logo, PBar, Chip, Segmented, Toggle } from "./studyquiz/components.jsx";
@@ -92,20 +92,6 @@ const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link", 
 const DRILL_REUSE_MAX = 5;
 const LIBRARY_REUSE_MAX = 4; // vetted bank questions reused in a 10-Q "quiz everything" review
 
-// Model for all generation/grading. Haiku 4.5: cheap + fast, plenty for
-// question writing. ($0.80/1M in, $4/1M out vs Sonnet's $3/$15.)
-const AI_MODEL     = "claude-haiku-4-5-20251001";
-// Difficulty rubric (index 0/1/2 = Easy/Normal/Hard). The label alone barely
-// moves the model, the per-level guidance is what actually changes output.
-// Calibrated from what students say they mean by each level: Easy = genuinely
-// easy, Normal = the standard exam question they expect, Hard = deep and
-// demanding but never tricky/gotcha/tedious. Difficulty comes from depth of
-// reasoning and number of concepts connected, not from trap wording.
-const DIFFICULTY = [
-  { name:"Easy",   guide:"Genuinely easy. One core fact or definition per question, tested directly, in plain everyday wording. Recall or simple recognition (Bloom: Remember or Understand). One step, no calculation chains, no traps. The correct answer is obvious to anyone who read the material, and the other options are clearly wrong. Never obscure." },
-  { name:"Normal", guide:"A standard, fair exam question, the level most students expect by default. Test real understanding and straightforward application (Bloom: Understand or Apply): connect two related ideas, apply a concept to a clear example, or take one clear reasoning step. Distractors should be genuinely plausible and reflect common honest misconceptions, not word games. Solid but not punishing." },
-  { name:"Hard",   guide:"Genuinely hard through DEPTH, not trickery. Require multi-step reasoning, connecting several concepts, applying ideas to a NEW or unfamiliar scenario, or analysing and evaluating relationships and trade-offs (Bloom: Apply, Analyze or Evaluate). Distractors are close and demand careful discrimination by someone who truly understands. The challenge must come from how much thinking and how many concepts are needed, NEVER from gotcha wording, deliberate ambiguity, obscure trivia, or tedious busywork. A well-prepared student should still get it by reasoning carefully." },
-];
 const STRIPE_MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const STRIPE_YEARLY_PRICE  = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
 
@@ -7173,6 +7159,7 @@ export default function StudyQuiz() {
 
   return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>;
 }
+
 
 
 
