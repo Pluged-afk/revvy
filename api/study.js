@@ -81,6 +81,27 @@ function ensureTables() {
         correct_count INT         NOT NULL DEFAULT 0,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
+      // Opt-in community Arena pool: vetted, self-contained MCQs contributed from
+      // learners' own quizzes, shared to everyone's Arena (served in a later pass).
+      sql`CREATE TABLE IF NOT EXISTS arena_contrib (
+        id            BIGSERIAL   PRIMARY KEY,
+        qhash         TEXT        UNIQUE NOT NULL,
+        category      TEXT        NOT NULL DEFAULT 'general',
+        question      TEXT        NOT NULL,
+        correct       TEXT        NOT NULL,
+        distractors   JSONB       NOT NULL,
+        difficulty    REAL        NOT NULL DEFAULT 2.5,
+        uses          INT         NOT NULL DEFAULT 1,
+        flags         INT         NOT NULL DEFAULT 0,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      // Per-account daily contribution counter, so no one account can flood the pool.
+      sql`CREATE TABLE IF NOT EXISTS arena_contrib_actor (
+        clerk_user_id TEXT NOT NULL,
+        day           DATE NOT NULL DEFAULT CURRENT_DATE,
+        contribs      INT  NOT NULL DEFAULT 0,
+        PRIMARY KEY (clerk_user_id, day)
+      )`,
       // One row per player: their public best run. The board is keyed on this.
       sql`CREATE TABLE IF NOT EXISTS arena_score (
         clerk_user_id TEXT        PRIMARY KEY,
@@ -492,6 +513,80 @@ async function mockDraw(req, res, body) {
     exemplars: good.map((r) => r.data).filter(Boolean),
     avoid: bad.map((r) => r.q).filter(Boolean),
   });
+}
+
+// ── Community Arena pool (opt-in) ────────────────────────────────────────
+// Learners can opt in to share the good MCQs from their own quizzes to a public
+// Arena pool that anyone can play. Everything here is the QUALITY GATE: only
+// well-formed, self-contained, non-abusive questions get in ("pick the good
+// ones, not anything"). Serving these into the live Arena is a later pass.
+const ARENA_CONTRIB_DAILY = 120;    // questions one account may contribute per day
+const ARENA_CONTRIB_PER_CALL = 30;  // items accepted from a single call
+const ARENA_POOL_CAP = 20000;       // total contributed questions kept
+const ARENA_DIFF = [2, 3, 4];       // quiz easy/normal/hard -> arena 1..5 difficulty
+// Arena questions are played with NO context, so they must stand alone. Reject
+// anything that leans on the learner's own material (a passage, figure, diagram,
+// "the author", "underlined", etc.), which would be meaningless to other players.
+const SELF_REF_RE = /\b(according to|based on|as (shown|described|stated|mentioned|seen)|refer(ring)? to)\b|\b(the|this|your|above|following|given) (passage|text|material|article|document|excerpt|reading|notes?|paragraph|diagram|image|figure|table|chart|graph|photo|picture|author|video|lecture|transcript|slide)\b|\bunderlined\b|\bhighlighted\b|\bthe marked\b|\bin the (image|figure|diagram|picture|photo|passage|text)\b/i;
+
+const arenaHash = (q) => "u" + (Math.abs([...String(q || "").toLowerCase().replace(/\s+/g, " ").trim()].reduce((h, c) => (h * 33 + c.charCodeAt(0)) | 0, 5381)) >>> 0).toString(36);
+
+// Vet + convert one contributed MCQ into the Arena's gk_pool shape, or null if it
+// fails the quality gate. Deterministic + cheap, runs on every item server-side
+// (so it holds even for a client that skips the UI).
+function sanitizeArenaItem(x) {
+  if (!x || typeof x !== "object") return null;
+  const q = clean(x.question, 280);
+  if (q.length < 12 || q.length > 280) return null;
+  if (SELF_REF_RE.test(q)) return null;                              // not self-contained
+  const options = Array.isArray(x.options) ? x.options.slice(0, 6).map((o) => clean(o, 120)).filter(Boolean) : [];
+  const ci = Number.isInteger(x.correct) ? x.correct : -1;
+  if (options.length < 4 || ci < 0 || ci >= options.length) return null; // need 1 correct + >=3 distractors
+  const correct = options[ci];
+  const distractors = options.filter((_, i) => i !== ci);
+  if (distractors.length < 3) return null;
+  const lc = correct.toLowerCase();
+  if (new Set(options.map((o) => o.toLowerCase())).size !== options.length) return null; // duplicate options
+  if (distractors.some((d) => d.toLowerCase() === lc)) return null;
+  if (looksAbusive(q) || options.some(looksAbusive)) return null;
+  const diff = ARENA_DIFF[Math.max(0, Math.min(2, Math.round(Number(x.diff) || 1)))];
+  const category = clean(x.subject, 40).toLowerCase() || "general";
+  return {
+    qhash: arenaHash(q),
+    category,
+    question: q,
+    correct,
+    distractors: distractors.slice(0, 5).map((d) => ({ text: d, close: 0.5 })),
+    difficulty: diff,
+  };
+}
+
+// Opt-in contribution: the learner chose to share their quiz's good questions to
+// the public Arena pool. Vet each, dedupe by qhash, store, under a per-account
+// daily cap. Returns how many were received vs. accepted (passed the gate).
+async function arenaContribute(req, res, body, userId) {
+  const received = Array.isArray(body.items) ? body.items.length : 0;
+  const used = (await sql`SELECT contribs FROM arena_contrib_actor WHERE clerk_user_id = ${userId} AND day = CURRENT_DATE`)[0]?.contribs || 0;
+  if (used >= ARENA_CONTRIB_DAILY) return res.status(200).json({ ok: true, received, accepted: 0, stored: 0, capped: true });
+  const room = ARENA_CONTRIB_DAILY - used;
+  const items = (Array.isArray(body.items) ? body.items : [])
+    .slice(0, ARENA_CONTRIB_PER_CALL).map(sanitizeArenaItem).filter(Boolean).slice(0, room);
+  let stored = 0;
+  for (const it of items) {
+    await sql`INSERT INTO arena_contrib (qhash, category, question, correct, distractors, difficulty)
+      VALUES (${it.qhash}, ${it.category}, ${it.question}, ${it.correct}, ${JSON.stringify(it.distractors)}::jsonb, ${it.difficulty})
+      ON CONFLICT (qhash) DO UPDATE SET uses = arena_contrib.uses + 1`;
+    stored++;
+  }
+  if (items.length) {
+    await sql`INSERT INTO arena_contrib_actor (clerk_user_id, day, contribs) VALUES (${userId}, CURRENT_DATE, ${items.length})
+              ON CONFLICT (clerk_user_id, day) DO UPDATE SET contribs = arena_contrib_actor.contribs + ${items.length}`;
+  }
+  // Keep the pool bounded: drop most-flagged, then least-used, then oldest beyond the cap.
+  await sql`DELETE FROM arena_contrib WHERE id IN (
+    SELECT id FROM arena_contrib ORDER BY flags ASC, uses DESC, created_at DESC OFFSET ${ARENA_POOL_CAP})`;
+  if (Math.random() < 0.05) await sql`DELETE FROM arena_contrib_actor WHERE day < CURRENT_DATE - 3`;
+  return res.status(200).json({ ok: true, received, accepted: items.length, stored });
 }
 
 // ── Endless Arena (server) ──────────────────────────────────────────────────
@@ -1280,6 +1375,7 @@ export default async function handler(req, res) {
       if (body?.action === "mockDraw") return mockDraw(req, res, body);
       if (body?.action === "arenaDraw") return arenaDraw(req, res, body);
       if (body?.action === "arenaSubmit") return arenaSubmit(req, res, body, userId);
+      if (body?.action === "arenaContribute") return arenaContribute(req, res, body, userId);
       if (body?.action === "arenaBoard") return arenaBoard(req, res, userId);
       if (body?.action === "arenaSeason") return arenaSeasonBoard(req, res, userId);
       if (body?.action === "leagueBoard") return leagueBoard(req, res, userId);
