@@ -72,6 +72,16 @@ export default function PrivacyPolicy() {
           accessible to anyone who has the link. If you want a shared quiz removed, email us and we
           will delete it.
         </p>
+        <p>
+          <strong>Community Arena questions (opt-in).</strong> This setting is off by default. If you
+          turn on "Share my questions to the Arena" in Settings, the well-formed multiple-choice
+          questions from the quizzes you make may be added to a shared pool that any player can see in
+          the Endless Arena. Only clear, self-contained, general-knowledge questions are shared, and
+          they are reviewed automatically first; we never share anything tied to your identity, and we
+          filter out questions that depend on your specific notes or material. You can stop
+          contributing at any time by turning the setting off, and you can email us to have questions
+          you contributed removed.
+        </p>
 
         <h2>5. Advertising</h2>
         <p>
