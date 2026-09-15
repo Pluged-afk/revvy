@@ -219,7 +219,9 @@ const QUIZ_FILES_PRO  = 20;
 const EXAM_FILES_FREE = 5;
 const EXAM_FILES_PRO  = 20;
 const FREE_DAILY   = 50;  // free daily QUESTION allowance (shown in plan lists)
-const QUIZ_TYPES   = ["mcq","cards","fill","match","written","diagram"];
+// "diagram" is intentionally omitted while it's rebuilt to work on the learner's
+// own uploaded diagrams (the AI-drawn SVG version produced crude, wrong figures).
+const QUIZ_TYPES   = ["mcq","cards","fill","match","written"];
 const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link", written:"chat", diagram:"target" };
 // Phase 2: how many of a 10-question weak-spot drill may be reused from the
 // learner's vetted bank (rest are freshly generated). Caps API cost saving at
