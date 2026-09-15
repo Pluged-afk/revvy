@@ -18,6 +18,7 @@ import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from
 import { previewInterval } from "./lib/fsrs.js";
 import { LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, THEME_LIGHT, THEME_DARK } from "./studyquiz/constants.js";
 import { Sb, CSS } from "./studyquiz/styles.js";
+import { stripEmoji, computeUnread, activityText, timeAgo, parseQuizlet, sectionPerQMarks, sectionMarksTotal, roundMarks, fmtMB, fmtDate, stripFences, shuffleMCQOptions, normalizeQuestion, safeSvg } from "./studyquiz/helpers.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
 import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
@@ -29,9 +30,6 @@ import Icon from "./components/Icon.jsx";
 // so we don't depend on the emoji stored in the translation data.
 const FEAT_ICONS = ["notes", "camera", "pencil", "layers", "chat", "globe"];
 
-// Strip a leading emoji (and its trailing space) from a translated label so we
-// can show a clean SVG icon in front of it instead. Leaves the words intact.
-const stripEmoji = (s) => String(s ?? "").replace(/^[\u{1F000}-\u{1FAFF}☀-➿⬀-⯿←-⇿️‍\s]+/u, "").trim();
 // Icon per upload tab id (labels come from the translation data with emoji).
 const TAB_ICONS = { file: "folder", text: "pencil", photo: "camera", media: "play" };
 // Localized name for a power-up ("hint" | "freeze" | "skip"), reusing the arena
@@ -60,25 +58,6 @@ function Medallion({ color = "#4338ca", size = 38, children }) {
       {children}
     </span>
   );
-}
-// Unread social notifications = server counts minus the learner's last-seen
-// counts. Split by category so the pop-ups + toggles can target each type.
-function computeUnread(data, seen) {
-  const s = seen || {};
-  if (!data) return { friends: 0, msg: 0, chal: 0, total: 0, byGroup: {}, byFriend: {} };
-  const friends = Math.max(0, (data.friendReqs || 0) - (s.friendReqs || 0));
-  let msg = 0, chal = 0; const byGroup = {}, byFriend = {};
-  for (const g of data.groups || []) {
-    const sg = (s.g && s.g[g.id]) || { m: 0, c: 0 };
-    const m = Math.max(0, (g.msg || 0) - (sg.m || 0));
-    const c = Math.max(0, (g.chal || 0) - (sg.c || 0));
-    msg += m; chal += c; byGroup[g.id] = { m, c };
-  }
-  for (const d of data.dms || []) {
-    const dm = Math.max(0, (d.msg || 0) - ((s.f && s.f[d.id]) || 0));
-    msg += dm; byFriend[d.id] = dm;
-  }
-  return { friends, msg, chal, total: friends + msg + chal, byGroup, byFriend };
 }
 // A small red count bubble for unread notifications.
 function NotifBubble({ n, style }) {
@@ -140,46 +119,6 @@ function Flair({ rank, badge, t, small }) {
     </span>
   );
 }
-// A group-activity line in words.
-function activityText(a, t) {
-  if (a.kind === "created") return t.actCreated || "created the group";
-  if (a.kind === "joined") return t.actJoined || "joined the group";
-  if (a.kind === "shared") return `${t.actShared || "shared"} ${a.detail || ""}`.trim();
-  if (a.kind === "quiz") return `${t.actScored || "scored"} ${a.detail || ""}`.trim();
-  return a.detail || a.kind;
-}
-// Compact relative time ("now", "5m", "2h", "3d").
-function timeAgo(at) {
-  const d = new Date(at).getTime();
-  if (isNaN(d)) return "";
-  const s = Math.max(0, Math.floor((Date.now() - d) / 1000));
-  if (s < 60) return "now";
-  const m = Math.floor(s / 60); if (m < 60) return m + "m";
-  const h = Math.floor(m / 60); if (h < 24) return h + "h";
-  return Math.floor(h / 24) + "d";
-}
-// Parse a pasted Quizlet export into flashcards. Quizlet separates term from
-// definition with a Tab (or comma) and cards with a newline (or semicolon); we
-// split on the first separator per row so definitions keep their own commas.
-// Pure string work, no URL, no network, no fetch: none of the link-import risk.
-function parseQuizlet(text) {
-  const raw = String(text || "").trim();
-  if (!raw) return [];
-  const rows = raw.includes("\n") ? raw.split(/\r?\n+/) : raw.split(/;+/);
-  const cards = [];
-  for (const row of rows) {
-    const line = row.trim();
-    if (!line) continue;
-    let m = line.match(/^([^\t]+)\t+(.+)$/);      // term<TAB>definition
-    if (!m) m = line.match(/^(.+?) {2,}(.+)$/);    // term<2+ spaces>definition
-    if (!m) m = line.match(/^([^,]+),\s*(.+)$/);   // term,definition
-    if (!m) continue;
-    const term = m[1].trim(), def = m[2].trim();
-    if (term && def) cards.push({ question: term, answer: def, topic: "" });
-    if (cards.length >= 300) break; // sane cap
-  }
-  return cards;
-}
 // Audio / video containers we accept for lecture transcription (Pro). Broad on
 // purpose; the transcriber pulls the audio out of whatever container it gets.
 const MEDIA_MAX_MB = 100;
@@ -229,22 +168,6 @@ const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link", 
 const DRILL_REUSE_MAX = 5;
 const LIBRARY_REUSE_MAX = 4; // vetted bank questions reused in a 10-Q "quiz everything" review
 
-// Marks for a custom-exam section. Two modes: "perQ" (the user sets marks per
-// question) or "total" (the user sets the section's overall score, split evenly
-// across its questions). Per-question marks stay exact (fractional if needed) so
-// the section total is preserved when scoring. Missing markMode = "perQ" (old).
-function sectionPerQMarks(sec) {
-  const count = Math.max(1, parseInt(sec?.count) || 1);
-  if (sec?.markMode === "total") {
-    const tot = parseFloat(sec.sectionMarks);
-    return (isFinite(tot) && tot > 0) ? tot / count : 1;
-  }
-  return parseFloat(sec?.marksPerQ) || 1;
-}
-function sectionMarksTotal(sec) {
-  return (parseInt(sec?.count) || 0) * sectionPerQMarks(sec);
-}
-const roundMarks = (x) => Math.round((Number(x) || 0) * 100) / 100; // tidy fractional marks for display
 // Model for all generation/grading. Haiku 4.5: cheap + fast, plenty for
 // question writing. ($0.80/1M in, $4/1M out vs Sonnet's $3/$15.)
 const AI_MODEL     = "claude-haiku-4-5-20251001";
@@ -262,12 +185,6 @@ const DIFFICULTY = [
 const STRIPE_MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const STRIPE_YEARLY_PRICE  = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
 
-function fmtMB(bytes)  { return (bytes/1024/1024).toFixed(1)+"MB"; }
-function fmtDate(iso)  {
-  if (!iso) return "";
-  try { return new Date(iso).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}); }
-  catch { return ""; }
-}
 // Haptic feedback. navigator.vibrate exists only where the Vibration API is
 // implemented, Android phones/tablets. iOS Safari and virtually all desktop
 // browsers don't implement it, so this is a silent no-op there (exactly the
@@ -423,9 +340,6 @@ async function readStream(res) {
   out += dec.decode();
   return out;
 }
-function stripFences(t) {
-  return (t||"").trim().replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/\s*```$/i,"").trim();
-}
 // House rule: no em/en dashes in any user-facing text (a well-known AI tell). The
 // model reaches for them constantly, so strip them from generated content and
 // tutor replies, replacing with a comma. Non-strings pass through untouched.
@@ -472,34 +386,6 @@ function followupAnswer({ question, correct, prior, ask }) {
   return callClaudeText(
     `A student is reviewing a quiz question they got wrong.\nQuestion: ${question}\nCorrect answer: ${correct}\nYour earlier explanation: ${prior}\nThe student now asks: "${ask}"\nAnswer concisely in 1-2 sentences; expand only if the question truly needs it. If they go off-topic, answer in ONE short friendly line and steer back, do not lecture.`
   );
-}
-
-// Randomize which position holds the correct option, so the key isn't clustered
-// (models tend to over-use one letter, e.g. every answer "B"). No-op for
-// non-MCQ questions (empty options) and safe against duplicate option text.
-function shuffleMCQOptions(q) {
-  if (!q || !Array.isArray(q.options) || q.options.length < 2 || !Number.isInteger(q.correct) || q.correct < 0 || q.correct >= q.options.length) return q;
-  const correctVal = q.options[q.correct];
-  const opts = q.options.map((text, i) => ({ text, wasCorrect: i === q.correct }));
-  for (let i = opts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [opts[i], opts[j]] = [opts[j], opts[i]]; }
-  const correct = opts.findIndex((o) => o.wasCorrect);
-  return { ...q, options: opts.map((o) => o.text), correct: correct >= 0 ? correct : q.correct, answer: correctVal ?? q.answer };
-}
-
-// Shape a model-returned MCQ into the app's question object, or null if it is
-// malformed. Shared by flag/fix regeneration and flag verification.
-function normalizeQuestion(parsed, orig) {
-  const options = Array.isArray(parsed?.options) ? parsed.options.filter((o)=>typeof o==="string"&&o.trim()) : [];
-  if (options.length < 2 || !Number.isInteger(parsed.correct) || parsed.correct < 0 || parsed.correct >= options.length) return null;
-  return {
-    question: String(parsed.question || "").trim(),
-    options,
-    correct: parsed.correct,
-    answer: options[parsed.correct] || "",
-    explanation: String(parsed.explanation || "").trim().slice(0, 400),
-    topic: String(parsed.topic || orig?.topic || "").trim().slice(0, 60),
-    source: typeof parsed.source === "string" ? parsed.source.trim().slice(0, 240) : "",
-  };
 }
 
 // Feature B: write ONE replacement multiple-choice question when the learner
@@ -609,16 +495,6 @@ const gateMessage = (category, t) =>
   category === "harmful"  ? t.gateHarmful  :
   t.gateNonstudy;
 
-// Keep a figure only if it is a clean, self-contained <svg> (rendered inside an
-// <img> data-URI, which can't run scripts; this strips anything scriptable too).
-// an SVG shown via <img> must carry the SVG namespace or the browser shows a
-// broken image, so add xmlns when the model leaves it off.
-function safeSvg(s) {
-  s = typeof s === "string" ? s.trim() : "";
-  if (!(/^<svg[\s>]/i.test(s) && s.length < 12000 && !/<script|<foreignobject|\son\w+\s*=|javascript:/i.test(s))) return "";
-  if (!/\sxmlns\s*=/i.test(s)) s = s.replace(/^<svg/i, "<svg xmlns='http://www.w3.org/2000/svg'");
-  return s;
-}
 // Crash-safe mock-exam resume. An in-progress mock (any of the 8 exams) is
 // mirrored to device storage in two keys: the heavy question set (rewritten only
 // when it changes) and the light progress that changes often (answers, position,
@@ -7510,3 +7386,4 @@ export default function StudyQuiz() {
 
   return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>;
 }
+
