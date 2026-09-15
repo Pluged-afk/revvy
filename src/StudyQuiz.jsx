@@ -655,7 +655,7 @@ function sanitizeMockQs(qs) {
     String(q.explanation || "").length <= 400
   ).map((q) => {
     const svg = safeSvg(q.svg);
-    const base = { question: q.question, options: q.options, correct: q.correct, explanation: q.explanation };
+    const base = { question: deDash(q.question), options: q.options.map(deDash), correct: q.correct, explanation: deDash(q.explanation) };
     return svg ? { ...base, svg } : base;
   });
 }
@@ -743,7 +743,7 @@ The "questions" array MUST contain ${count} items${wantsFigures ? `, at least ${
   }
   const questions = sanitizeMockQs(parsed.questions);
   if (fmt === "english" || fmt === "passage") {
-    return { format: fmt, passage: String(parsed.passage || "").slice(0, 9000), svg: safeSvg(parsed.svg), questions };
+    return { format: fmt, passage: deDash(String(parsed.passage || "").slice(0, 9000)), svg: safeSvg(parsed.svg), questions };
   }
   return { format: "standalone", passage: "", svg: "", questions };
 }
@@ -3437,7 +3437,7 @@ export default function StudyQuiz() {
         budget -= got;
       }
       if (!examAll.length) throw (exLastErr || new Error("No questions generated"));
-      const parsed = { title: exTitle, questions: examAll, summary: exSummary };
+      const parsed = { title: deDash(exTitle), questions: examAll, summary: deDash(exSummary) };
       const marksMap = examMarksMap;
       if(!parsed.questions?.length) throw new Error("No questions generated");
       // Phase 3: remember a summary of this exam's material for the study library
@@ -3447,6 +3447,8 @@ export default function StudyQuiz() {
       if (exDoc) srs.addLibraryDoc(exDoc);
       const annotated = parsed.questions.map(q=>shuffleMCQOptions({
         ...q,
+        question: deDash(q.question), answer: deDash(q.answer), explanation: deDash(q.explanation),
+        topic: deDash(q.topic), options: Array.isArray(q.options) ? q.options.map(deDash) : q.options,
         marksPerQ: examMode==="custom" ? (marksMap[q.section]||1) : 1,
       }));
       setExamQs(annotated);setExamIdx(0);setExamAns({});setExamEvals(null);setShowConfetti(false);
@@ -3495,7 +3497,7 @@ export default function StudyQuiz() {
         const rank=writtenIdxs.indexOf(i); // 0-based position among written answers
         // Match on the answer's own 1-based number; fall back to positional order.
         const ev=evals.find(e=>Number(e.n)===rank+1) ?? evals[rank];
-        return ev?{score:clamp(ev.score),feedback:ev.feedback||""}:{score:0,feedback:t.notEvaluated};
+        return ev?{score:clamp(ev.score),feedback:deDash(ev.feedback||"")}:{score:0,feedback:t.notEvaluated};
       });
     }catch{return examQs.map((q,i)=>({score:q.type==="mcq"?(answers[i]===q.correct?1:0):0,feedback:""}));}
   },[examQs]);
