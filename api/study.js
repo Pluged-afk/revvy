@@ -553,7 +553,7 @@ function isEnglishArena(text) {
   if (nonLatin > 2 || nonLatin / (letters + nonLatin) > 0.1) return false;
   return true;
 }
-const STOP = new Set("the a an of to in on at for and or is are was were be been being what which who whom whose when where why how does do did can could would should will shall may might must this that these those with from by as it its their his her they them you your our we".split(" "));
+const STOP = new Set("the a an of to in on at for and or is are was were be been being what which who whom whose when where why how does do did can could would should will shall may might must this that these those with from by as it its their his her they them you your our we name named called known following best most main one first type kind example city country place thing term word number group also often usually commonly".split(" "));
 // A coarse "concept" key so near-duplicate questions (same idea + answer, just
 // reworded) collapse to one, keeping the pool diverse rather than 40 phrasings of
 // the same fact: the correct answer plus the salient words of the question.
