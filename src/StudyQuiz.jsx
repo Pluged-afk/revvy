@@ -1178,7 +1178,8 @@ function PairBadge({ n, color }) {
 
 function MatchQuiz({ questions, onDone, t }) {
   const terms = questions.map(q=>q.question);
-  const defs  = useRef(questions.map(q=>q.answer||"").sort(()=>Math.random()-0.5)).current;
+  // shuffle once at mount (useRef's arg re-runs every render; useState lazy-inits once)
+  const [defs] = useState(() => questions.map(q=>q.answer||"").sort(()=>Math.random()-0.5));
   const [sel,setSel]         = useState(null);
   const [matches,setMatches] = useState({});
   const [pairNo,setPairNo]   = useState({}); // termIndex -> 1-based pair number
@@ -2300,11 +2301,12 @@ function ResumeModal({ info, onResume, onDiscard, fmtClock }) {
 }
 
 function Confetti() {
-  const pieces = Array.from({length:60},(_,i)=>({
+  // computed once at mount, not every render (fire-once decoration)
+  const [pieces] = useState(() => Array.from({length:60},(_,i)=>({
     id:i, x:Math.random()*100, delay:Math.random()*2.5, dur:1.8+Math.random()*2,
     color:["#4338ca","#f59e0b","#22c55e","#ec4899","#3b82f6","#f97316","#8b5cf6","#06b6d4"][i%8],
     size:6+Math.random()*8, shape:i%3,
-  }));
+  })));
   return (
     <div style={{position:"fixed",inset:0,pointerEvents:"none",overflow:"hidden",zIndex:999}}>
       <style>{"@keyframes cfFall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}"}</style>
