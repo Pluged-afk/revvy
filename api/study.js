@@ -256,6 +256,11 @@ function ensureTables() {
       .then(() => sql`CREATE INDEX IF NOT EXISTS friend_msg_thread ON friend_messages (sender, recipient, id)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS friend_msg_inbox ON friend_messages (recipient, sender)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS gk_pool_diff ON gk_pool (difficulty)`)
+      .then(() => sql`ALTER TABLE arena_contrib ADD COLUMN IF NOT EXISTS concept TEXT`)
+      .then(() => sql`ALTER TABLE arena_contrib ADD COLUMN IF NOT EXISTS plays INT NOT NULL DEFAULT 0`)
+      .then(() => sql`ALTER TABLE arena_contrib ADD COLUMN IF NOT EXISTS correct_count INT NOT NULL DEFAULT 0`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS arena_contrib_diff ON arena_contrib (difficulty)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS arena_contrib_concept ON arena_contrib (concept)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS friendships_addr ON friendships (addressee, status)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS friendships_req ON friendships (requester, status)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS group_members_user ON group_members (clerk_user_id)`)
@@ -517,10 +522,12 @@ async function mockDraw(req, res, body) {
 
 // ── Community Arena pool (opt-in) ────────────────────────────────────────
 // Learners can opt in to share the good MCQs from their own quizzes to a public
-// Arena pool that anyone can play. Everything here is the QUALITY GATE: only
-// well-formed, self-contained, non-abusive questions get in ("pick the good
-// ones, not anything"). Serving these into the live Arena is a later pass.
-const ARENA_CONTRIB_DAILY = 120;    // questions one account may contribute per day
+// Arena pool that anyone can play. Everything here is the QUALITY GATE, in layers:
+// cheap deterministic checks (well-formed, self-contained, English-only,
+// non-abusive), near-duplicate collapse (same idea/answer), then an AI gate that
+// keeps only genuinely good, factually-sound, general-interest questions ("pick
+// the good ones, not anything").
+const ARENA_CONTRIB_DAILY = 120;    // items one account may push through the gate per day
 const ARENA_CONTRIB_PER_CALL = 30;  // items accepted from a single call
 const ARENA_POOL_CAP = 20000;       // total contributed questions kept
 const ARENA_DIFF = [2, 3, 4];       // quiz easy/normal/hard -> arena 1..5 difficulty
@@ -528,12 +535,39 @@ const ARENA_DIFF = [2, 3, 4];       // quiz easy/normal/hard -> arena 1..5 diffi
 // anything that leans on the learner's own material (a passage, figure, diagram,
 // "the author", "underlined", etc.), which would be meaningless to other players.
 const SELF_REF_RE = /\b(according to|based on|as (shown|described|stated|mentioned|seen)|refer(ring)? to)\b|\b(the|this|your|above|following|given) (passage|text|material|article|document|excerpt|reading|notes?|paragraph|diagram|image|figure|table|chart|graph|photo|picture|author|video|lecture|transcript|slide)\b|\bunderlined\b|\bhighlighted\b|\bthe marked\b|\bin the (image|figure|diagram|picture|photo|passage|text)\b/i;
+// The Arena is English-only. Substantial non-Latin script (Arabic, CJK, Cyrillic,
+// Hebrew, Devanagari, Greek, etc.) means a non-English question -> reject. A few
+// stray symbols are fine, and medical/Latin/Greek-DERIVED terms are written in
+// Latin script so they pass; Latin-script non-English (French, Spanish) is caught
+// by the AI gate below.
+function isEnglishArena(text) {
+  const s = String(text || "");
+  let letters = 0, nonLatin = 0;
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) { letters++; continue; }
+    // Greek/Cyrillic/Hebrew/Arabic, Devanagari, and CJK/Kana/Hangul and beyond.
+    if ((c >= 0x0370 && c <= 0x06ff) || (c >= 0x0900 && c <= 0x097f) || c >= 0x3040) nonLatin++;
+  }
+  if (letters < 6) return false;
+  if (nonLatin > 2 || nonLatin / (letters + nonLatin) > 0.1) return false;
+  return true;
+}
+const STOP = new Set("the a an of to in on at for and or is are was were be been being what which who whom whose when where why how does do did can could would should will shall may might must this that these those with from by as it its their his her they them you your our we".split(" "));
+// A coarse "concept" key so near-duplicate questions (same idea + answer, just
+// reworded) collapse to one, keeping the pool diverse rather than 40 phrasings of
+// the same fact: the correct answer plus the salient words of the question.
+function conceptKey(q, correct) {
+  const words = String(q || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w));
+  const top = [...new Set(words)].sort().slice(0, 8).join(" ");
+  return arenaHash(String(correct || "").toLowerCase().trim() + "|" + top);
+}
 
 const arenaHash = (q) => "u" + (Math.abs([...String(q || "").toLowerCase().replace(/\s+/g, " ").trim()].reduce((h, c) => (h * 33 + c.charCodeAt(0)) | 0, 5381)) >>> 0).toString(36);
 
 // Vet + convert one contributed MCQ into the Arena's gk_pool shape, or null if it
-// fails the quality gate. Deterministic + cheap, runs on every item server-side
-// (so it holds even for a client that skips the UI).
+// fails the cheap deterministic gate. Runs on every item server-side (so it holds
+// even for a client that skips the UI).
 function sanitizeArenaItem(x) {
   if (!x || typeof x !== "object") return null;
   const q = clean(x.question, 280);
@@ -548,11 +582,13 @@ function sanitizeArenaItem(x) {
   const lc = correct.toLowerCase();
   if (new Set(options.map((o) => o.toLowerCase())).size !== options.length) return null; // duplicate options
   if (distractors.some((d) => d.toLowerCase() === lc)) return null;
+  if (!isEnglishArena(q + " " + options.join(" "))) return null;     // English-only
   if (looksAbusive(q) || options.some(looksAbusive)) return null;
   const diff = ARENA_DIFF[Math.max(0, Math.min(2, Math.round(Number(x.diff) || 1)))];
   const category = clean(x.subject, 40).toLowerCase() || "general";
   return {
     qhash: arenaHash(q),
+    concept: conceptKey(q, correct),
     category,
     question: q,
     correct,
@@ -561,32 +597,76 @@ function sanitizeArenaItem(x) {
   };
 }
 
+// AI quality gate: only genuinely good, self-contained, factually-sound English
+// general-knowledge questions reach the shared Arena. One batched, model-pinned +
+// token-capped call. Returns a Set of the indices the model judged good. Fails
+// CLOSED (empty) so an outage never lets junk through.
+async function arenaAIGate(items) {
+  const KEY = process.env.ANTHROPIC_API_KEY;
+  if (!KEY || !items.length) return new Set();
+  const list = items.map((it, i) => `#${i + 1}\nQ: ${it.question}\nCorrect: ${it.correct}\nOther options: ${it.distractors.map((d) => d.text).join(" | ")}`).join("\n\n");
+  const prompt =
+    "You are the quality gate for a public English general-knowledge quiz Arena that anyone can play. Judge each numbered question. Mark good=true ONLY if ALL of these hold: " +
+    "(1) it is written in clear, natural ENGLISH (technical, medical, Latin or Greek-derived TERMS are fine, but the question itself must be English, not another language); " +
+    "(2) it is fully SELF-CONTAINED, answerable on its own with no passage, figure, document, or personal context; " +
+    "(3) the marked Correct answer is factually correct and is the single best answer among the options; " +
+    "(4) it is of GENERAL interest, not hyper-niche, course-specific, or personal-notes trivia; " +
+    "(5) it is clear, unambiguous, and not offensive. Otherwise good=false. Be strict. " +
+    "Return ONLY raw JSON: {\"v\":[{\"n\":1,\"good\":true}]} with exactly one entry per number.\n\n" + list;
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1500, system: "You are a strict, fair quiz-quality classifier. Return only raw JSON.", messages: [{ role: "user", content: [{ type: "text", text: prompt }] }] }),
+    });
+    if (!r.ok) { console.error("[arena gate]", r.status); return new Set(); }
+    const j = await r.json();
+    const text = (j.content || []).map((b) => b.text || "").join("").trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+    const good = new Set();
+    for (const v of (JSON.parse(text).v || [])) if (v && v.good === true && Number.isInteger(v.n)) good.add(v.n - 1);
+    return good;
+  } catch (e) { console.error("[arena gate] failed:", e.message); return new Set(); }
+}
+
 // Opt-in contribution: the learner chose to share their quiz's good questions to
-// the public Arena pool. Vet each, dedupe by qhash, store, under a per-account
-// daily cap. Returns how many were received vs. accepted (passed the gate).
+// the public Arena pool. Layers: deterministic vet -> near-duplicate collapse ->
+// AI gate -> store. Per-account daily cap bounds both flooding and AI-gate cost.
 async function arenaContribute(req, res, body, userId) {
   const received = Array.isArray(body.items) ? body.items.length : 0;
   const used = (await sql`SELECT contribs FROM arena_contrib_actor WHERE clerk_user_id = ${userId} AND day = CURRENT_DATE`)[0]?.contribs || 0;
   if (used >= ARENA_CONTRIB_DAILY) return res.status(200).json({ ok: true, received, accepted: 0, stored: 0, capped: true });
   const room = ARENA_CONTRIB_DAILY - used;
-  const items = (Array.isArray(body.items) ? body.items : [])
-    .slice(0, ARENA_CONTRIB_PER_CALL).map(sanitizeArenaItem).filter(Boolean).slice(0, room);
+  // 1) cheap deterministic gate (well-formed, self-contained, English, non-abusive)
+  let cand = (Array.isArray(body.items) ? body.items : []).slice(0, ARENA_CONTRIB_PER_CALL).map(sanitizeArenaItem).filter(Boolean);
+  // 2) drop near-duplicates within this batch, then against what's already stored
+  const seen = new Set();
+  cand = cand.filter((it) => (seen.has(it.concept) ? false : (seen.add(it.concept), true)));
+  if (cand.length) {
+    const dupC = new Set((await sql`SELECT concept FROM arena_contrib WHERE concept = ANY(${cand.map((it) => it.concept)}::text[])`).map((r) => r.concept));
+    const dupH = new Set((await sql`SELECT qhash FROM arena_contrib WHERE qhash = ANY(${cand.map((it) => it.qhash)}::text[])`).map((r) => r.qhash));
+    cand = cand.filter((it) => !dupC.has(it.concept) && !dupH.has(it.qhash));
+  }
+  cand = cand.slice(0, room);
+  // 3) AI quality gate: keep only the genuinely good ones
+  const good = cand.length ? await arenaAIGate(cand) : new Set();
+  const approved = cand.filter((_, i) => good.has(i));
   let stored = 0;
-  for (const it of items) {
-    await sql`INSERT INTO arena_contrib (qhash, category, question, correct, distractors, difficulty)
-      VALUES (${it.qhash}, ${it.category}, ${it.question}, ${it.correct}, ${JSON.stringify(it.distractors)}::jsonb, ${it.difficulty})
-      ON CONFLICT (qhash) DO UPDATE SET uses = arena_contrib.uses + 1`;
+  for (const it of approved) {
+    await sql`INSERT INTO arena_contrib (qhash, concept, category, question, correct, distractors, difficulty)
+      VALUES (${it.qhash}, ${it.concept}, ${it.category}, ${it.question}, ${it.correct}, ${JSON.stringify(it.distractors)}::jsonb, ${it.difficulty})
+      ON CONFLICT (qhash) DO NOTHING`;
     stored++;
   }
-  if (items.length) {
-    await sql`INSERT INTO arena_contrib_actor (clerk_user_id, day, contribs) VALUES (${userId}, CURRENT_DATE, ${items.length})
-              ON CONFLICT (clerk_user_id, day) DO UPDATE SET contribs = arena_contrib_actor.contribs + ${items.length}`;
+  // Count everything that reached the AI gate against the cap (bounds gate cost).
+  if (cand.length) {
+    await sql`INSERT INTO arena_contrib_actor (clerk_user_id, day, contribs) VALUES (${userId}, CURRENT_DATE, ${cand.length})
+              ON CONFLICT (clerk_user_id, day) DO UPDATE SET contribs = arena_contrib_actor.contribs + ${cand.length}`;
   }
-  // Keep the pool bounded: drop most-flagged, then least-used, then oldest beyond the cap.
+  // Keep the pool bounded: drop most-flagged, then least-played, then oldest beyond the cap.
   await sql`DELETE FROM arena_contrib WHERE id IN (
-    SELECT id FROM arena_contrib ORDER BY flags ASC, uses DESC, created_at DESC OFFSET ${ARENA_POOL_CAP})`;
+    SELECT id FROM arena_contrib ORDER BY flags ASC, plays DESC, created_at DESC OFFSET ${ARENA_POOL_CAP})`;
   if (Math.random() < 0.05) await sql`DELETE FROM arena_contrib_actor WHERE day < CURRENT_DATE - 3`;
-  return res.status(200).json({ ok: true, received, accepted: items.length, stored });
+  return res.status(200).json({ ok: true, received, accepted: approved.length, stored });
 }
 
 // ── Endless Arena (server) ──────────────────────────────────────────────────
@@ -742,11 +822,22 @@ async function arenaDraw(req, res, body) {
     UNION ALL (SELECT id, category, question, correct, distractors, difficulty, plays, correct_count FROM gk_pool WHERE difficulty >= 2.5 AND difficulty < 3.5 ORDER BY random() LIMIT 14)
     UNION ALL (SELECT id, category, question, correct, distractors, difficulty, plays, correct_count FROM gk_pool WHERE difficulty >= 3.5 AND difficulty < 4.5 ORDER BY random() LIMIT 9)
     UNION ALL (SELECT id, category, question, correct, distractors, difficulty, plays, correct_count FROM gk_pool WHERE difficulty >= 4.5 ORDER BY random() LIMIT 3)`;
-  return res.status(200).json({ questions: rows.map((r) => ({
-    id: String(r.id), category: r.category, question: r.question, correct: r.correct,
+  // Blend in opt-in community questions (namespaced "c"+id), skipping flagged or
+  // crowd-proven-broken ones (very low correct-rate over enough plays). Wrapped in
+  // try/catch so a cold DB without the table still serves the curated pool.
+  let contrib;
+  try {
+    contrib = await sql`SELECT id, category, question, correct, distractors, difficulty, plays, correct_count
+      FROM arena_contrib
+      WHERE flags = 0 AND NOT (plays >= 12 AND correct_count::float / GREATEST(plays, 1) < 0.15)
+      ORDER BY random() LIMIT 14`;
+  } catch { contrib = []; }
+  const shape = (r, pre) => ({
+    id: pre + r.id, category: r.category, question: r.question, correct: r.correct,
     distractors: Array.isArray(r.distractors) ? r.distractors : [],
     difficulty: Math.round(aDifficulty(r.difficulty, r.plays, r.correct_count) * 100) / 100,
-  })) });
+  });
+  return res.status(200).json({ questions: [...rows.map((r) => shape(r, "")), ...contrib.map((r) => shape(r, "c"))] });
 }
 
 // A finished run: recompute an authoritative score (each submitted per-question
@@ -758,29 +849,48 @@ async function arenaSubmit(req, res, body, userId) {
   const freeze = aclamp(parseInt(body.freeze, 10) || 0, 0, 999);
   const hint = aclamp(parseInt(body.hint, 10) || 0, 0, 999);
   const skip = aclamp(parseInt(body.skip, 10) || 0, 0, 999);
-  const ids = answers.map((a) => parseInt(a.id, 10)).filter(Number.isInteger);
-  const diffs = new Map();
-  if (ids.length) {
-    const drows = await sql`SELECT id, difficulty, plays, correct_count FROM gk_pool WHERE id = ANY(${ids}::bigint[])`;
-    for (const r of drows) diffs.set(Number(r.id), aDifficulty(r.difficulty, r.plays, r.correct_count));
+  // Answers carry namespaced ids: gk_pool = plain number, community pool = "c"+id.
+  const gkIds = [], ccIds = [];
+  for (const a of answers) {
+    const s = String(a.id ?? "");
+    if (s[0] === "c") { const n = parseInt(s.slice(1), 10); if (Number.isInteger(n)) ccIds.push(n); }
+    else { const n = parseInt(s, 10); if (Number.isInteger(n)) gkIds.push(n); }
+  }
+  const diffs = new Map(); // raw id string -> crowd-calibrated difficulty
+  if (gkIds.length) {
+    const drows = await sql`SELECT id, difficulty, plays, correct_count FROM gk_pool WHERE id = ANY(${gkIds}::bigint[])`;
+    for (const r of drows) diffs.set(String(r.id), aDifficulty(r.difficulty, r.plays, r.correct_count));
+  }
+  if (ccIds.length) {
+    try {
+      const crows = await sql`SELECT id, difficulty, plays, correct_count FROM arena_contrib WHERE id = ANY(${ccIds}::bigint[])`;
+      for (const r of crows) diffs.set("c" + r.id, aDifficulty(r.difficulty, r.plays, r.correct_count));
+    } catch { /* table may not exist yet on a cold DB */ }
   }
   let score = 0, streak = 0;
-  const statIds = [], oks = [];
+  const gkStat = [], gkOk = [], ccStat = [], ccOk = [];
   for (const a of answers) {
-    const id = parseInt(a.id, 10);
-    if (!Number.isInteger(id)) continue;
-    const base = diffs.has(id) ? diffs.get(id) : 2.5;
+    const s = String(a.id ?? "");
+    const isCc = s[0] === "c";
+    const num = parseInt(isCc ? s.slice(1) : s, 10);
+    if (!Number.isInteger(num)) continue;
+    const base = diffs.has(s) ? diffs.get(s) : 2.5;
     const ok = a.ok === true || a.ok === 1;
-    statIds.push(id); oks.push(ok ? 1 : 0);
+    if (isCc) { ccStat.push(num); ccOk.push(ok ? 1 : 0); } else { gkStat.push(num); gkOk.push(ok ? 1 : 0); }
     if (ok) { score += aclamp(parseInt(a.pts, 10) || 0, 0, aMaxQPts(base, streak)); streak += 1; }
     else streak = 0;
   }
-  if (statIds.length) {
+  if (gkStat.length) {
     try {
       await sql`UPDATE gk_pool g SET plays = plays + 1, correct_count = correct_count + c.ok
-                FROM (SELECT unnest(${statIds}::bigint[]) AS id, unnest(${oks}::int[]) AS ok) c
-                WHERE g.id = c.id`;
-    } catch (e) { console.error("[arena] stat update:", e.message); }
+                FROM (SELECT unnest(${gkStat}::bigint[]) AS id, unnest(${gkOk}::int[]) AS ok) c WHERE g.id = c.id`;
+    } catch (e) { console.error("[arena] gk stat update:", e.message); }
+  }
+  if (ccStat.length) {
+    try {
+      await sql`UPDATE arena_contrib g SET plays = plays + 1, correct_count = correct_count + c.ok
+                FROM (SELECT unnest(${ccStat}::bigint[]) AS id, unnest(${ccOk}::int[]) AS ok) c WHERE g.id = c.id`;
+    } catch (e) { console.error("[arena] contrib stat update:", e.message); }
   }
   const prev = (await sql`SELECT best_score FROM arena_score WHERE clerk_user_id = ${userId}`)[0]?.best_score || 0;
   const isBest = score > prev;
