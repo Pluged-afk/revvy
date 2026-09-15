@@ -4,7 +4,9 @@ import { useDev } from "./DevContext.jsx";
 import { useLang } from "./LanguageContext.jsx";
 
 // Exported so the build-time prerenderer (entry-server.jsx) can supply a
-// logged-out mock value without pulling in Clerk.
+// logged-out mock value without pulling in Clerk. (Fast-refresh wants a
+// component-only file; the context has to be exported, so allow it here.)
+// eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext(null);
 
 // eslint-disable-next-line react-refresh/only-export-components

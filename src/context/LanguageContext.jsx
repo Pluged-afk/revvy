@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 import { getTranslations } from "../i18n.js";
 
 // Exported so the build-time prerenderer can supply an English mock value.
+// (Fast-refresh wants a component-only file; the context has to be exported.)
+// eslint-disable-next-line react-refresh/only-export-components
 export const LangContext = createContext(null);
 
 // eslint-disable-next-line react-refresh/only-export-components
