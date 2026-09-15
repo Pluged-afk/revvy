@@ -1964,7 +1964,7 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
   };
   if (!draft) return null;
   const DEFAULTS = {theme:'system',fontSize:'medium',animations:true,sound:true,
-    volume:70,notifSound:true,haptics:false,feedback:'immediate',autoAdvance:false,autoAdvanceSec:5,defaultDiff:1,defaultQCount:10,keyboardOn:true,keyBindings:DEFAULT_KEYBINDS};
+    volume:70,notifSound:true,haptics:false,feedback:'immediate',autoAdvance:false,autoAdvanceSec:5,defaultDiff:1,defaultQCount:10,keyboardOn:true,shareArena:false,keyBindings:DEFAULT_KEYBINDS};
   return (
     <div style={{position:"fixed",inset:0,zIndex:600,display:"flex",pointerEvents:"all"}}>
       <div onClick={onCancel} style={{flex:1,background:"rgba(0,0,0,0.45)",backdropFilter:"blur(1px)"}}/>
@@ -2193,6 +2193,9 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
               <KeyBindings bindings={draft.keyBindings} onChange={b=>update("keyBindings",b)} t={t}/>
             </div>
           )}
+          <SettingRow label={s.shareArena||"Share my questions to the Arena"} desc={s.shareArenaDesc||"Off by default. Opt in to contribute the good questions from your quizzes to the public Endless Arena for everyone to play. Only clear, self-contained questions are shared, never anything specific to your own notes or material."}>
+            <Toggle on={draft.shareArena===true} onChange={v=>update("shareArena",v)}/>
+          </SettingRow>
           <SettingRow label={s.defaultDiff} desc={s.defaultDiffDesc}>
             <Seg options={[["0",s.segEasy],["1",s.segMed],["2",s.segHard]]} value={String(draft.defaultDiff)} onChange={v=>update("defaultDiff",parseInt(v))}/>
           </SettingRow>
@@ -2927,6 +2930,15 @@ export default function StudyQuiz() {
         const items = quiz.questions.map((q) => makeBankItem({ q, diff: quiz.genDiff ?? diff, type: "mcq", quality: 1 })).filter(Boolean);
         if (items.length) srs.bankAdd(items);
       }
+      // Opt-in only: share the well-formed MCQs from this quiz to the community
+      // Arena pool. The server vets each one (self-contained, non-abusive) and
+      // keeps the good ones; nothing personal or material-specific gets through.
+      if (quiz.type === "mcq" && settings.shareArena && !quiz.sample) {
+        const contrib = quiz.questions
+          .filter((q) => Array.isArray(q.options) && q.options.length >= 4 && Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length)
+          .map((q) => ({ question: q.question, options: q.options, correct: q.correct, diff: quiz.genDiff ?? diff, subject: quiz.subject || "" }));
+        if (contrib.length) socialApi("arenaContribute", { items: contrib });
+      }
     } else if (screen === "exam_results" && examEvals && srsAddedRef.current !== examEvals) {
       srsAddedRef.current = examEvals;
       const missed = examQs.filter((_, i) => (examEvals[i]?.score ?? 0) < 1).map(toCard);
@@ -2991,6 +3003,7 @@ export default function StudyQuiz() {
     defaultQCount:10,
     nickname:'',
     keyboardOn:true,
+    shareArena:false,
     keyBindings:DEFAULT_KEYBINDS,
   });
   const [examSections, setExamSections] = useState([

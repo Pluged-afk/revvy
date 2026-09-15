@@ -443,6 +443,7 @@ const T_EN = {
     autoAdvance:"Auto-advance", autoAdvanceDesc:"Moves to the next question automatically after you answer",
     autoAdvanceTime:"Auto-advance time", autoAdvanceTimeDesc:"How long to wait before the next question (instant feedback)",
     keyboard:"Keyboard controls", keyboardDesc:"Answer with your keyboard on a computer. Tap a key below to rebind it.",
+    shareArena:"Share my questions to the Arena", shareArenaDesc:"Off by default. Opt in to contribute the good questions from your quizzes to the public Endless Arena for everyone to play. Only clear, self-contained questions are shared, never anything specific to your own notes or material.",
     defaultDiff:"Default Difficulty", defaultDiffDesc:"Starting difficulty when opening a new quiz", segEasy:"Easy", segMed:"Med", segHard:"Hard",
     defaultQ:"Default Questions", defaultQDesc:"Starting question count for new quizzes",
     secUsage:"USAGE", usageToday:"Questions today", leftWord:"left", usageBonus:"Extra questions (packs)", usageAdWatches:"Ad watches today", adLimitReached:"Daily ad limit reached",
