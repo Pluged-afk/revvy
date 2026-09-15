@@ -219,8 +219,8 @@ const QUIZ_FILES_PRO  = 20;
 const EXAM_FILES_FREE = 5;
 const EXAM_FILES_PRO  = 20;
 const FREE_DAILY   = 50;  // free daily QUESTION allowance (shown in plan lists)
-const QUIZ_TYPES   = ["mcq","cards","fill","match"];
-const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link" };
+const QUIZ_TYPES   = ["mcq","cards","fill","match","written"];
+const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link", written:"chat" };
 // Phase 2: how many of a 10-question weak-spot drill may be reused from the
 // learner's vetted bank (rest are freshly generated). Caps API cost saving at
 // half so drills still feel fresh.
@@ -350,6 +350,7 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName, learnerBrief, 
     cards: `Flashcards: "question" = front (term/concept), "answer" = back (full explanation). Set options:[] correct:0.`,
     fill:  `Fill in the blank: each "question" has exactly one blank written as ___. "answer" = the missing word or phrase. Set options:[] correct:0.`,
     match: `Matching pairs: "question" = term, "answer" = definition. Set options:[] correct:0.`,
+    written: `Short answer: "question" = an open-ended question that needs a 1-3 sentence written response. "answer" = a concise, complete model answer the response is graded against. Set options:[] correct:0.`,
   };
   // `diff` is the 0/1/2 index; map to the difficulty rubric.
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
@@ -421,6 +422,25 @@ async function callClaudeText(prompt, max = 400) {
   });
   if (!res.ok) throw new Error("explain failed");
   return (await readStream(res)).trim();
+}
+
+// Grade one short-answer response against its model answer. Fair and
+// encouraging: rewards correct understanding even when the wording differs.
+// Returns { score: 1 | 0.5 | 0, feedback }.
+async function gradeWritten({ question, modelAnswer, userAnswer, subject }) {
+  if (!String(userAnswer || "").trim()) return { score: 0, feedback: "" };
+  const raw = await callClaudeText(
+    `Grade a student's short answer fairly and encouragingly; reward correct understanding even when the wording differs from the model answer.\nQuestion: ${question}\nModel answer: ${modelAnswer || "(none given)"}\nStudent answer: ${userAnswer}${subject ? `\nSubject: ${subject}` : ""}\nReply with ONLY compact JSON, no other text: {"score":1|0.5|0,"feedback":"one short sentence"}. 1 = correct, 0.5 = partially correct, 0 = incorrect.`,
+    300,
+  );
+  try {
+    const j = JSON.parse(stripFences(raw));
+    const score = j.score === 1 ? 1 : j.score === 0.5 ? 0.5 : 0;
+    return { score, feedback: String(j.feedback || "").slice(0, 240) };
+  } catch {
+    // model didn't return clean JSON: keep its text as feedback, award nothing
+    return { score: 0, feedback: String(raw || "").slice(0, 240) };
+  }
 }
 function explainAnswer({ question, correct, picked, subject }) {
   return callClaudeText(
@@ -1163,6 +1183,40 @@ function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=fal
       )}
       {checked && autoAdvance && <AutoAdvanceBar sec={autoSec} runId={q.question} t={t}/>}
       {checked && <button onClick={()=>onNext(isRight,val)} style={{...Sb.btnPrimary,width:"100%",marginTop:autoAdvance?12:0}}>{autoAdvance?(t.skip||t.next):(isLast?t.finish:t.next)}</button>}
+    </div>
+  );
+}
+
+// Short-answer question: type a response, the AI grades it against the model
+// answer, then the verdict + model answer + feedback are revealed. onNext mirrors
+// the other quiz types; partial credit (0.5) counts as correct for the score.
+function WrittenAnswer({ q, onNext, isLast, t, subject }) {
+  const [val, setVal] = useState("");
+  const [grading, setGrading] = useState(false);
+  const [res, setRes] = useState(null); // { score, feedback } once graded
+  const submit = async () => {
+    if (grading || res || !val.trim()) return;
+    Haptics.buzz();
+    setGrading(true);
+    try { setRes(await gradeWritten({ question: q.question, modelAnswer: q.answer, userAnswer: val, subject })); }
+    catch { setRes({ score: 0, feedback: t.gradeFailed || "Couldn't grade that, here's the model answer." }); }
+    setGrading(false);
+  };
+  const done = () => onNext(res ? res.score >= 0.5 : false, { chosen: val, score: res?.score ?? 0, feedback: res?.feedback || "" });
+  const right = !!res && res.score >= 0.5, partial = !!res && res.score === 0.5;
+  return (
+    <div>
+      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:18,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.5,marginBottom:16}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></div>
+      {!res && <textarea value={val} onChange={e=>setVal(e.target.value)} placeholder={t.typeAnswer} disabled={grading} style={{...Sb.textarea,height:130,marginBottom:10}}/>}
+      {!res && <button disabled={!val.trim()||grading} onClick={submit} style={{...Sb.btnPrimary,width:"100%",opacity:(val.trim()&&!grading)?1:0.35}}>{grading?(t.grading||"Grading…"):t.check}</button>}
+      {res && (
+        <div style={{borderRadius:10,padding:"12px 14px",background:right?"var(--color-background-success)":"var(--color-background-danger)",border:`0.5px solid ${right?"var(--color-border-success)":"var(--color-border-danger)"}`,color:right?"var(--color-text-success)":"var(--color-text-danger)",marginBottom:14}} className="slide-up">
+          <strong>{partial?(t.partial||"Partially correct"):right?t.correct:t.incorrect}</strong>
+          {q.answer && <div style={{fontSize:13,marginTop:6}}>{t.fbAnswerLabel} <strong>{q.answer}</strong></div>}
+          {res.feedback && <p style={{margin:"8px 0 0",fontSize:13,lineHeight:1.5}}>{res.feedback}</p>}
+        </div>
+      )}
+      {res && <button onClick={done} style={{...Sb.btnPrimary,width:"100%"}}>{isLast?t.finish:t.next}</button>}
     </div>
   );
 }
@@ -3064,7 +3118,9 @@ export default function StudyQuiz() {
 
   // ── Feature access (free users unlock via 1-hour ad windows) ─────────
   const QTYPE_FEATURE = { cards:"flashcard", fill:"fillinblank", match:"matchterms" };
-  const canUseQType = useCallback((type) => type==="mcq" || isPro || unlocks.isUnlocked(QTYPE_FEATURE[type]), [isPro, unlocks]);
+  // written (short answer) is Pro-only: it spends an extra AI call to grade each
+  // response, so there's no ad-unlock for it. Everything else is Pro OR ad-unlock.
+  const canUseQType = useCallback((type) => type==="mcq" || (type==="written" ? isPro : (isPro || unlocks.isUnlocked(QTYPE_FEATURE[type]))), [isPro, unlocks]);
   const canCustomQ  = useCallback(() => isPro, [isPro]);
   // Max questions per quiz: 100 (Pro) / 50 (ad-unlocked) / 20 (free).
   const qCap        = useCallback(() => isPro ? PRO_MAX_Q : (unlocks.isUnlocked("questions") ? AD_MAX_Q : FREE_MAX_Q), [isPro, unlocks]);
@@ -5299,7 +5355,7 @@ export default function StudyQuiz() {
                 const unlocked = canUseQType(type);
                 const active = qType===type;
                 return (
-                  <button key={type} onClick={()=>{ if(unlocked) setQType(type); else setUnlockFeature(QTYPE_FEATURE[type]); }} style={{
+                  <button key={type} onClick={()=>{ if(unlocked) setQType(type); else if(type==="written") setShowProModal(true); else setUnlockFeature(QTYPE_FEATURE[type]); }} style={{
                     display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,padding:"11px 8px",
                     border:active?"1.5px solid var(--color-accent)":"1px solid var(--color-border-secondary)",
                     borderRadius:11,cursor:"pointer",fontFamily:"inherit",fontSize:12.5,fontWeight:600,
@@ -5510,6 +5566,7 @@ export default function StudyQuiz() {
           </div>
           {quiz.type==="cards"&&<Flashcard key={qIdx} q={q} isLast={isLast} t={t} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} feedback={settings.feedback} autoAdvance={settings.autoAdvance} autoSec={autoAdvanceSec} onNext={(ok,picked)=>{const u=[...answers,{isCorrect:ok,picked}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
+          {quiz.type==="written"&&<WrittenAnswer key={qIdx} q={q} isLast={isLast} t={t} subject={quiz.subject} onNext={(ok,detail)=>{const u=[...answers,{isCorrect:ok,...detail}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="mcq"  &&(
             <>
               <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></h3>
@@ -5641,10 +5698,11 @@ export default function StudyQuiz() {
             const a=answers[i];
             return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"14px 14px 14px 11px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${a?.isCorrect?"#22c55e":"#ef4444"}`}} className="fade-in">
               <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{flexShrink:0,display:"inline-flex",marginTop:1}}>{a?.isCorrect?<Icon name="check" size={16} stroke={2.6} style={{color:"#16a34a"}}/>:<Icon name="x" size={16} stroke={2.6} style={{color:"#dc2626"}}/>}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></span></div>
-              {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="fill")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {quiz.type==="mcq"?(q.options?.[a.selected]??", "):(a.picked||", ")}</div>}
+              {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="fill"||quiz.type==="written")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {quiz.type==="mcq"?(q.options?.[a.selected]??", "):quiz.type==="written"?(a.chosen||", "):(a.picked||", ")}</div>}
               <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {quiz.type==="mcq"?q.options?.[q.correct]:(q.answer||"")}<SourceMark source={q.source} label={t.srcSeeAnswer} quoteLabel={t.srcConfirmsAnswer} t={t}/></div>
+              {quiz.type==="written"&&a?.feedback&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingLeft:23,marginBottom:4}}>{a.feedback}</div>}
               {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.55,paddingTop:8,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:23}}>{q.explanation}</div>}
-              {!a?.isCorrect&&<ExplainBox t={t} ctx={{question:q.question,correct:quiz.type==="mcq"?(q.options?.[q.correct]??""):(q.answer||""),picked:quiz.type==="mcq"?(q.options?.[a?.selected]??""):(a?.picked||""),subject:quiz.subject}}/>}
+              {!a?.isCorrect&&quiz.type!=="written"&&<ExplainBox t={t} ctx={{question:q.question,correct:quiz.type==="mcq"?(q.options?.[q.correct]??""):(q.answer||""),picked:quiz.type==="mcq"?(q.options?.[a?.selected]??""):(a?.picked||""),subject:quiz.subject}}/>}
             </div>;
           })
         }
