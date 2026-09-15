@@ -219,9 +219,9 @@ const QUIZ_FILES_PRO  = 20;
 const EXAM_FILES_FREE = 5;
 const EXAM_FILES_PRO  = 20;
 const FREE_DAILY   = 50;  // free daily QUESTION allowance (shown in plan lists)
-// "diagram" is intentionally omitted while it's rebuilt to work on the learner's
-// own uploaded diagrams (the AI-drawn SVG version produced crude, wrong figures).
-const QUIZ_TYPES   = ["mcq","cards","fill","match","written"];
+// "diagram" runs on the learner's OWN uploaded image: the vision model marks a
+// part on their real diagram and they identify it (no AI-drawn figures).
+const QUIZ_TYPES   = ["mcq","cards","fill","match","written","diagram"];
 const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link", written:"chat", diagram:"target" };
 // Phase 2: how many of a 10-question weak-spot drill may be reused from the
 // learner's vetted bank (rest are freshly generated). Caps API cost saving at
@@ -353,12 +353,12 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName, learnerBrief, 
     fill:  `Fill in the blank: each "question" has exactly one blank written as ___. "answer" = the missing word or phrase. Set options:[] correct:0.`,
     match: `Matching pairs: "question" = term, "answer" = definition. Set options:[] correct:0.`,
     written: `Short answer: "question" = an open-ended question that needs a 1-3 sentence written response. "answer" = a concise, complete model answer the response is graded against. Set options:[] correct:0.`,
-    diagram: `Diagram identification (image occlusion): for EACH question draw a clear, self-contained inline <svg> figure of a concept from the material and mark exactly ONE part with a bright red circle or arrow. CRITICAL, or the question is trivial: the marked part MUST NOT have ANY text label, letter, number or abbreviation on it or next to it, its identity must be recoverable only from the drawing, never readable as text. You may briefly label a FEW OTHER parts for context, but NEVER the marked one; if unsure, leave all parts unlabeled. "question" asks what the marked part is (do not name it in the question); "options" = 4 plausible part names; "correct" = 0-based index of the marked part; "answer" = the marked part's name. Put the figure in an "svg" field on the question.`,
+    diagram: `Diagram identification from the image the user uploaded (a real diagram/figure). For EACH question pick ONE distinct part that is clearly visible in that image, ask what it is (do NOT name it in the question), give 4 plausible "options" (part names), "correct" (0-based index) and "answer" (the part name). Also give the part's location as "x" and "y": numbers 0 to 100 giving the CENTER of that part as a percentage of the image's width (x, 0=left 100=right) and height (y, 0=top 100=bottom), so a marker can be drawn on it. Be accurate with x/y. Do not repeat a part across questions.`,
   };
-  const wantsSvg = type === "diagram";
+  const wantsCoords = type === "diagram";
   // `diff` is the 0/1/2 index; map to the difficulty rubric.
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
-  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nFAIRNESS: whatever the level, difficulty must come from the depth of thinking and the number of concepts a learner must connect, NEVER from trick wording, deliberate ambiguity, obscure trivia, or gotchas. Every question must be clearly answerable from a genuine understanding of the material and have exactly ONE defensible correct answer.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}${learnerBrief?`\n${learnerBrief}`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic","source":"..."${wantsSvg?`,"svg":"<svg viewBox='0 0 400 300' xmlns='http://www.w3.org/2000/svg'>a clear labeled figure with ONE part marked by a bright arrow or circle</svg>"`:""}}]${withSummary?`,"summary":"a compact digest of this material for the study library"`:""}}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Set "source" to SHORT verbatim words copied straight from the study material (a phrase or one sentence, max ~25 words, exact wording, no paraphrasing) that back up the correct answer, so the learner can see exactly where it came from; if a question leans on general knowledge NOT stated in the material, set "source" to an empty string "". Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.${withSummary?`\nALSO add a top-level "summary" field LAST: a compact digest (max 120 words) of the KEY concepts, definitions and facts this material covers, in the SAME language as the material, so the learner's study library can remember what it was about later. Cover the material as a whole, not any single question.`:""}`;
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nFAIRNESS: whatever the level, difficulty must come from the depth of thinking and the number of concepts a learner must connect, NEVER from trick wording, deliberate ambiguity, obscure trivia, or gotchas. Every question must be clearly answerable from a genuine understanding of the material and have exactly ONE defensible correct answer.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}${learnerBrief?`\n${learnerBrief}`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic","source":"..."${wantsCoords?`,"x":50,"y":50`:""}}]${withSummary?`,"summary":"a compact digest of this material for the study library"`:""}}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Set "source" to SHORT verbatim words copied straight from the study material (a phrase or one sentence, max ~25 words, exact wording, no paraphrasing) that back up the correct answer, so the learner can see exactly where it came from; if a question leans on general knowledge NOT stated in the material, set "source" to an empty string "". Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.${withSummary?`\nALSO add a top-level "summary" field LAST: a compact digest (max 120 words) of the KEY concepts, definitions and facts this material covers, in the SAME language as the material, so the learner's study library can remember what it was about later. Cover the material as a whole, not any single question.`:""}`;
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
@@ -366,7 +366,7 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName, learnerBrief, 
   // max_tokens is a ceiling, not a charge, you're billed only for tokens
   // actually generated. Generous per-question budget so a 100-question set
   // never truncates mid-generation.
-  const maxTokens = Math.min(Math.max(Math.round(numQ * (wantsSvg ? 900 : 300)) + 3000, 4000), 48000);
+  const maxTokens = Math.min(Math.max(Math.round(numQ * 300) + 3000, 4000), 48000);
 
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
@@ -399,7 +399,8 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName, learnerBrief, 
             explanation: deDash(q.explanation),
             topic: deDash(q.topic),
             options: Array.isArray(q.options) ? q.options.map(deDash) : q.options,
-            ...(q.svg ? { svg: safeSvg(q.svg) } : {}),
+            // diagram: keep the marker coords (0..100), clamped
+            ...(typeof q.x === "number" && typeof q.y === "number" ? { x: Math.max(0, Math.min(100, q.x)), y: Math.max(0, Math.min(100, q.y)) } : {}),
             // source stays verbatim (it's an exact quote from the learner's own material)
             source: typeof q.source === "string" ? q.source.trim().slice(0, 240) : "",
           })
@@ -923,6 +924,7 @@ async function fetchMyChallenges() {
 }
 
 function readText(f)   { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error("Read failed")); r.readAsText(f); }); }
+function readDataURL(f) { return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error("Read failed")); r.readAsDataURL(f); }); }
 
 function Logo({ size=28 }) {
   return (
@@ -3706,6 +3708,12 @@ export default function StudyQuiz() {
       if (!file) { setError(t.errUploadFirst); return; }
     } else if (!textVal.trim()) { setError(t.errPasteFirst); return; }
 
+    // Diagram quizzes mark a part on the learner's OWN image, so they need one.
+    if (finalType==="diagram" && !((tab==="file"||tab==="photo") && file?.type==="image")) {
+      setError(t.diagramNeedsImage || "Diagram quizzes need an image. Upload a diagram or photo, then choose Diagram.");
+      return;
+    }
+
     setScreen("loading");
     try {
       let blocks = [];
@@ -3816,9 +3824,13 @@ export default function StudyQuiz() {
       const libTopics = [...new Set((res.questions || []).map((q) => q.topic).filter(Boolean))];
       const libDoc = makeLibraryDoc({ title: res.title, subject: res.subject, topics: libTopics, summary: res.summary, n: res.questions.length });
       if (libDoc) srs.addLibraryDoc(libDoc);
+      // Diagram: keep the learner's uploaded image (data URL) to show with the
+      // marker on each question.
+      let diagramImg = null;
+      if (finalType==="diagram" && file?.raw) { try { diagramImg = await readDataURL(file.raw); } catch { /* ignore, questions still work */ } }
       // fresh + genDiff mark this as a first-play, difficulty-calibrated round so
       // the results handler logs it into the adaptive-difficulty perf history.
-      setQuiz({...res, type:finalType, fresh:true, genDiff:diff});
+      setQuiz({...res, type:finalType, fresh:true, genDiff:diff, ...(diagramImg?{diagramImg}:{})});
       setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
       setScreen("quiz");
     } catch(err) {
@@ -5593,7 +5605,14 @@ export default function StudyQuiz() {
           {quiz.type==="written"&&<WrittenAnswer key={qIdx} q={q} isLast={isLast} t={t} subject={quiz.subject} onNext={(ok,detail)=>{const u=[...answers,{isCorrect:ok,...detail}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {(quiz.type==="mcq"||quiz.type==="diagram")&&(
             <>
-              {q.svg && <div style={{margin:"0 0 14px",display:"flex",justifyContent:"center"}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.svg)} style={{maxWidth:"100%",maxHeight:300,background:"#fff",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)",padding:10,boxSizing:"border-box"}}/></div>}
+              {quiz.type==="diagram" && quiz.diagramImg && (
+                <div style={{display:"flex",justifyContent:"center",margin:"0 0 16px"}}>
+                  <div style={{position:"relative",display:"inline-block",maxWidth:"100%"}}>
+                    <img alt="Diagram" src={quiz.diagramImg} style={{display:"block",maxWidth:"100%",maxHeight:360,borderRadius:10,border:"0.5px solid var(--color-border-tertiary)"}}/>
+                    {typeof q.x==="number"&&typeof q.y==="number"&&<span style={{position:"absolute",left:q.x+"%",top:q.y+"%",width:28,height:28,marginLeft:-14,marginTop:-14,borderRadius:"50%",border:"3px solid #ff3b30",boxShadow:"0 0 0 2px #fff, 0 0 10px rgba(0,0,0,0.5)",pointerEvents:"none"}}/>}
+                  </div>
+                </div>
+              )}
               <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></h3>
               <div style={{display:"flex",flexDirection:"column",gap:9,marginTop:20}}>
                 {q.options.map((opt,i)=>{
@@ -5723,7 +5742,7 @@ export default function StudyQuiz() {
             const a=answers[i];
             return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"14px 14px 14px 11px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${a?.isCorrect?"#22c55e":"#ef4444"}`}} className="fade-in">
               <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{flexShrink:0,display:"inline-flex",marginTop:1}}>{a?.isCorrect?<Icon name="check" size={16} stroke={2.6} style={{color:"#16a34a"}}/>:<Icon name="x" size={16} stroke={2.6} style={{color:"#dc2626"}}/>}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></span></div>
-              {q.svg&&<div style={{margin:"2px 0 8px",paddingLeft:23}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.svg)} style={{maxWidth:"100%",maxHeight:220,background:"#fff",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",padding:8,boxSizing:"border-box"}}/></div>}
+              {quiz.type==="diagram"&&quiz.diagramImg&&<div style={{margin:"2px 0 8px",paddingLeft:23}}><div style={{position:"relative",display:"inline-block",maxWidth:"100%"}}><img alt="Diagram" src={quiz.diagramImg} style={{display:"block",maxWidth:"100%",maxHeight:200,borderRadius:8,border:"0.5px solid var(--color-border-tertiary)"}}/>{typeof q.x==="number"&&typeof q.y==="number"&&<span style={{position:"absolute",left:q.x+"%",top:q.y+"%",width:22,height:22,marginLeft:-11,marginTop:-11,borderRadius:"50%",border:"3px solid #ff3b30",boxShadow:"0 0 0 2px #fff",pointerEvents:"none"}}/>}</div></div>}
               {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="diagram"||quiz.type==="fill"||quiz.type==="written")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {(quiz.type==="mcq"||quiz.type==="diagram")?(q.options?.[a.selected]??", "):quiz.type==="written"?(a.chosen||", "):(a.picked||", ")}</div>}
               <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {(quiz.type==="mcq"||quiz.type==="diagram")?q.options?.[q.correct]:(q.answer||"")}<SourceMark source={q.source} label={t.srcSeeAnswer} quoteLabel={t.srcConfirmsAnswer} t={t}/></div>
               {quiz.type==="written"&&a?.feedback&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingLeft:23,marginBottom:4}}>{a.feedback}</div>}

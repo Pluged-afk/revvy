@@ -297,6 +297,7 @@ const T_EN = {
   notNow:"Not now", fileTooLarge:"File too large",
   freeFileLimitNote:"Free plan allows files up to", adFileLimitNote:"Your ad unlock allows up to",
   quizTypes:{ mcq:"Multiple Choice", cards:"Flashcards", fill:"Fill in Blank", match:"Match Terms", written:"Short Answer", diagram:"Diagram" },
+  diagramNeedsImage:"Diagram quizzes need an image. Upload a diagram or photo first, then choose Diagram.",
   lockedTitles:{ questions:"More Questions (up to 100 + custom)", cards:"Flashcards", fill:"Fill in Blank", match:"Match Terms", files:"Larger File Uploads" },
   lockedAdLabels:{ questions:"up to 50 questions + custom input", cards:"Flashcards quiz type", fill:"Fill in Blank quiz type", match:"Match Terms quiz type", files:"larger file uploads" },
   dailyLeft:(n)=>`${n} free quiz${n!==1?"zes":""} left today`,
