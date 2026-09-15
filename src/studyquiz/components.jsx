@@ -88,3 +88,86 @@ export function Flair({ rank, badge, t, small }) {
     </span>
   );
 }
+
+export function Logo({ size=28 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0}}>
+      <rect width="28" height="28" rx="8" fill="url(#lg)"/>
+      <defs>
+        <linearGradient id="lg" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#6366f1"/>
+          <stop offset="1" stopColor="#4338ca"/>
+        </linearGradient>
+      </defs>
+      <path d="M9.7 7.4 V20.6 M9.7 7.4 H14.6 A3.95 3.95 0 0 1 14.6 15.3 H9.7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M11 15.3 L14.9 20.6 L20.7 11" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+export function PBar({ v, max }) {
+  return <div style={{height:4,background:"var(--color-border-tertiary)",borderRadius:2}}><div style={{height:"100%",borderRadius:2,background:"#4338ca",width:`${(v/max)*100}%`,transition:"width 0.35s"}}/></div>;
+}
+
+export function Chip({ label, active, onClick, locked, small, hideBadge, rec }) {
+  return (
+    <button onClick={onClick} style={{
+      padding:small?"4px 10px":"6px 14px", borderRadius:20,
+      fontSize:small?11:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+      border:locked?"1.5px solid #f59e0b":"1px solid",
+      transition:"all 0.15s",
+      background:active?"#4338ca":"transparent",
+      color:active?"#fff":locked?"#92400e":"var(--color-text-secondary)",
+      borderColor:active?"#4338ca":locked?"#f59e0b":"var(--color-border-secondary)",
+      boxShadow:locked?"0 0 0 1px #f59e0b33, inset 0 0 0 1px #f59e0b22":undefined,
+    }}>
+      {label}
+      {rec && !active && <span style={{marginLeft:5,display:"inline-block",width:6,height:6,borderRadius:"50%",background:"var(--color-accent)",verticalAlign:"middle"}}/>}
+      {locked && !hideBadge && <span style={{marginLeft:4,fontSize:7,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"1px 4px",fontWeight:700,verticalAlign:"middle"}}>PRO</span>}
+    </button>
+  );
+}
+
+// A clean segmented control: one connected track, the selected option raised as a
+// card. `options` = [{value,label,icon?,locked?,rec?}]. onChange gets the option
+// so callers can route a locked pick to an unlock flow.
+export function Segmented({ options, value, onChange, size }) {
+  const sm = size==="sm";
+  return (
+    <div style={{display:"flex",width:"100%",background:"var(--color-background-secondary)",border:"1px solid var(--color-border-secondary)",borderRadius:11,padding:3,gap:2}}>
+      {options.map((o)=>{
+        const active=o.value===value;
+        return (
+          <button key={o.value} onClick={()=>onChange(o)} title={o.title||o.label} style={{
+            flex:1,minWidth:0,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,
+            padding:sm?"7px 6px":"9px 8px",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",
+            fontSize:sm?11.5:13,fontWeight:active?700:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+            background:active?"var(--color-background-primary)":"transparent",
+            color:active?"var(--color-text-primary)":"var(--color-text-secondary)",
+            boxShadow:active?"0 1px 3px rgba(35,31,26,0.12)":"none",
+            transition:"background .15s, color .15s, box-shadow .15s",
+          }}>
+            {o.icon && <Icon name={o.icon} size={sm?13:15} style={{flexShrink:0}}/>}
+            <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{o.label}</span>
+            {o.rec && !active && <span style={{width:6,height:6,borderRadius:"50%",background:"var(--color-accent)",flexShrink:0}}/>}
+            {o.locked && <Icon name="lock" size={11} style={{opacity:0.65,flexShrink:0}}/>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function Toggle({ on, onChange, disabled }) {
+  return (
+    <div onClick={()=>!disabled&&onChange(!on)} style={{
+      width:44,height:24,borderRadius:12,cursor:disabled?"not-allowed":"pointer",
+      background:on?"#4338ca":"var(--color-border-secondary)",
+      position:"relative",transition:"background 0.2s",opacity:disabled?0.45:1,
+    }}>
+      <div style={{position:"absolute",top:2,left:on?22:2,width:20,height:20,
+        borderRadius:"50%",background:"#fff",transition:"left 0.18s",
+        boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}/>
+    </div>
+  );
+}
