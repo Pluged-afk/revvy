@@ -219,8 +219,8 @@ const QUIZ_FILES_PRO  = 20;
 const EXAM_FILES_FREE = 5;
 const EXAM_FILES_PRO  = 20;
 const FREE_DAILY   = 50;  // free daily QUESTION allowance (shown in plan lists)
-const QUIZ_TYPES   = ["mcq","cards","fill","match","written"];
-const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link", written:"chat" };
+const QUIZ_TYPES   = ["mcq","cards","fill","match","written","diagram"];
+const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link", written:"chat", diagram:"target" };
 // Phase 2: how many of a 10-question weak-spot drill may be reused from the
 // learner's vetted bank (rest are freshly generated). Caps API cost saving at
 // half so drills still feel fresh.
@@ -351,10 +351,12 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName, learnerBrief, 
     fill:  `Fill in the blank: each "question" has exactly one blank written as ___. "answer" = the missing word or phrase. Set options:[] correct:0.`,
     match: `Matching pairs: "question" = term, "answer" = definition. Set options:[] correct:0.`,
     written: `Short answer: "question" = an open-ended question that needs a 1-3 sentence written response. "answer" = a concise, complete model answer the response is graded against. Set options:[] correct:0.`,
+    diagram: `Diagram identification (image occlusion): for EACH question draw a clear, self-contained inline <svg> figure of a concept from the material and visually mark ONE part with a bright arrow or circle WITHOUT naming that part in the figure (other parts may carry short text labels). "question" asks what the marked part is; "options" = 4 plausible part names; "correct" = 0-based index of the marked part; "answer" = the marked part's name. Put the figure in an "svg" field on the question.`,
   };
+  const wantsSvg = type === "diagram";
   // `diff` is the 0/1/2 index; map to the difficulty rubric.
   const d = DIFFICULTY[typeof diff === "number" ? diff : 1] || DIFFICULTY[1];
-  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nFAIRNESS: whatever the level, difficulty must come from the depth of thinking and the number of concepts a learner must connect, NEVER from trick wording, deliberate ambiguity, obscure trivia, or gotchas. Every question must be clearly answerable from a genuine understanding of the material and have exactly ONE defensible correct answer.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}${learnerBrief?`\n${learnerBrief}`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic","source":"..."}]${withSummary?`,"summary":"a compact digest of this material for the study library"`:""}}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Set "source" to SHORT verbatim words copied straight from the study material (a phrase or one sentence, max ~25 words, exact wording, no paraphrasing) that back up the correct answer, so the learner can see exactly where it came from; if a question leans on general knowledge NOT stated in the material, set "source" to an empty string "". Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.${withSummary?`\nALSO add a top-level "summary" field LAST: a compact digest (max 120 words) of the KEY concepts, definitions and facts this material covers, in the SAME language as the material, so the learner's study library can remember what it was about later. Cover the material as a whole, not any single question.`:""}`;
+  const prompt = `Generate EXACTLY ${numQ} study questions from the material, not ${numQ-1}, not ${numQ+1}, EXACTLY ${numQ}. This is a strict requirement: the "questions" array MUST contain exactly ${numQ} items. Do not stop early; produce all ${numQ}, then count them before responding.\nQuiz type: ${typeMap[type]}\nDIFFICULTY: ${d.name}. ${d.guide} Calibrate every question to this ${d.name} level.\nFAIRNESS: whatever the level, difficulty must come from the depth of thinking and the number of concepts a learner must connect, NEVER from trick wording, deliberate ambiguity, obscure trivia, or gotchas. Every question must be clearly answerable from a genuine understanding of the material and have exactly ONE defensible correct answer.\nLANGUAGE: Write the ENTIRE quiz, every question, all answer options, the answer, the explanation, and the title/subject/topic, in the SAME language as the study material above. Match the material's language exactly; do NOT translate it into English.${uiLangName?` If the material is too short to tell its language, use ${uiLangName}.`:""}${learnerBrief?`\n${learnerBrief}`:""}\nReturn ONLY raw JSON (no markdown, no backticks):\n{"title":"Short title","subject":"Subject","questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"answer":"...","explanation":"One sentence","topic":"2-4 word sub-topic","source":"..."${wantsSvg?`,"svg":"<svg viewBox='0 0 400 300' xmlns='http://www.w3.org/2000/svg'>a clear labeled figure with ONE part marked by a bright arrow or circle</svg>"`:""}}]${withSummary?`,"summary":"a compact digest of this material for the study library"`:""}}\nSet "topic" to the specific concept each question tests (2-4 words, e.g. "Photosynthesis", "Supply and demand"), used to track weak areas. Set "source" to SHORT verbatim words copied straight from the study material (a phrase or one sentence, max ~25 words, exact wording, no paraphrasing) that back up the correct answer, so the learner can see exactly where it came from; if a question leans on general knowledge NOT stated in the material, set "source" to an empty string "". Make all 4 options plausible. Vary question styles across the set. The "questions" array length MUST equal ${numQ}.${withSummary?`\nALSO add a top-level "summary" field LAST: a compact digest (max 120 words) of the KEY concepts, definitions and facts this material covers, in the SAME language as the material, so the learner's study library can remember what it was about later. Cover the material as a whole, not any single question.`:""}`;
 
   // Scale output budget with the question count so big sets aren't truncated
   // (each Q ≈ 160 tokens, +generous headroom). Haiku 4.5 allows up to 64k
@@ -362,7 +364,7 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName, learnerBrief, 
   // max_tokens is a ceiling, not a charge, you're billed only for tokens
   // actually generated. Generous per-question budget so a 100-question set
   // never truncates mid-generation.
-  const maxTokens = Math.min(Math.max(Math.round(numQ * 300) + 3000, 4000), 48000);
+  const maxTokens = Math.min(Math.max(Math.round(numQ * (wantsSvg ? 900 : 300)) + 3000, 4000), 48000);
 
   const res = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json", ...(await authHeader())},
@@ -395,6 +397,7 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName, learnerBrief, 
             explanation: deDash(q.explanation),
             topic: deDash(q.topic),
             options: Array.isArray(q.options) ? q.options.map(deDash) : q.options,
+            ...(q.svg ? { svg: safeSvg(q.svg) } : {}),
             // source stays verbatim (it's an exact quote from the learner's own material)
             source: typeof q.source === "string" ? q.source.trim().slice(0, 240) : "",
           })
@@ -2865,7 +2868,9 @@ export default function StudyQuiz() {
       srsAddedRef.current = quiz; setSrsAdded(0); setEarnedReward(null);
     } else if (screen === "results" && quiz && srsAddedRef.current !== quiz) {
       srsAddedRef.current = quiz;
-      const missed = quiz.questions.filter((_, i) => answers[i] && answers[i].isCorrect === false).map(toCard);
+      // diagram questions are figure-dependent, so they don't belong in the
+      // text-only review deck (a "what is the marked part?" card has no figure).
+      const missed = quiz.type === "diagram" ? [] : quiz.questions.filter((_, i) => answers[i] && answers[i].isCorrect === false).map(toCard);
       setSrsAdded(missed.length ? srs.addMissed(missed) : 0);
       // Universal streak + rewards: passing earns a power-up, and the questions
       // count toward the next (silent) streak saver. Supersedes recordSession.
@@ -3133,9 +3138,9 @@ export default function StudyQuiz() {
 
   // ── Feature access (free users unlock via 1-hour ad windows) ─────────
   const QTYPE_FEATURE = { cards:"flashcard", fill:"fillinblank", match:"matchterms" };
-  // written (short answer) is Pro-only: it spends an extra AI call to grade each
-  // response, so there's no ad-unlock for it. Everything else is Pro OR ad-unlock.
-  const canUseQType = useCallback((type) => type==="mcq" || (type==="written" ? isPro : (isPro || unlocks.isUnlocked(QTYPE_FEATURE[type]))), [isPro, unlocks]);
+  // written (short answer) + diagram are Pro-only: they spend extra tokens (AI
+  // grading / figure generation), so there's no ad-unlock. Others = Pro OR ad-unlock.
+  const canUseQType = useCallback((type) => type==="mcq" || ((type==="written"||type==="diagram") ? isPro : (isPro || unlocks.isUnlocked(QTYPE_FEATURE[type]))), [isPro, unlocks]);
   const canCustomQ  = useCallback(() => isPro, [isPro]);
   // Max questions per quiz: 100 (Pro) / 50 (ad-unlocked) / 20 (free).
   const qCap        = useCallback(() => isPro ? PRO_MAX_Q : (unlocks.isUnlocked("questions") ? AD_MAX_Q : FREE_MAX_Q), [isPro, unlocks]);
@@ -5372,7 +5377,7 @@ export default function StudyQuiz() {
                 const unlocked = canUseQType(type);
                 const active = qType===type;
                 return (
-                  <button key={type} onClick={()=>{ if(unlocked) setQType(type); else if(type==="written") setShowProModal(true); else setUnlockFeature(QTYPE_FEATURE[type]); }} style={{
+                  <button key={type} onClick={()=>{ if(unlocked) setQType(type); else if(type==="written"||type==="diagram") setShowProModal(true); else setUnlockFeature(QTYPE_FEATURE[type]); }} style={{
                     display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,padding:"11px 8px",
                     border:active?"1.5px solid var(--color-accent)":"1px solid var(--color-border-secondary)",
                     borderRadius:11,cursor:"pointer",fontFamily:"inherit",fontSize:12.5,fontWeight:600,
@@ -5584,8 +5589,9 @@ export default function StudyQuiz() {
           {quiz.type==="cards"&&<Flashcard key={qIdx} q={q} isLast={isLast} t={t} onNext={ok=>{const u=[...answers,{isCorrect:ok}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="fill" &&<FillBlank  key={qIdx} q={q} isLast={isLast} t={t} feedback={settings.feedback} autoAdvance={settings.autoAdvance} autoSec={autoAdvanceSec} onNext={(ok,picked)=>{const u=[...answers,{isCorrect:ok,picked}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
           {quiz.type==="written"&&<WrittenAnswer key={qIdx} q={q} isLast={isLast} t={t} subject={quiz.subject} onNext={(ok,detail)=>{const u=[...answers,{isCorrect:ok,...detail}];setAnswers(u);setSelected(null);if(qIdx+1>=quiz.questions.length)setScreen("results");else setQIdx(i=>i+1);}}/>}
-          {quiz.type==="mcq"  &&(
+          {(quiz.type==="mcq"||quiz.type==="diagram")&&(
             <>
+              {q.svg && <div style={{margin:"0 0 14px",display:"flex",justifyContent:"center"}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.svg)} style={{maxWidth:"100%",maxHeight:300,background:"#fff",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)",padding:10,boxSizing:"border-box"}}/></div>}
               <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:0}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></h3>
               <div style={{display:"flex",flexDirection:"column",gap:9,marginTop:20}}>
                 {q.options.map((opt,i)=>{
@@ -5715,11 +5721,12 @@ export default function StudyQuiz() {
             const a=answers[i];
             return <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"14px 14px 14px 11px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${a?.isCorrect?"#22c55e":"#ef4444"}`}} className="fade-in">
               <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{flexShrink:0,display:"inline-flex",marginTop:1}}>{a?.isCorrect?<Icon name="check" size={16} stroke={2.6} style={{color:"#16a34a"}}/>:<Icon name="x" size={16} stroke={2.6} style={{color:"#dc2626"}}/>}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></span></div>
-              {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="fill"||quiz.type==="written")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {quiz.type==="mcq"?(q.options?.[a.selected]??", "):quiz.type==="written"?(a.chosen||", "):(a.picked||", ")}</div>}
-              <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {quiz.type==="mcq"?q.options?.[q.correct]:(q.answer||"")}<SourceMark source={q.source} label={t.srcSeeAnswer} quoteLabel={t.srcConfirmsAnswer} t={t}/></div>
+              {q.svg&&<div style={{margin:"2px 0 8px",paddingLeft:23}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.svg)} style={{maxWidth:"100%",maxHeight:220,background:"#fff",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",padding:8,boxSizing:"border-box"}}/></div>}
+              {!a?.isCorrect&&a&&(quiz.type==="mcq"||quiz.type==="diagram"||quiz.type==="fill"||quiz.type==="written")&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {(quiz.type==="mcq"||quiz.type==="diagram")?(q.options?.[a.selected]??", "):quiz.type==="written"?(a.chosen||", "):(a.picked||", ")}</div>}
+              <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {(quiz.type==="mcq"||quiz.type==="diagram")?q.options?.[q.correct]:(q.answer||"")}<SourceMark source={q.source} label={t.srcSeeAnswer} quoteLabel={t.srcConfirmsAnswer} t={t}/></div>
               {quiz.type==="written"&&a?.feedback&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingLeft:23,marginBottom:4}}>{a.feedback}</div>}
               {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.55,paddingTop:8,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:23}}>{q.explanation}</div>}
-              {!a?.isCorrect&&quiz.type!=="written"&&<ExplainBox t={t} ctx={{question:q.question,correct:quiz.type==="mcq"?(q.options?.[q.correct]??""):(q.answer||""),picked:quiz.type==="mcq"?(q.options?.[a?.selected]??""):(a?.picked||""),subject:quiz.subject}}/>}
+              {!a?.isCorrect&&quiz.type!=="written"&&<ExplainBox t={t} ctx={{question:q.question,correct:(quiz.type==="mcq"||quiz.type==="diagram")?(q.options?.[q.correct]??""):(q.answer||""),picked:(quiz.type==="mcq"||quiz.type==="diagram")?(q.options?.[a?.selected]??""):(a?.picked||""),subject:quiz.subject}}/>}
             </div>;
           })
         }
