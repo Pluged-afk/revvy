@@ -1,11 +1,8 @@
-// AI study-coach planner. Turns a test date + chapter count into a day-by-day
-// schedule that splits the material across the available time, spreads spaced
-// review into the slack when the exam is far off, and finishes with a full
-// review the day before. Formats are chosen per tier: free users get
-// frictionless MCQ throughout (the only always-available type); Pro users get
-// a rotation of quiz styles plus a mock exam on the final day.
-//
-// Deterministic on purpose, no API call, so it's instant, free, and reliable.
+// Study planner. Turns a test date + chapter count into a day-by-day schedule:
+// spread the chapters across the time, fill the slack with spaced review, end
+// with a full review the day before. Free gets MCQ throughout (the only
+// always-available type); Pro rotates quiz styles and finishes on a mock.
+// Deterministic, no API call, so it's instant and free.
 
 const DAY = 86400000;
 const PRO_LEARN_FORMATS = ["mcq", "cards", "fill", "match"];

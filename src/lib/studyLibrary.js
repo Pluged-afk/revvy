@@ -1,11 +1,9 @@
-// ── Study library: material "memory" (Phase 3, summaries only) ────────────
-// Pure helpers over the `library` slice of the synced study blob. When a learner
-// makes a quiz from an upload, generation also returns a compact SUMMARY of that
-// material (folded into the same API call, no extra cost). We keep those
-// summaries, never the verbatim material, so Revyy can "remember what you've
-// studied" and build a cumulative "quiz me on everything" review across all of
-// it. Per-user and privacy-light by design: only short AI summaries the learner
-// produced from their own uploads, in their own blob, deletable any time.
+// Study library: material "memory", over the `library` slice of the study blob.
+// When a learner makes a quiz from an upload, generation also returns a compact
+// summary of the material (same API call, no extra cost). We keep the summaries,
+// never the verbatim material, so we can "remember what you've studied" and build
+// a cumulative "quiz me on everything" review across all of it. Per-user, in
+// their own blob, deletable any time.
 
 export const LIBRARY_MAX_DOCS = 40;      // remembered study sets per learner
 export const LIB_SUMMARY_MAX = 1200;     // chars kept per summary

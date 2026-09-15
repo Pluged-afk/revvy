@@ -1,20 +1,12 @@
-// ── Badges, ranks + public flair ─────────────────────────────────────────
-// A collectible achievement system layered over the signals Revyy already
-// tracks in the server-synced study blob (lifetime stats, best streak, mock
-// composites, arena bests, challenge record). Everything here is PURE: given a
-// study blob it returns which badges are earned, progress toward the rest, and
-// the learner's overall rank ("status"). Nothing is stored beyond a tiny record
-// of which badges have been earned + which one is equipped as public flair.
-//
-// Two visible layers:
-//   1. badges  – discrete achievements, a trophy case you fill in.
-//   2. rank    – one guild tier derived from lifetime XP, shown next to your
-//                name everywhere public. You pin ONE earned badge as flair.
+// Badges, ranks and public flair, all derived from the study blob (lifetime
+// stats, best streak, mock composites, arena bests, challenge record). Pure:
+// given a blob, returns which badges are earned, progress toward the rest, and
+// the learner's rank. We only persist which badges are earned and which one is
+// pinned as flair. Two layers: badges (a trophy case) and rank (one guild tier).
 
-// The scholar-guild ladder. `min` is the XP floor for the tier; colors are used
-// for the rank pill in both the app and the public leaderboards.
-// `icon` is a name in the custom line-icon set (Icon.jsx) used across the UI;
-// `emoji` is kept only for the canvas-drawn share card, which can't render SVG.
+// the scholar-guild ladder. `min` is the XP floor; `color` paints the rank pill
+// in the app and on public boards. `icon` is a name in Icon.jsx; `emoji` is only
+// for the canvas share card, which can't render SVG.
 export const RANKS = [
   { key: "novice",     name: "Novice",     min: 0,    icon: "rank_novice",     emoji: "🌱", color: "#6b7280" },
   { key: "apprentice", name: "Apprentice", min: 400,  icon: "rank_apprentice", emoji: "📖", color: "#0f6e56" },
@@ -25,21 +17,18 @@ export const RANKS = [
   { key: "luminary",   name: "Luminary",   min: 8000, icon: "rank_luminary",   emoji: "☀️", color: "#a3762b" },
 ];
 
-// ── Difficulty-adaptive XP ──────────────────────────────────────────────
-// A correct answer is worth more the harder the question. `diffXP` is a
-// lifetime accumulator: on every graded quiz/exam we add each correct answer's
-// premium for that set's difficulty, so grinding easy sets ranks you slowly
-// while clearing hard ones climbs fast. Easy earns no premium (participation +
-// accuracy only), Normal a little, Hard a lot. Purely additive, so it kicks in
-// going forward without disturbing any existing learner's standing.
+// difficulty-adaptive XP: a correct answer is worth more the harder the set.
+// `diffXP` is a lifetime accumulator, so grinding easy sets ranks slowly and
+// clearing hard ones climbs fast. purely additive so it doesn't disturb anyone's
+// existing standing.
 export const DIFF_PREMIUM = [0, 0.9, 2.4]; // per correct answer at [easy, normal, hard]
 export function diffXPFor(correct = 0, diff = 1) {
   const d = Math.max(0, Math.min(2, Math.round(Number(diff) || 0)));
   return Math.max(0, Math.round(Number(correct) || 0)) * DIFF_PREMIUM[d];
 }
 
-// Lifetime XP from honestly-earned signals. A flat participation + accuracy
-// base, PLUS the difficulty premium (diffXP), streaks, arena bests and wins.
+// lifetime XP: a flat participation + accuracy base, plus the difficulty premium
+// (diffXP), streaks, arena bests and wins
 export function computeXP(ctx) {
   return Math.round(
     (ctx.answered || 0) +           // participation, difficulty-neutral
@@ -52,8 +41,8 @@ export function computeXP(ctx) {
   );
 }
 
-// The tier for a given XP total: highest rank whose floor is met. Returns the
-// rank object plus its index and progress toward the next tier (0..1, null at top).
+// tier for an XP total: highest rank whose floor is met, plus progress toward
+// the next (0..1, null at the top)
 export function rankFor(xp) {
   let idx = 0;
   for (let i = 0; i < RANKS.length; i++) if (xp >= RANKS[i].min) idx = i;
@@ -61,9 +50,9 @@ export function rankFor(xp) {
   const toNext = next ? Math.max(0, Math.min(1, (xp - cur.min) / (next.min - cur.min))) : null;
   return { ...cur, index: idx, xp, next, toNext };
 }
-// The rank is COMPETITIVE: it reflects your best Endless Arena run score, not
-// study activity (founder decision). Same 7 tiers, arena-scaled thresholds.
-// `computeXP` above is kept for other signals but no longer drives the rank.
+// rank is competitive: it tracks your best arena run, not study activity (founder
+// call). same 7 tiers, arena-scaled thresholds. computeXP stays around for other
+// signals but no longer drives the rank.
 export function rankOf(study) {
   const s = (study && study.stats) ? study.stats : (study || {});
   return rankFor(Math.max(0, Math.round(Number(s.arenaBest) || 0)));
@@ -94,10 +83,9 @@ export function buildCtx(study = {}) {
   };
 }
 
-// Each badge: id, category, emoji, a current `value(ctx)`, a `target` it must
-// reach, and an optional `count(ctx)` shown as "earned ×N". Names + descriptions
-// are localized in the UI via `badge_<id>` / `badgeDesc_<id>` i18n keys; the
-// English text here is the fallback and the source of the copy.
+// each badge: id, category, emoji, a `value(ctx)`, a `target`, and an optional
+// `count(ctx)` shown as "earned ×N". names/descs are localized in the UI via
+// badge_<id> / badgeDesc_<id>; the English here is the fallback and source copy.
 export const BADGES = [
   // Consistency
   { id: "warmup",       cat: "consistency", emoji: "🔥", name: "Warmed Up",     desc: "Finish your first activity",   value: (c) => c.answered, target: 1 },
@@ -141,7 +129,7 @@ export const BADGES = [
   { id: "geographer",    cat: "subjects", emoji: "🗺️", name: "Geographer",    desc: "Answer 60 geography questions",value: (c) => c.subjectCounts.geography || 0, target: 60 },
   { id: "economist",     cat: "subjects", emoji: "📈", name: "Economist",     desc: "Answer 60 business questions", value: (c) => c.subjectCounts.business || 0, target: 60 },
   { id: "polymath",      cat: "subjects", emoji: "🧩", name: "Polymath",      desc: "Study 4 different subjects",   value: (c) => c.domainCount, target: 4 },
-  // Meta — the ultimate: earn every other badge in the case.
+  // meta: earn every other badge in the case
   { id: "the_full_set",  cat: "meta", emoji: "🏵️", name: "The Full Set", desc: "Earn every other badge", meta: true },
 ];
 

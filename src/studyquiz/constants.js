@@ -1,14 +1,12 @@
-// Pure data + theme tokens extracted from StudyQuiz.jsx (no React, no state), so
-// the main component file carries logic rather than constants. Behaviour is
-// unchanged: these are imported back into StudyQuiz.jsx verbatim.
+// Data + theme tokens for StudyQuiz, split out so the component file is logic.
 
-// Option letters for MCQ choices.
+// MCQ choice letters
 export const LETTERS = ["A", "B", "C", "D", "E", "F"];
 
-// Default keyboard bindings for the (opt-in) MCQ keyboard-control setting.
+// default bindings for the opt-in MCQ keyboard controls
 export const DEFAULT_KEYBINDS = { o1: "1", o2: "2", o3: "3", o4: "4", next: "Enter" };
 
-// Weekly League tiers (display only; mirrors the server's LEAGUE_TIERS order).
+// weekly league tiers (display only; mirrors the server's order)
 export const LEAGUE_TIERS = [
   { key: "bronze",   name: "Bronze",   color: "#b45309" },
   { key: "silver",   name: "Silver",   color: "#9aa3ad" },
@@ -19,10 +17,10 @@ export const LEAGUE_TIERS = [
 ];
 
 // Warm-editorial theme tokens, matched to the marketing site (src/site.css) so
-// the app and the site read as ONE product. Light = paper/ink; dark = a neutral
-// charcoal (deliberately un-tinted so it never reads warm/yellow). Injected via
-// a <style> element in the theme effect. Elevation order: tertiary (page,
-// recessed) < secondary (inset) < primary (cards). Indigo #4338ca is the accent.
+// app and site read as one product. Light is paper/ink; dark is a neutral
+// charcoal, kept un-tinted so it never reads warm/yellow (learned that the hard
+// way). Injected via a <style> element in the theme effect. Elevation runs
+// tertiary (page) < secondary (inset) < primary (cards); indigo #4338ca accent.
 export const THEME_LIGHT = `
   :root,[data-theme="light"] {
     --color-background-primary:#fffdf9 !important;

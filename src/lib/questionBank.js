@@ -1,16 +1,9 @@
-// ── Per-user vetted question bank (Phase 2) ───────────────────────────────
-// Pure helpers over the `bank` slice of the synced study blob. The bank is a
-// growing, self-vetting store of the learner's OWN good MCQs (well-formed and
-// never flagged), plus a short memory of the questions they flagged as bad. It
-// powers two things:
-//   1. Cost + speed: "drill weak spots" reuses vetted questions instead of
-//      regenerating every one from the API.
-//   2. Self-improving quality: a flagged question is rejected (never reused) and
-//      its gist is fed back into generation as an explicit "avoid these" list,
-//      so the questions a learner sees get better over time.
-// Per-user ONLY (privacy): a bank item is derived from that learner's material
-// and lives in their own blob, exactly like the rest of study_data. Nothing is
-// pooled across users.
+// Per-user vetted question bank, over the `bank` slice of the study blob. A
+// self-vetting store of the learner's own well-formed, never-flagged MCQs, plus
+// a short memory of what they flagged as bad. Two payoffs: "drill weak spots"
+// reuses vetted questions instead of hitting the API for every one, and a
+// flagged question is dropped and its gist fed back as an "avoid these" note so
+// quality climbs over time. Stays per-user: nothing is pooled across accounts.
 
 export const BANK_MAX_ITEMS = 120;   // reusable vetted questions kept per learner
 export const BANK_MAX_REJECTS = 40;  // recent flagged-bad questions remembered
@@ -135,9 +128,8 @@ export function bankAvoid(bank, max = 4) {
   return normBank(bank).rejects.map((r) => r.text).filter(Boolean).slice(-max);
 }
 
-// Build the localized-agnostic AVOID block appended to generation prompts. This
-// is the visible half of the content feedback loop: what the learner rejected
-// steers what the model produces next. Empty (no cost) when nothing was flagged.
+// The AVOID block appended to generation prompts, so what the learner rejected
+// steers what the model produces next. Empty when nothing was flagged.
 export function buildAvoidNote(bank, { max = 4 } = {}) {
   const texts = bankAvoid(bank, max);
   if (!texts.length) return "";

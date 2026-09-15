@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { simulateAdWatch } from "./ads.jsx";
 
-// Granular, per-feature ad-unlock system for FREE users. Each feature has its
-// own localStorage timestamp (and, for once-daily features, an "ad used" date).
-// Pro users always have everything unlocked and never see these prompts.
+// Per-feature ad-unlock system for free users. Each feature has its own
+// localStorage timestamp (and, for once-daily ones, an "ad used" date). Pro
+// always has everything unlocked and never sees these prompts.
 //
-// Rules:
+// rules:
 //   flashcard, unlimited unlocks/day, 1h each
 //   fillinblank, once/day, 1h
 //   matchterms, once/day, 1h
@@ -13,9 +13,9 @@ import { simulateAdWatch } from "./ads.jsx";
 //   filesize, 10MB uploads, once/day, 1h
 const HOUR = 3600 * 1000;
 
-// Exam mode is a special case: watching one ad unlocks a SINGLE exam for the
-// day (not a 1-hour window). Once that exam is generated it's used up, and the
-// user must watch again the next day. Pro users skip all of this.
+// exam mode is special: one ad unlocks a single exam for the day, not a 1-hour
+// window. once that exam is generated it's used up and they watch again
+// tomorrow. Pro skips all of this.
 const EXAM_AD_DATE = "exam_ad_date";     // date the unlock ad was watched
 const EXAM_USED_DATE = "exam_used_date"; // date the free exam was generated
 

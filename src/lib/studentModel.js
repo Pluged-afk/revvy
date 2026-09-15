@@ -1,18 +1,12 @@
 import { topicMastery } from "./insights.js";
 
-// ── Per-user student model + adaptive difficulty ──────────────────────────
-// Pure functions over the server-synced study blob (stats, topicStats, the
-// small rolling `perf` session log, and the SRS deck). They turn the signals
-// Revyy already collects into two things:
-//   1. recommendDifficulty(study) -> the right Easy/Normal/Hard level for the
-//      learner's NEXT quiz, so difficulty adapts to how they've been doing.
-//   2. buildLearnerBrief(study)   -> a short, privacy-safe brief injected into
-//      generation so every quiz is calibrated to this specific learner.
-// No material content leaves the device through the brief, no API call, and no
-// extra storage beyond the tiny `perf` log kept in the study blob. Everything
-// degrades gracefully: a brand-new learner gets today's exact behaviour (a
-// Normal default and an empty brief), and personalization fades in as real
-// history accumulates.
+// Student model + adaptive difficulty, over the study blob (stats, topicStats,
+// the rolling `perf` log). Two outputs: recommendDifficulty(study) picks the
+// Easy/Normal/Hard level for the next quiz, and buildLearnerBrief(study) makes a
+// short brief we append to the generation prompt so quizzes calibrate to this
+// learner. The brief carries only aggregate signals (accuracy, topic labels),
+// never any material content, and a new learner gets today's behaviour: a Normal
+// default and an empty brief, with personalization fading in as history builds.
 
 const DIFF_MIN = 0, DIFF_MAX = 2;
 const DIFF_NAMES = ["Easy", "Normal", "Hard"];
@@ -20,10 +14,9 @@ const DIFF_NAMES = ["Easy", "Normal", "Hard"];
 const clampDiff = (d) => Math.max(DIFF_MIN, Math.min(DIFF_MAX, Math.round(Number(d) || 0)));
 const pct = (x) => Math.round((x || 0) * 100);
 
-// A single graded session as stored in perf.recent. Kept deliberately tiny:
-// { at, type, diff, total, correct }. Only real, difficulty-calibrated quiz
-// rounds are logged (not fix-your-misses re-drills or retries of seen sets),
-// so the accuracy signal reflects fresh performance at a chosen level.
+// one graded session for perf.recent, kept tiny: { at, type, diff, total,
+// correct }. only fresh difficulty-calibrated rounds get logged (not
+// fix-your-misses re-drills or retries), so accuracy reflects real performance.
 export function makePerfEntry({ type = "mcq", diff = 1, total = 0, correct = 0 } = {}) {
   return {
     at: Date.now(),
@@ -34,10 +27,9 @@ export function makePerfEntry({ type = "mcq", diff = 1, total = 0, correct = 0 }
   };
 }
 
-// Recency-weighted accuracy at one difficulty level, from the last `window`
-// sessions played at that level. Recent sessions count more (linear ramp) and
-// bigger sessions count more (weighted by question volume). Returns
-// { acc, q, n } or null when the learner has never played that level.
+// recency-weighted accuracy at one level, over the last `window` sessions there.
+// recent and bigger sessions count for more. returns { acc, q, n }, or null if
+// they've never played that level.
 export function recentAccuracyAt(perf, diff, { window = 8 } = {}) {
   const d = clampDiff(diff);
   const rows = (perf?.recent || []).filter((s) => clampDiff(s.diff) === d && (s.total || 0) > 0).slice(-window);
@@ -52,8 +44,7 @@ export function recentAccuracyAt(perf, diff, { window = 8 } = {}) {
   return { acc: wTotal ? wCorrect / wTotal : 0, q, n: rows.length };
 }
 
-// Direction of travel over the whole recent log: are they trending up, holding
-// steady, or slipping? Used only for encouraging, honest framing.
+// trend over the recent log: improving, steady, or dipping. only used for framing.
 export function momentum(perf) {
   const rows = (perf?.recent || []).filter((s) => (s.total || 0) > 0);
   if (rows.length < 4) return "steady";
@@ -67,23 +58,17 @@ export function momentum(perf) {
   return delta > 0.08 ? "improving" : delta < -0.08 ? "dipping" : "steady";
 }
 
-// ── Adaptive difficulty ────────────────────────────────────────────────
-// Recommend the level for the next quiz. The "working level" is whatever the
-// learner most recently played; from there we level up when they're cruising
-// and ease down when they're underwater, staying put in the sweet spot. A
-// confidence value (0..1) reflects how much data backs the call, so the UI can
-// decide whether to auto-apply it or merely suggest it.
-//
-// Returns { diff, reason: "up"|"down"|"hold", confidence, acc, level }.
-const UP_AT = 0.85;    // cruising: bump the challenge
-const DOWN_AT = 0.5;   // struggling: rebuild momentum
-const MIN_Q = 10;      // questions needed before we trust the signal at all
+// Recommend the next quiz's level. Working level = whatever they last played;
+// from there, level up when they're cruising and down when they're underwater,
+// else hold. confidence (0..1) says how much data backs the call so the UI can
+// auto-apply or just suggest. Returns { diff, reason, confidence, acc, level }.
+const UP_AT = 0.85;    // cruising, bump it
+const DOWN_AT = 0.5;   // struggling, ease off
+const MIN_Q = 10;      // questions before we trust the signal at all
 const FULL_Q = 20;     // questions for full confidence
 
-// A strong head-to-head challenge record is a peer-relative signal of strength:
-// beating other people on the SAME questions says more than solo accuracy alone.
-// Proven winners (won most of at least a few challenges) get pushed a level
-// harder, so "people who win more get smarter questions".
+// a strong challenge record is peer-relative: beating people on the same
+// questions says more than solo accuracy, so proven winners get pushed a level.
 const CHAL_MIN = 3;       // challenges played before the record counts
 const CHAL_WIN_AT = 0.6;  // win-rate that earns the bump
 export function isStrongCompetitor(study = {}) {
@@ -100,9 +85,8 @@ export function recommendDifficulty(study = {}) {
   const at = recentAccuracyAt(perf, lastDiff);
   const competitor = isStrongCompetitor(study);
 
-  // Cold start or too little data at the working level: hold, but with zero
-  // confidence so the caller leaves the learner's own default untouched. A
-  // proven challenge winner is the exception, that record alone justifies a bump.
+  // cold start or too little data: hold at zero confidence so the caller keeps
+  // the learner's own default. exception: a proven challenge winner still bumps.
   if (!at || at.q < MIN_Q) {
     if (competitor && lastDiff < DIFF_MAX) {
       const d = Math.min(DIFF_MAX, lastDiff + 1);
@@ -115,17 +99,16 @@ export function recommendDifficulty(study = {}) {
   if (at.acc >= UP_AT && lastDiff < DIFF_MAX) { diff = lastDiff + 1; reason = "up"; }
   else if (at.acc < DOWN_AT && lastDiff > DIFF_MIN) { diff = lastDiff - 1; reason = "down"; }
 
-  // Competitor bump: never fights a "down" call (if they're struggling solo,
-  // rebuild first), but otherwise a winning record earns one extra level.
+  // competitor bump, but never override a "down" call: if they're struggling
+  // solo, rebuild first.
   if (competitor && reason !== "down" && diff < DIFF_MAX) { diff = Math.min(DIFF_MAX, diff + 1); reason = "up"; }
 
   const confidence = Math.max(0, Math.min(1, at.q / FULL_Q));
   return { diff, reason, confidence, acc: at.acc, level: DIFF_NAMES[diff] };
 }
 
-// After a quiz finishes, is there an obvious next-level nudge to offer on the
-// results screen? Reward-framed only: level up on a strong showing, offer a
-// gentler set after a rough one. Returns { dir: "up"|"down", from, to } or null.
+// results-screen nudge after a quiz: level up on a strong showing, offer a
+// gentler set after a rough one. Returns { dir, from, to } or null.
 export function resultNudge({ diff, correct, total }) {
   const d = clampDiff(diff);
   if (!total || total < 4) return null;               // too short to judge
@@ -135,18 +118,12 @@ export function resultNudge({ diff, correct, total }) {
   return null;
 }
 
-// ── Personalized generation brief ──────────────────────────────────────
-// A compact English instruction block appended to the generation prompt so the
-// model calibrates the set to THIS learner. It carries only aggregate signals
-// the learner produced themselves (recent accuracy, topic labels they've been
-// quizzed on) never any material content, so it is cheap and privacy-safe. It
-// stays quiet for new learners (returns "") and never forces past topics onto
-// unrelated new material: topic emphasis is explicitly conditioned on "only if
-// the material covers it."
-//
-// `opts.forDrill` produces the stronger, weak-spot-targeted variant used by the
-// no-upload "drill weak spots" flow, where hitting those exact topics is the
-// whole point.
+// The instruction block appended to the generation prompt so the model
+// calibrates to this learner. Carries only aggregate signals (recent accuracy,
+// topic labels), never material content. Stays empty for new learners, and topic
+// emphasis is conditioned on the material actually covering the topic so we don't
+// force old topics onto new material. `forDrill` builds the stronger
+// weak-spot-targeted variant for the no-upload "drill weak spots" flow.
 export function buildLearnerBrief(study = {}, { max = 4, forDrill = false } = {}) {
   const stats = study?.stats || {};
   const perf = study?.perf || {};
@@ -155,8 +132,8 @@ export function buildLearnerBrief(study = {}, { max = 4, forDrill = false } = {}
   const weak = mastery.filter((t) => t.weak).slice(0, max).map((t) => t.topic);
   const strong = mastery.filter((t) => t.mastery >= 85 && t.seen >= 4).slice(0, max).map((t) => t.topic);
 
-  // Not enough history to personalize honestly: say nothing, keep today's
-  // behaviour. (Drill mode always builds one, its caller guarantees signal.)
+  // not enough history to personalize honestly, so say nothing. (drill mode
+  // always builds one, its caller guarantees signal.)
   if (!forDrill && answered < 8 && !weak.length) return "";
 
   const rec = recommendDifficulty(study);
@@ -178,12 +155,12 @@ export function buildLearnerBrief(study = {}, { max = 4, forDrill = false } = {}
   if (isStrongCompetitor(study)) {
     lines.push(`- They consistently win head-to-head challenges against their peers, so bias toward genuinely demanding, stretch-level questions rather than routine recall.`);
   }
-  // Only worth sending if it actually says something beyond the header.
+  // only send it if there's an actual line beyond the header
   return lines.length > 1 ? lines.join("\n") : "";
 }
 
-// Convenience: a short, localized-agnostic summary object for any UI that wants
-// to show the learner their model at a glance (not required by generation).
+// small summary object for any UI that wants to show the learner their model at
+// a glance (generation doesn't need it)
 export function studentSnapshot(study = {}) {
   const rec = recommendDifficulty(study);
   return {

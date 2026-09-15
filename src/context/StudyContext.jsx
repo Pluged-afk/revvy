@@ -7,13 +7,11 @@ import { normWallet, walletAdd, addSaverProgress, tickStreak, arenaEarn, passEar
 import { evaluateBadges } from "../lib/badges.js";
 import { reviewCard } from "../lib/fsrs.js";
 
-// ── Server-synced study data ──────────────────────────────────────────
-// Single source of truth for the spaced-repetition deck, lifetime stats +
-// streak, exam date, and AI study plans. Held in one blob, cached in
-// localStorage (instant + offline), and synced to Neon per-user when signed
-// in (debounced write-through; one read on sign-in with a merge so progress
-// made while logged out is never lost). Replaces the old per-hook localStorage
-// state in srs.js / stats.js, those now read from here.
+// Server-synced study data: the single source of truth for the review deck,
+// lifetime stats + streak, exam date, and study plans. One blob, cached in
+// localStorage (instant + offline) and synced to Neon per-user when signed in
+// (debounced write-through; one read + merge on sign-in so progress made while
+// logged out isn't lost). srs.js / stats.js now read from here.
 
 const LS_KEY = "revyy_study_v1";
 

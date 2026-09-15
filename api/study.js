@@ -2,8 +2,8 @@ import { verifyToken } from "@clerk/backend";
 import { randomBytes } from "crypto";
 import sql, { readBody } from "./db.js";
 
-// Server-synced study data + shared-quiz storage. Kept in ONE serverless
-// function to stay under the Vercel Hobby plan's 12-function limit.
+// Server-synced study data + shared-quiz storage. All one serverless function
+// to stay under the Vercel Hobby plan's 12-function limit.
 //
 //   Authed (Authorization: Bearer <clerk token>):
 //     GET  /api/study                        -> { data }  (the user's blob)
@@ -28,13 +28,12 @@ function ensureTables() {
         data       JSONB       NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
-      // GLOBAL, cross-user mock-exam learning bank. Mock questions come from the
-      // model's general knowledge of standardized tests (SAT/ACT/etc.), NOT from
-      // any user's private material, so pooling them across everyone is safe.
-      // We keep questions the crowd generates + a flag count, and feed the good
-      // ones back into generation as STYLE exemplars and the flagged ones as an
-      // avoid-list, so mocks get more authentic for everyone over time. We never
-      // serve exact copies; generation stays fresh.
+      // Global, cross-user mock-exam learning bank. Mock questions come from the
+      // model's general knowledge of standardized tests (SAT/ACT/etc.), not from
+      // anyone's private material, so pooling them is safe. We keep what the crowd
+      // generates plus a flag count, then feed the good ones back as style
+      // exemplars and the flagged ones as an avoid-list, so mocks get more
+      // authentic over time. We never serve exact copies; generation stays fresh.
       sql`CREATE TABLE IF NOT EXISTS mock_bank (
         id         BIGSERIAL   PRIMARY KEY,
         exam       TEXT        NOT NULL,

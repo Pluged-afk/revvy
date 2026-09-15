@@ -36,10 +36,10 @@ const TAB_ICONS = { file: "folder", text: "pencil", photo: "camera", media: "pla
 // Localized name for a power-up ("hint" | "freeze" | "skip"), reusing the arena
 // labels so the reward economy speaks one language everywhere.
 const pupName = (t, key) => key === "freeze" ? (t.arenaFreeze || "Freeze") : key === "skip" ? (t.arenaSkip || "Skip") : (t.arenaHint || "Hint");
-// Arena board entry points (intro + game-over). Now ON: the board leads with
-// the competitive SEASON tier + season leaderboard, which are NOT gated (work
-// from day one), so there's always something to show. The all-time board
-// behind the toggle is still gated at 100 players server-side.
+// Arena board entry points (intro + game-over). On now: the board leads with the
+// competitive season tier + season leaderboard, which aren't gated (they work
+// from day one), so there's always something to show. The all-time board behind
+// the toggle is still gated at 100 players server-side.
 const SHOW_ARENA_LEADERBOARD = true;
 
 // Round initial-letter avatar used across friends + groups (no external image).
@@ -50,13 +50,10 @@ function AvatarInitial({ name, size = 34 }) {
     </span>
   );
 }
-// A colored icon "medallion": a tinted circle with the icon in its accent
-// color. Gives each home card a distinct, lively identity instead of a row of
-// flat monochrome line icons. The tint reads in both light and dark themes.
+// colored icon "medallion": a tinted circle with the icon in its accent color,
+// so each home card gets its own identity instead of a row of flat line icons.
+// two-tone gradient + faint same-hue ring, reads in both themes.
 function Medallion({ color = "#4338ca", size = 38, children }) {
-  // A subtle two-tone gradient tint + a faint same-hue ring gives every icon
-  // depth and a consistent treatment, so a palette of relevant per-icon colors
-  // reads as one designed family rather than a clashing rainbow.
   return (
     <span style={{ flexShrink: 0, width: size, height: size, borderRadius: 12, background: `linear-gradient(140deg, ${color}30, ${color}12)`, boxShadow: `inset 0 0 0 1px ${color}33`, color, display: "inline-flex", alignItems: "center", justifyContent: "center" }} aria-hidden="true">
       {children}
@@ -162,7 +159,7 @@ function timeAgo(at) {
 }
 // Parse a pasted Quizlet export into flashcards. Quizlet separates term from
 // definition with a Tab (or comma) and cards with a newline (or semicolon); we
-// split on the FIRST separator per row so definitions keep their own commas.
+// split on the first separator per row so definitions keep their own commas.
 // Pure string work, no URL, no network, no fetch: none of the link-import risk.
 function parseQuizlet(text) {
   const raw = String(text || "").trim();
@@ -234,7 +231,7 @@ const LIBRARY_REUSE_MAX = 4; // vetted bank questions reused in a 10-Q "quiz eve
 
 // Marks for a custom-exam section. Two modes: "perQ" (the user sets marks per
 // question) or "total" (the user sets the section's overall score, split evenly
-// across its questions). Per-question marks stay EXACT (fractional if needed) so
+// across its questions). Per-question marks stay exact (fractional if needed) so
 // the section total is preserved when scoring. Missing markMode = "perQ" (old).
 function sectionPerQMarks(sec) {
   const count = Math.max(1, parseInt(sec?.count) || 1);
@@ -339,9 +336,9 @@ const SoundEngine = (() => {
 })();
 
 // One-shot celebration guards: each achievement's sound + confetti fires at most
-// ONCE per page load, so navigating between screens (or a remount) never replays
-// it. They reset on a fresh app load, and cross-session dedup is handled by the
-// persisted badges.seen list.
+// once per page load, so moving between screens (or a remount) never replays it.
+// They reset on a fresh load; cross-session dedup is the persisted badges.seen
+// list.
 let _celebratedRankIdx = -1;
 let _celebratedStreak = -1;
 
@@ -544,12 +541,12 @@ Return ONLY raw JSON, no markdown: {"verdict":"answer_correct","explanation":"..
 }
 
 // Content gate (feature F, safety). Before generating, judge the uploaded
-// material by INTENT, not surface keywords, so factual/educational content on
-// ANY subject passes (Wikipedia, articles, studies, and sensitive-but-academic
+// material by intent, not surface keywords, so factual/educational content on
+// any subject passes (Wikipedia, articles, studies, and sensitive-but-academic
 // topics like anatomy, war or toxicology) and only genuine porn / CSAM / hate /
 // weapon-instructions / junk is blocked. Runs on the same blocks (image / pdf /
 // text) as generation, so it sees the real content. Errs toward allowing, and
-// FAILS OPEN on any error so an infra hiccup never blocks a real learner.
+// fails open on any error so an infra hiccup never blocks a real learner.
 async function gateContent({ blocks, uiLangName }) {
   const prompt = `You gate uploads for a study app. A student wants to make a quiz from this material. Judge it and return ONLY JSON: {"decision":"allow"|"block","category":"ok"|"explicit"|"harmful"|"nonstudy","reason":"a few words"}.
 
@@ -583,7 +580,7 @@ const gateMessage = (category, t) =>
 
 // Keep a figure only if it is a clean, self-contained <svg> (rendered inside an
 // <img> data-URI, which can't run scripts; this strips anything scriptable too).
-// An SVG shown via <img> MUST carry the SVG namespace or the browser shows a
+// an SVG shown via <img> must carry the SVG namespace or the browser shows a
 // broken image, so add xmlns when the model leaves it off.
 function safeSvg(s) {
   s = typeof s === "string" ? s.trim() : "";
@@ -3960,17 +3957,17 @@ export default function StudyQuiz() {
   // so a learner can tweak settings and regenerate without re-uploading. Use the
   // file's own remove control (the red x) to actually clear it.
   const newMat  = () => { setScreen("upload");setQuiz(null);setError(""); };
-  // Feature D: re-drill ONLY the questions just missed, as a fresh mini-quiz
-  // (active recall on exactly your weak spots, right now). Reuses the whole quiz
-  // flow, no new generation, no quota spent, and no lockout: keep fixing until
-  // you get them all. The spaced-repetition deck still handles the long game.
+  // Feature D: re-drill just the questions you missed, as a fresh mini-quiz
+  // (active recall on your weak spots, right now). Reuses the whole quiz flow, no
+  // new generation, no quota spent, no lockout: keep fixing until you get them
+  // all. The spaced-repetition deck still handles the long game.
   const missedThisQuiz = quiz && quiz.type!=="match"
     ? quiz.questions.filter((_, i) => answers[i] && answers[i].isCorrect === false)
     : [];
   const fixMisses = () => {
     if (!missedThisQuiz.length) return;
-    // fresh:false so this re-drill of already-missed questions is NOT logged
-    // into the adaptive-difficulty perf history (it would skew accuracy low).
+    // fresh:false so this re-drill of already-missed questions isn't logged into
+    // the adaptive-difficulty perf history (it would skew accuracy low).
     setQuiz((prev) => ({ ...prev, questions: missedThisQuiz, title: t.fixMissesTitle, fresh:false }));
     setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
     setScreen("quiz");
@@ -4098,13 +4095,13 @@ export default function StudyQuiz() {
     const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
     setScreen("mock_gen");
     try {
-      // Every mock runs at authentic, demanding exam difficulty, NEVER softened.
+      // Every mock runs at authentic, demanding exam difficulty, never softened.
       // The form leans between a genuine full-difficulty paper and an extra-hard
       // one so retakes stay fresh, but a mock never feels unrealistically easy.
       const tilt = ["standard", "harder", "harder"][Math.floor(Math.random() * 3)];
       setMockTilt(tilt);
-      // Build ONLY the first section now; the rest are built on demand as the
-      // user proceeds, faster start, and no cost for sections never reached.
+      // Build only the first section now; the rest build on demand as the user
+      // proceeds. Faster start, and no cost for sections never reached.
       const sec0 = exam.sections[0];
       const qs = await buildMockSection(exam, sec0, tilt);
       if (!qs.length) throw new Error("Couldn't generate the exam, please try again.");
