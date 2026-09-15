@@ -16,6 +16,7 @@ import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/stude
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { previewInterval } from "./lib/fsrs.js";
+import { LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, THEME_LIGHT, THEME_DARK } from "./studyquiz/constants.js";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
 import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
@@ -225,7 +226,6 @@ const Q_FREE       = [5, 10, 15, 20];
 const Q_EXTRA      = [25, 30, 40, 50];
 const QUIZ_TYPES   = ["mcq","cards","fill","match"];
 const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link" };
-const LETTERS      = ["A","B","C","D","E","F"];
 // Phase 2: how many of a 10-question weak-spot drill may be reused from the
 // learner's vetted bank (rest are freshly generated). Caps API cost saving at
 // half so drills still feel fresh.
@@ -345,69 +345,8 @@ const SoundEngine = (() => {
 let _celebratedRankIdx = -1;
 let _celebratedStreak = -1;
 
-// Weekly League tiers (display only; mirrors the server's LEAGUE_TIERS order).
-const LEAGUE_TIERS = [
-  { key: "bronze",   name: "Bronze",   color: "#b45309" },
-  { key: "silver",   name: "Silver",   color: "#9aa3ad" },
-  { key: "gold",     name: "Gold",     color: "#c99a3b" },
-  { key: "sapphire", name: "Sapphire", color: "#2f6fed" },
-  { key: "ruby",     name: "Ruby",     color: "#c02749" },
-  { key: "diamond",  name: "Diamond",  color: "#22b8c4" },
-];
-
-// Cool, modern product palette (Aug 2026 redesign): neutral slate/gray base,
-// hairline borders, a confident indigo accent. Replaces the earlier warm ivory
-// theme so the app reads as a serious study tool.
-// Warm-editorial palette, matched to the marketing site (src/site.css) so the
-// app and the site read as ONE product: paper/ink instead of the old clinical
-// slate-on-white (which also read as a generic Tailwind AI-build tell). Warm
-// off-whites are the 2026 education-UI norm; the ink/paper contrast stays high.
-// Elevation order is preserved: tertiary = page (most recessed) < secondary
-// (inset) < primary (cards, lightest). Indigo #4338ca is the brand accent.
-const THEME_LIGHT = `
-  :root,[data-theme="light"] {
-    --color-background-primary:#fffdf9 !important;
-    --color-background-secondary:#f6f1e8 !important;
-    --color-background-tertiary:#f3ece0 !important;
-    --color-background-success:#edf4ec !important;
-    --color-background-danger:#f8ece7 !important;
-    --color-text-primary:#231f1a !important;
-    --color-text-secondary:#544e45 !important;
-    --color-text-tertiary:#8a8478 !important;
-    --color-text-success:#3b7a5e !important;
-    --color-text-danger:#b23a26 !important;
-    --color-border-danger:#ecccc2 !important;
-    --color-border-primary:#d8cfbd !important;
-    --color-border-secondary:#e6dfd2 !important;
-    --color-border-tertiary:#efe8db !important;
-    --color-border-success:#cbe3cf !important;
-    --color-hover-tint:#f3ede1 !important;
-    --color-sel-tint:#ece8f9 !important;
-    --color-accent:#4338ca !important;
-  }
-`;
-const THEME_DARK = `
-  :root,[data-theme="dark"] {
-    --color-background-primary:#242424 !important;
-    --color-background-secondary:#2e2e2e !important;
-    --color-background-tertiary:#181818 !important;
-    --color-background-success:#18291c !important;
-    --color-background-danger:#2c1a15 !important;
-    --color-text-primary:#ececec !important;
-    --color-text-secondary:#a6a6a6 !important;
-    --color-text-tertiary:#787878 !important;
-    --color-text-success:#63cd91 !important;
-    --color-text-danger:#ef9e8c !important;
-    --color-border-danger:#472a20 !important;
-    --color-border-primary:#3f3f3f !important;
-    --color-border-secondary:#333333 !important;
-    --color-border-tertiary:#262626 !important;
-    --color-border-success:#2d4a37 !important;
-    --color-hover-tint:#2e2e2e !important;
-    --color-sel-tint:#302c58 !important;
-    --color-accent:#a3a4f7 !important;
-  }
-`;
+// LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, THEME_LIGHT and THEME_DARK now live
+// in ./studyquiz/constants.js (imported at the top of this file).
 
 // ── Claude API ────────────────────────────────────────────────────────
 // The AI proxy + file upload spend the server's Anthropic key, so both require
@@ -1852,10 +1791,6 @@ function UsageSection({ isPro, usage, s, adBusy, onWatchAd, onBuyPack, packBusy,
     </>
   );
 }
-
-// Default keyboard bindings for MCQ quizzes: 1-4 pick options, Enter advances.
-// Rebindable per-user in Settings. Stored as raw KeyboardEvent.key values.
-const DEFAULT_KEYBINDS = { o1: "1", o2: "2", o3: "3", o4: "4", next: "Enter" };
 // Pretty-print a stored key for the UI (Space, Enter, arrows, upper-cased letters).
 const keyLabel = (v) => v === " " ? "Space" : v === "ArrowRight" ? "→" : v === "ArrowLeft" ? "←" : v === "ArrowUp" ? "↑" : v === "ArrowDown" ? "↓" : (v || "").length === 1 ? v.toUpperCase() : (v || "?");
 // Rebindable keyboard-controls editor. Tap an action, press any key to bind it.
