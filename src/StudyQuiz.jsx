@@ -217,10 +217,7 @@ const PRO_FILE_MB  = 999;
 const QUIZ_FILES_PRO  = 20;
 const EXAM_FILES_FREE = 5;
 const EXAM_FILES_PRO  = 20;
-const AD_HOURS     = 1;
 const FREE_DAILY   = 50;  // free daily QUESTION allowance (shown in plan lists)
-const Q_FREE       = [5, 10, 15, 20];
-const Q_EXTRA      = [25, 30, 40, 50];
 const QUIZ_TYPES   = ["mcq","cards","fill","match"];
 const QT_ICON      = { mcq:"list", cards:"layers", fill:"pencil", match:"link" };
 // Phase 2: how many of a 10-question weak-spot drill may be reused from the
@@ -262,20 +259,12 @@ const DIFFICULTY = [
 const STRIPE_MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
 const STRIPE_YEARLY_PRICE  = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
 
-function getTodayStr() { return new Date().toLocaleDateString("en-US"); }
 function fmtMB(bytes)  { return (bytes/1024/1024).toFixed(1)+"MB"; }
 function fmtDate(iso)  {
   if (!iso) return "";
   try { return new Date(iso).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}); }
   catch { return ""; }
 }
-function msUntil(ts)   {
-  const d = ts - Date.now();
-  if (d <= 0) return null;
-  const h = Math.floor(d/3600000), m = Math.floor((d%3600000)/60000);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
 // Haptic feedback. navigator.vibrate exists only where the Vibration API is
 // implemented, Android phones/tablets. iOS Safari and virtually all desktop
 // browsers don't implement it, so this is a silent no-op there (exactly the
@@ -311,7 +300,7 @@ const SoundEngine = (() => {
       g.gain.linearRampToValueAtTime(vol, c.currentTime+start+0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime+start+dur);
       o.start(c.currentTime+start); o.stop(c.currentTime+start+dur+0.01);
-    } catch(e) {}
+    } catch { /* ignore */ }
   };
   return {
     click:     ()=>tone(780,'sine',0.05,0.12),
@@ -1111,7 +1100,7 @@ function UnlockModal({ feature, unlocks, onClose, onUpgrade, t }) {
 }
 
 // ── Flashcard ─────────────────────────────────────────────────────────
-function Flashcard({ q, onNext, isLast, t }) {
+function Flashcard({ q, onNext, t }) {
   const [flipped,setFlipped] = useState(false);
   const ans = q.answer || (q.options&&q.options[q.correct]) || "";
   return (
@@ -2714,7 +2703,6 @@ export default function StudyQuiz() {
   const sortedPlans = [...plans].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const homePlan = sortedPlans.find(p=>!isPlanComplete(p)) || sortedPlans[0] || null;
   const activePlan = plans.find(p=>p.id===activePlanId) || homePlan;
-  const topicsWeak = weakTopics(srs.cards); // weak areas from the review deck
   const mastery = topicMastery(srs.topicStats); // per-topic mastery across all quizzes/exams
   // ── Student model + adaptive difficulty (Phase 1) ──
   // One object gathering the signals the model reads (lifetime stats, per-topic
@@ -2790,8 +2778,6 @@ export default function StudyQuiz() {
   const examAddRef=useRef();
   const [examMode,    setExamMode]    = useState(null);
   const [examFiles,   setExamFiles]   = useState([]);
-  const [examMCQCount,setExamMCQCount]= useState("20");
-  const [examWrtCount,setExamWrtCount]= useState("10");
   const [examTotalQ,  setExamTotalQ]  = useState("20");
   const [examQs,      setExamQs]      = useState([]);
   const [examIdx,     setExamIdx]     = useState(0);
@@ -2942,7 +2928,7 @@ export default function StudyQuiz() {
           setSoundOn(d.sound!==false);
           if(d.volume!==undefined) SoundEngine.setVolume(d.volume);
         }
-      } catch {}
+      } catch { /* ignore */ }
       finally { setSettingsReady(true); } // unblocks the one-time adaptive apply
     })();
   },[]);
@@ -3593,7 +3579,7 @@ export default function StudyQuiz() {
 
   const haptic = (ms=35) => Haptics.buzz(ms);
 
-  const processFile = useCallback(async (f, limitMB) => {
+  const processFile = useCallback(async (f) => {
     const isPdf=f.type==="application/pdf", isImg=f.type.startsWith("image/"), isTxt=f.type.startsWith("text/")||/\.(txt|md|csv)$/i.test(f.name);
     if (!isPdf&&!isImg&&!isTxt) { setError(t.errFileType2); return; }
     try {

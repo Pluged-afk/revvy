@@ -65,7 +65,7 @@ self.addEventListener("notificationclick", (event) => {
 
 // Web Push (used once a backend sends daily reminders with VAPID keys).
 self.addEventListener("push", (event) => {
-  let d = {};
+  let d;
   try { d = event.data ? event.data.json() : {}; } catch { d = { body: event.data && event.data.text() }; }
   event.waitUntil(self.registration.showNotification(d.title || "Revyy", {
     body: d.body || "Time to study.",

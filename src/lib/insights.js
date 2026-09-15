@@ -4,8 +4,6 @@ import { planProgress } from "./planner.js";
 // stats, active plan). One number plus a short "focus here" list, from data we
 // already have. No extra storage, no API call.
 
-const DAY = 86400000;
-
 // a card is "solid" once it's been recalled twice and isn't overdue. freshly
 // missed cards drag readiness down until they're reviewed, which is the point.
 function isSolid(c, now) {

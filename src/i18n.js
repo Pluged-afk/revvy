@@ -286,7 +286,7 @@ const T_EN = {
   activatePro:"Activate Pro", activateNote:"Secure billing powered by Stripe.",
   // Payment / subscription
   upgradeToPro:"Upgrade to Pro", tryFree7Days:"Upgrade to Pro",
-  planMonthly:"Monthly", planYearly:"Yearly", bestValue:"Best Value",
+  planMonthly:"Monthly", planYearly:"Yearly",
   cancelAnytime:"Cancel anytime", cardRequired:"Card required",
   manageSubscription:"Manage Subscription", cardRequiredNote:"Cancel anytime · No commitment",
   trialNote:"Cancel anytime",
@@ -341,7 +341,7 @@ const T_EN = {
   scoreLbl:"Score", resultLbl:"Result", passLbl:"PASS", failLbl:"FAIL",
   timeUsedLbl:"Time Used", timeExpiredLbl:"Time Expired", answeredLbl:"Questions Answered",
   // ── Free-tier / ad-unlock flow ──
-  unlimited:"Unlimited", maxFileFree:"Max {n}MB (free)", freeMax:"(free max)", goPro:"Go Pro →", notNow:"Not now",
+  unlimited:"Unlimited", maxFileFree:"Max {n}MB (free)", freeMax:"(free max)", goPro:"Go Pro →",
   adWatchFile:"Watch ad, {n}MB uploads (1 hr)", adFileUsed:"{n}MB unlock used today",
   adWatchQ:"Watch ad, up to {n} questions/quiz (1 hr)", adQUsed:"{n}-question unlock used today",
   examAdUsed:"Used today, come back tomorrow, or go Pro for unlimited exams.",

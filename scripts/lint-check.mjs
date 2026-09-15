@@ -7,7 +7,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const BASELINE = 44; // known-accepted ESLint errors as of 2026-09-15. Ratchet DOWN, never up.
+const BASELINE = 25; // known-accepted ESLint errors as of 2026-09-15. Ratchet DOWN, never up.
 
 // Write the JSON report to a file so parsing never depends on capturing stdout
 // (eslint writes the -o file even when it exits non-zero because errors exist).
