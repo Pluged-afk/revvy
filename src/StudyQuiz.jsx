@@ -388,13 +388,23 @@ async function callClaude({ blocks, numQ, diff, type, uiLangName, learnerBrief, 
   if (parsed && Array.isArray(parsed.questions)) {
     parsed.questions = parsed.questions.map((q) =>
       q && typeof q === "object"
-        ? shuffleMCQOptions({ ...q, source: typeof q.source === "string" ? q.source.trim().slice(0, 240) : "" })
+        ? shuffleMCQOptions({
+            ...q,
+            question: deDash(q.question),
+            answer: deDash(q.answer),
+            explanation: deDash(q.explanation),
+            topic: deDash(q.topic),
+            options: Array.isArray(q.options) ? q.options.map(deDash) : q.options,
+            // source stays verbatim (it's an exact quote from the learner's own material)
+            source: typeof q.source === "string" ? q.source.trim().slice(0, 240) : "",
+          })
         : q
     );
   }
+  if (parsed) { parsed.title = deDash(parsed.title); parsed.subject = deDash(parsed.subject); }
   // Phase 3: cap the optional material summary (study library "memory"). Absent
   // on a truncated response, which is fine, the library just skips that upload.
-  if (parsed && typeof parsed.summary === "string") parsed.summary = parsed.summary.trim().slice(0, 1200);
+  if (parsed && typeof parsed.summary === "string") parsed.summary = deDash(parsed.summary.trim().slice(0, 1200));
   return parsed;
 }
 
@@ -410,6 +420,10 @@ async function readStream(res) {
 function stripFences(t) {
   return (t||"").trim().replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/\s*```$/i,"").trim();
 }
+// House rule: no em/en dashes in any user-facing text (a well-known AI tell). The
+// model reaches for them constantly, so strip them from generated content and
+// tutor replies, replacing with a comma. Non-strings pass through untouched.
+const deDash = (s) => typeof s === "string" ? s.replace(/\s*[—–]\s*/g, ", ") : s;
 
 // One-shot plain-text tutor completion via the same proxy (no JSON). Used by
 // the "Explain why" feature on wrong answers.
@@ -421,7 +435,8 @@ async function callClaudeText(prompt, max = 400) {
       messages:[{ role:"user", content:[{type:"text",text:prompt}] }] }),
   });
   if (!res.ok) throw new Error("explain failed");
-  return (await readStream(res)).trim();
+  // de-dash tutor explanations + short-answer grading feedback (see deDash)
+  return deDash((await readStream(res)).trim());
 }
 
 // Grade one short-answer response against its model answer. Fair and
