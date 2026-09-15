@@ -558,8 +558,12 @@ const STOP = new Set("the a an of to in on at for and or is are was were be been
 // reworded) collapse to one, keeping the pool diverse rather than 40 phrasings of
 // the same fact: the correct answer plus the salient words of the question.
 function conceptKey(q, correct) {
-  const words = String(q || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w));
-  const top = [...new Set(words)].sort().slice(0, 8).join(" ");
+  // Keep the most distinctive words: length >= 4 drops short function words (has,
+  // was, who, ...) without an exhaustive stop list, then take the longest few, so
+  // wording variants of the same fact ("has the symbol" vs "with symbol") collapse.
+  const words = [...new Set(String(q || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length >= 4 && !STOP.has(w)))];
+  words.sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+  const top = words.slice(0, 5).sort().join(" ");
   return arenaHash(String(correct || "").toLowerCase().trim() + "|" + top);
 }
 
