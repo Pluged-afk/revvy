@@ -4325,8 +4325,9 @@ export default function StudyQuiz() {
   const startSampleQuiz = useCallback(async (set) => {
     if (!set?.summary) return;
     const n = 10;
-    const consumed = await consumeQuestions(n);
-    if (consumed && consumed.allowed === false) { setError(isPro ? "Daily limit reached." : "Daily limit reached. Watch an ad or upgrade."); setScreen("upload"); return; }
+    // The starter is a one-time onboarding sample (shown once per account, fixed
+    // content), so it isn't counted against the daily limit: a brand-new learner's
+    // very first tap should always land the loop, never hit a "limit reached" wall.
     setScreen("loading");
     try {
       const blocks = [{ type: "text", text: `${set.title} (${set.subject})\n\n${set.summary}` }];
@@ -4341,7 +4342,7 @@ export default function StudyQuiz() {
       setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
       setScreen("quiz");
     } catch (err) { setError(err.message?.includes("parse") ? t.errAiFormat : err.message); setScreen("home"); }
-  }, [consumeQuestions, isPro, lang, t]);
+  }, [lang, t]);
   // First-run starter card: decide exactly ONCE whether this load is a genuine
   // first run, and latch it in a ref so persisting "seen" below never hides the
   // card mid-view. For a KNOWN signed-in user we wait for the server blob
@@ -4722,7 +4723,13 @@ export default function StudyQuiz() {
       if (unseen.length) setTimeout(() => srs.markBadgesSeen(unseen), 0); // silence future opens
       return;
     }
-    const fresh = now.filter((id) => !badgeBaselineRef.current.has(id));
+    // Celebrate only a badge that is new since our baseline AND not already in the
+    // account's synced `seen` list. A fresh device baselines an empty blob before
+    // the server sync lands, so without the `seen` check every already-earned badge
+    // would replay its toast + sound on that device. `seen` is account-tied, so the
+    // celebration is too.
+    const seen = new Set(srs.badges?.seen || []);
+    const fresh = now.filter((id) => !badgeBaselineRef.current.has(id) && !seen.has(id));
     if (!fresh.length) return;
     fresh.forEach((id) => badgeBaselineRef.current.add(id));
     const id = setTimeout(() => { setBadgeToast(fresh); srs.markBadgesSeen(fresh); SoundEngine.unlock(); fireBurst(); }, 450);
@@ -4732,11 +4739,12 @@ export default function StudyQuiz() {
   // Streak getting hotter: a rising flare (pitch scales with the count) the
   // moment the streak extends. Silent on first load.
   useEffect(() => {
+    if (!srs.loaded) return; // wait for the account blob, so a fresh device doesn't fire on the empty->loaded jump
     const s = stats.streak || 0;
     if (prevStreakRef.current == null) { prevStreakRef.current = s; if (_celebratedStreak < 0) _celebratedStreak = s; return; }
     if (s > prevStreakRef.current && s > _celebratedStreak) { _celebratedStreak = s; SoundEngine.streak(s); }
     prevStreakRef.current = s;
-  }, [stats.streak]);
+  }, [stats.streak, srs.loaded]);
   // Auto-dismiss the badge toast.
   useEffect(() => {
     if (!badgeToast) return;
@@ -4751,11 +4759,12 @@ export default function StudyQuiz() {
   }, [screen]);
   // Rank-up celebration: fanfare + confetti + a toast when the tier climbs.
   useEffect(() => {
+    if (!srs.loaded) return; // wait for the account blob, so a fresh device doesn't fire on the empty->loaded jump
     const r = myRankInfo.index;
     if (prevRankRef.current == null) { prevRankRef.current = r; if (_celebratedRankIdx < 0) _celebratedRankIdx = r; return; } // seed, don't fire on first load
     if (r > prevRankRef.current && r > _celebratedRankIdx) { _celebratedRankIdx = r; SoundEngine.rankUp(); fireBurst(); setRankToast(RANKS[r]); setTimeout(() => setRankToast(null), 5000); }
     prevRankRef.current = r;
-  }, [myRankInfo.index, fireBurst]);
+  }, [myRankInfo.index, fireBurst, srs.loaded]);
   // Shared "badge unlocked" toast, dropped into the finish screens + home.
   const badgeToastEl = badgeToast && badgeToast.length ? (
     <div style={{position:"fixed",left:0,right:0,bottom:20,zIndex:900,display:"flex",justifyContent:"center",pointerEvents:"none",padding:"0 14px"}}>
