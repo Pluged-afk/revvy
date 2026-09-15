@@ -47,6 +47,11 @@ const FAQ = [
   { q: "Is my data safe?", a: "We do not keep your uploaded files. They are used to build your quiz and then discarded. Our Privacy Policy has the full detail." },
 ];
 
+// static "on Pro" badge; module-scoped so it isn't re-created every render
+function ProActive() {
+  return <div className="pro-active-badge" aria-disabled="true"><Icon name="check" size={17} /> You are on Pro</div>;
+}
+
 export default function Pricing() {
   const { user, isPro, startCheckout, loading } = useAuth();
   const { t } = useLang();
@@ -66,10 +71,6 @@ export default function Pricing() {
     const { error } = await startCheckout(priceId);
     if (error) { setBusy(""); setErr(error); }
   };
-
-  const ProActive = () => (
-    <div className="pro-active-badge" aria-disabled="true"><Icon name="check" size={17} /> You are on Pro</div>
-  );
 
   return (
     <>
