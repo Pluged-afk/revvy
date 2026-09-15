@@ -5,6 +5,7 @@
 import { RANKS, rankFor, rankOf } from "../src/lib/badges.js";
 import { ARENA, comboMult, basePoints, questionPoints, timerFor, boardUnlocked, serveDifficulty } from "../src/lib/arena.js";
 import { reviewCard, previewInterval, initStability } from "../src/lib/fsrs.js";
+import { recommendDailyGoal } from "../src/lib/studentModel.js";
 
 let passed = 0, failed = 0;
 const eq = (got, want, msg) => {
@@ -63,6 +64,18 @@ let sc = { reps: 0, interval: 0, lapses: 0 }, tt = NOW, bounded = true;
 for (let i = 0; i < 15; i++) { const rr = reviewCard(sc, 3, tt); if (rr.difficulty < 1 || rr.difficulty > 10 || rr.stability <= 0) bounded = false; sc = { ...sc, ...rr }; tt = rr.due; }
 ok(bounded, "difficulty stays in 1..10 and stability positive across many reviews");
 ok(previewInterval({ reps: 0, interval: 0 }, 3) === reviewCard({ reps: 0, interval: 0 }, 3).interval, "previewInterval matches reviewCard");
+
+// ── Adaptive daily goal ──────────────────────────────────────────────────
+const RNOW = Date.now();
+eq(recommendDailyGoal({ stats: { answered: 0, streak: 0 }, perf: { recent: [] } }), 5, "brand-new learner gets a gentle daily goal of 5");
+eq(recommendDailyGoal({ stats: { answered: 5, streak: 7 }, perf: { recent: [] } }), 10, "newcomer daily goal ramps with the streak");
+ok(recommendDailyGoal({ stats: { answered: 5, streak: 40 }, perf: { recent: [] } }) <= 15, "newcomer goal capped at 15");
+const priorDays = { recent: [1, 2, 3].map((k) => ({ at: RNOW - k * DAY, total: 20, correct: 15 })) };
+eq(recommendDailyGoal({ stats: { answered: 200 }, perf: priorDays }), 20, "established learner's goal tracks their ~20/day");
+const heavyDays = { recent: [1, 2, 3, 4].map((k) => ({ at: RNOW - k * DAY, total: 200, correct: 150 })) };
+eq(recommendDailyGoal({ stats: { answered: 5000 }, perf: heavyDays }), 40, "heavy learner's goal capped at 40");
+const todayOnly = { recent: [{ at: RNOW, total: 200, correct: 150 }] };
+eq(recommendDailyGoal({ stats: { answered: 200 }, perf: todayOnly }), 5, "today's own sessions don't move today's goal");
 
 console.log(`\nSmoke tests: ${passed} passed, ${failed} failed.`);
 process.exit(failed ? 1 : 0);

@@ -12,7 +12,7 @@ import { useStudyStats } from "./lib/stats.js";
 import { usePlans } from "./context/StudyContext.jsx";
 import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, dayState } from "./lib/planner.js";
 import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
-import { recommendDifficulty, buildLearnerBrief, resultNudge } from "./lib/studentModel.js";
+import { recommendDifficulty, buildLearnerBrief, resultNudge, recommendDailyGoal } from "./lib/studentModel.js";
 import { makeBankItem, bankPick, buildAvoidNote, qhashOf } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { previewInterval } from "./lib/fsrs.js";
@@ -4702,9 +4702,10 @@ export default function StudyQuiz() {
   // themselves once they've felt the loop once, so the first screen never
   // overwhelms. Everything comes back the moment they've started.
   const hasStarted = (stats.answered || 0) > 0 || librarySize(srs.library) > 0;
-  // Daily goal: a small, reachable target that (with the streak) gives a reason
-  // to come back tomorrow. Counted in the study blob (srs.daily), resets daily.
-  const DAILY_GOAL = 10;
+  // Daily goal: a reachable target that (with the streak) gives a reason to come
+  // back tomorrow. Personalized to the learner's own recent typical day (a gentle
+  // ramp for newcomers). Counted in the study blob (srs.daily), resets daily.
+  const DAILY_GOAL = recommendDailyGoal({ stats: srs.stats, perf: srs.perf });
   const dailyToday = (srs.daily && srs.daily.date === new Date().toLocaleDateString("en-CA")) ? (srs.daily.count || 0) : 0;
   const dailyMet = dailyToday >= DAILY_GOAL;
   const dailyPct = Math.min(100, Math.round((dailyToday / DAILY_GOAL) * 100));

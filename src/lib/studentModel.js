@@ -171,3 +171,35 @@ export function studentSnapshot(study = {}) {
     sessions: (study?.perf?.recent || []).length,
   };
 }
+
+// Personalized daily question goal, replacing the old flat 10. Newcomers get a
+// gentle target that ramps with their streak; once there are a few days of real
+// history we aim at their own recent typical day (rounded to a nice number,
+// clamped). Prior days only, so the goal is stable for the whole of today rather
+// than moving as they answer. Pure; the goal always lands in [5, 40].
+export function recommendDailyGoal(study = {}) {
+  const perf = study?.perf?.recent || [];
+  const answered = study?.stats?.answered || 0;
+  const streak = Math.max(0, study?.stats?.streak || 0);
+  const DAY = 86400000;
+  const now = Date.now();
+  const today = new Date(now).toLocaleDateString("en-CA");
+
+  // sum questions per prior calendar day over the last two weeks
+  const byDay = {};
+  for (const s of perf) {
+    if (!s || !((s.total || 0) > 0)) continue;
+    if (now - (Number(s.at) || 0) > 14 * DAY) continue;
+    const day = new Date(Number(s.at) || 0).toLocaleDateString("en-CA");
+    if (day === today) continue; // base on prior days so today's goal doesn't move
+    byDay[day] = (byDay[day] || 0) + s.total;
+  }
+  const days = Object.values(byDay);
+
+  // not enough history: a gentle 5, nudged up as they build a streak (5/10/15)
+  if (days.length < 3 || answered < 20) return Math.min(15, 5 + Math.floor(streak / 7) * 5);
+
+  const avg = days.reduce((a, b) => a + b, 0) / days.length;
+  const round5 = Math.round(avg / 5) * 5;
+  return Math.min(40, Math.max(10, round5));
+}
