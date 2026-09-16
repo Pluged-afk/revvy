@@ -53,6 +53,13 @@ export default defineConfig(({ mode }) => {
   setEnv('STRIPE_WEBHOOK_SECRET', env.STRIPE_WEBHOOK_SECRET)
   setEnv('ANTHROPIC_API_KEY', env.ANTHROPIC_API_KEY)
   setEnv('BLOB_READ_WRITE_TOKEN', env.BLOB_READ_WRITE_TOKEN)
+  // Closed-app push (study reminders): VAPID keys + the cron secret. Only needed
+  // locally to exercise the reminder cron / test-push; on Vercel these come from
+  // the project env automatically.
+  setEnv('CRON_SECRET', env.CRON_SECRET)
+  setEnv('VAPID_PUBLIC_KEY', env.VAPID_PUBLIC_KEY)
+  setEnv('VAPID_PRIVATE_KEY', env.VAPID_PRIVATE_KEY)
+  setEnv('VAPID_SUBJECT', env.VAPID_SUBJECT)
 
   // Startup diagnostic, printed to the terminal running `npm run dev`.
   console.log(
@@ -61,7 +68,8 @@ export default defineConfig(({ mode }) => {
     `        CLERK_SECRET_KEY ..... ${process.env.CLERK_SECRET_KEY ? 'loaded' : 'MISSING'}\n` +
     `        STRIPE_SECRET_KEY .... ${process.env.STRIPE_SECRET_KEY ? 'loaded' : 'MISSING'}\n` +
     `        STRIPE_WEBHOOK_SECRET. ${process.env.STRIPE_WEBHOOK_SECRET ? 'loaded' : 'MISSING'}\n` +
-    `        ANTHROPIC_API_KEY .... ${process.env.ANTHROPIC_API_KEY ? 'loaded' : 'MISSING'}\n`
+    `        ANTHROPIC_API_KEY .... ${process.env.ANTHROPIC_API_KEY ? 'loaded' : 'MISSING'}\n` +
+    `        PUSH (VAPID+cron) ..... ${process.env.VAPID_PRIVATE_KEY && process.env.CRON_SECRET ? 'loaded' : 'not set'}\n`
   )
 
   return {

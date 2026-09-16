@@ -1582,8 +1582,11 @@ export default async function handler(req, res) {
     await ensureTables();
 
     // Daily reminder cron (Vercel Cron -> GET /api/study?cron=reminders). Auth is
-    // the platform CRON_SECRET, not a user session.
-    if (req.method === "GET" && req.query?.cron === "reminders") return runReminders(req, res);
+    // the platform CRON_SECRET, not a user session. Parse the query straight from
+    // the URL as well, so it also fires under the local dev shim (which, unlike
+    // Vercel, does not populate req.query).
+    const cronParam = req.query?.cron ?? new URLSearchParams((req.url || "").split("?")[1] || "").get("cron");
+    if (req.method === "GET" && cronParam === "reminders") return runReminders(req, res);
 
     // Public share paths (no account required).
     if (req.method === "GET" && req.query?.shared) {
