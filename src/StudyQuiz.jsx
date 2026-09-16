@@ -16,7 +16,7 @@ import { recommendDifficulty, buildLearnerBrief, resultNudge, recommendDailyGoal
 import { makeBankItem, bankPick, buildAvoidNote } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { previewInterval } from "./lib/fsrs.js";
-import { LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, THEME_LIGHT, THEME_DARK, AI_MODEL, DIFFICULTY, QUESTION_PACKS, ADS_ENABLED } from "./studyquiz/constants.js";
+import { LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, THEME_LIGHT, THEME_DARK, AI_MODEL, DIFFICULTY, QUESTION_PACKS, ADS_ENABLED, STARTER_EXAMS, STARTER_SUBJECTS } from "./studyquiz/constants.js";
 import { Sb, CSS } from "./studyquiz/styles.js";
 import { stripEmoji, computeUnread, activityText, timeAgo, parseQuizlet, sectionPerQMarks, sectionMarksTotal, roundMarks, fmtMB, fmtDate, stripFences, shuffleMCQOptions } from "./studyquiz/helpers.js";
 import { AvatarInitial, Medallion, NotifBubble, GroupAvatar, StreakFlame, RankPill, BadgeGlyph, Flair, Logo, PBar, Chip, Segmented, Toggle } from "./studyquiz/components.jsx";
@@ -794,45 +794,6 @@ function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAc
     </div>
   );
 }
-
-// Starter library: ready-made warm-ups a brand-new user (no material of their
-// own yet) can quiz on in one tap, so they feel the core "make a quiz" magic
-// before uploading anything. Grouped by GOAL: the eight exams Revyy has mocks
-// for (so a serious prepper sees THEIR test, not generic trivia) and a few
-// broad subjects. Each summary is rich enough for the AI to build a solid
-// 10-question set; questions are generated in the user's UI language.
-const STARTER_EXAMS = [
-  { id: "starter_sat", emoji: "📝", title: "SAT", subject: "SAT",
-    summary: "A warm-up mixing the digital SAT's core skills: standard English grammar and punctuation (subject-verb agreement, commas, transitions, concision), reading a short passage for its main idea and evidence, and the most common math topics, linear equations, ratios and percentages, and basic functions." },
-  { id: "starter_act", emoji: "📘", title: "ACT", subject: "ACT",
-    summary: "A warm-up covering the ACT's core skills: English grammar and punctuation, reading for main idea and detail, core algebra and geometry (equations, ratios, area and angles), and interpreting a simple data table or graph the way the science section expects." },
-  { id: "starter_psat", emoji: "✏️", title: "PSAT", subject: "PSAT/NMSQT",
-    summary: "A warm-up mirroring the digital PSAT and SAT: standard English grammar and punctuation, reading a short passage for its main idea, and common math topics, linear equations, ratios and percentages, and basic functions." },
-  { id: "starter_gre", emoji: "🎓", title: "GRE", subject: "GRE",
-    summary: "A warm-up on the GRE's core skills: high-frequency academic vocabulary used in context, reading comprehension and inference, and quantitative reasoning basics, arithmetic, ratios and percentages, algebra, and simple data interpretation." },
-  { id: "starter_gmat", emoji: "📊", title: "GMAT", subject: "GMAT",
-    summary: "A warm-up on GMAT Focus skills: critical reasoning (spotting an argument's assumption and what strengthens or weakens it), quantitative problem solving (algebra, ratios, word problems), and reading a short table or chart to reach a decision." },
-  { id: "starter_lsat", emoji: "⚖️", title: "LSAT", subject: "LSAT",
-    summary: "A warm-up on LSAT logical reasoning: identifying an argument's conclusion and its support, naming the assumption, spotting a flaw, and choosing what would most strengthen or weaken a short argument, plus careful reading for a passage's main point." },
-  { id: "starter_mcat", emoji: "🧪", title: "MCAT", subject: "MCAT",
-    summary: "A warm-up on MCAT foundations: cell biology and biochemistry basics (macromolecules, enzymes, metabolism), general and organic chemistry fundamentals (bonding, acids and bases, functional groups), and a touch of introductory psychology and sociology terms." },
-  { id: "starter_ucat", emoji: "🩺", title: "UCAT", subject: "UCAT",
-    summary: "A warm-up on UCAT-style reasoning: reading a short passage to judge whether a statement follows, quantitative reasoning from a table or chart, spotting the pattern in an abstract set, and a simple logical decision-making puzzle." },
-];
-const STARTER_SUBJECTS = [
-  { id: "starter_bio", emoji: "🧬", title: "Biology Basics", subject: "Biology",
-    summary: "Cells are the basic unit of life. Prokaryotic cells (bacteria) have no nucleus, while eukaryotic cells (plants, animals, fungi) keep their DNA inside a membrane-bound nucleus. Key organelles: mitochondria produce ATP energy through cellular respiration; chloroplasts in plant cells carry out photosynthesis, converting carbon dioxide and water into glucose and oxygen using sunlight; ribosomes build proteins; the cell membrane controls what enters and leaves. DNA is made of four bases (A, T, C, G) and carries genetic instructions; it is copied during replication and read to make proteins via transcription and translation. Mitosis produces two identical cells for growth; meiosis produces four genetically varied sex cells. Osmosis is the movement of water across a membrane from low to high solute concentration." },
-  { id: "starter_world", emoji: "🌍", title: "World History", subject: "History",
-    summary: "Ancient civilizations arose along rivers: Mesopotamia between the Tigris and Euphrates, Egypt along the Nile, the Indus Valley, and China's Yellow River. The Roman Empire fell in 476 CE. The Middle Ages followed in Europe, then the Renaissance (roughly 1400 to 1600) revived art and learning. The printing press was invented by Gutenberg around 1440. The Industrial Revolution began in Britain in the late 1700s, shifting economies to factories and steam power. World War I ran from 1914 to 1918; World War II from 1939 to 1945, ending after the atomic bombings of Hiroshima and Nagasaki. The Cold War was a rivalry between the United States and the Soviet Union. The Berlin Wall fell in 1989." },
-  { id: "starter_chem", emoji: "⚗️", title: "Chemistry Essentials", subject: "Chemistry",
-    summary: "Atoms consist of protons and neutrons in a nucleus, with electrons around it. The atomic number is the number of protons and defines the element. The periodic table arranges elements by atomic number; columns are groups and rows are periods. Chemical bonds: ionic bonds transfer electrons (metal plus nonmetal, like sodium chloride), while covalent bonds share electrons (nonmetals, like water H2O). A mole is 6.022 times 10 to the 23 particles (Avogadro's number). pH measures acidity: below 7 is acidic, 7 is neutral, above 7 is basic. In a chemical equation, reactants form products, and mass is conserved so equations must be balanced. Exothermic reactions release heat; endothermic reactions absorb it." },
-  { id: "starter_psych", emoji: "🧠", title: "Psychology 101", subject: "Psychology",
-    summary: "Classical conditioning, shown by Pavlov's dogs, pairs a neutral stimulus with one that triggers a response until the neutral one alone triggers it. Operant conditioning, studied by B. F. Skinner, shapes behavior through reinforcement (which increases behavior) and punishment (which decreases it). Maslow's hierarchy of needs rises from physiological needs to safety, belonging, esteem, and self-actualization. Long-term memory differs from short-term (working) memory, which holds about seven items. The brain's regions include the amygdala (emotion and fear), the hippocampus (forming memories), and the prefrontal cortex (planning and decisions). Confirmation bias is favoring information that supports existing beliefs. The nature versus nurture debate weighs genetics against environment in shaping behavior." },
-  { id: "starter_geo", emoji: "🗺️", title: "World Geography", subject: "Geography",
-    summary: "Earth has seven continents: Asia, Africa, North America, South America, Antarctica, Europe, and Australia. The largest ocean is the Pacific. The longest river is the Nile (though the Amazon carries the most water); the highest mountain is Everest. Capitals to know: France is Paris, Japan is Tokyo, Australia is Canberra (not Sydney), Canada is Ottawa, Brazil is Brasilia, Egypt is Cairo. The equator divides the Northern and Southern Hemispheres; the Prime Meridian sets zero longitude. The Sahara is the largest hot desert. Russia is the largest country by area; China and India are the most populous. Latitude lines run east to west; longitude lines run north to south." },
-  { id: "starter_gk", emoji: "💡", title: "General Knowledge", subject: "Trivia",
-    summary: "A varied mix of common knowledge. Water is made of two hydrogen atoms and one oxygen atom. There are eight planets in the solar system; Jupiter is the largest and Mercury is closest to the Sun. Light travels faster than sound, which is why lightning is seen before thunder. The human body has 206 bones and the heart has four chambers. Shakespeare wrote Romeo and Juliet and Hamlet. The Mona Lisa was painted by Leonardo da Vinci. A triangle's angles add up to 180 degrees. The freezing point of water is 0 degrees Celsius and boiling is 100. The speed of light is about 300,000 kilometres per second. Photosynthesis produces the oxygen we breathe." },
-];
 
 export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
@@ -5804,6 +5765,7 @@ export default function StudyQuiz() {
 
   return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} t={t}/>;
 }
+
 
 
 
