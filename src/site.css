@@ -28,43 +28,46 @@
 }
 
 /* Dark theme, driven by data-theme on <html> (set from the saved settings, so the
-   whole marketing site follows the app's appearance choice). The variable flip
-   cascades to everything variable-driven; the handful of hardcoded surfaces get
-   an explicit dark override below. The footer + indigo blocks are already dark. */
+   whole marketing site follows the app's appearance choice). Surfaces + text are
+   PURE NEUTRAL GRAY, matching the app's dark tokens: this app's dark mode must
+   carry no warmth (warm-neutral grays read as an unpleasant beige/yellow tint).
+   The warm-editorial identity is carried by LIGHT mode + the serif + the accents.
+   Success/danger reuse the app's semantic dark tokens for cohesion. */
 [data-theme="dark"] {
-  --paper:      #1b1916;
-  --paper-2:    #211e18;
-  --paper-3:    #26221b;
-  --card:       #24201a;
-  --ink:        #f2eee5;
-  --ink-soft:   #c3bcae;
-  --muted:      #918a7d;
-  --faint:      #6e685d;
-  --line:       #38322a;
-  --line-soft:  #2b2620;
-  --indigo:     #8b83f2;
-  --clay:       #d97a5a;
-  --clay-soft:  #382822;
-  --gold:       #d3a850;
-  --gold-soft:  #322e1e;
-  --green:      #5ea888;
-  --shadow-sm:  0 1px 2px rgba(0,0,0,0.45);
-  --shadow-md:  0 14px 34px rgba(0,0,0,0.55);
+  --paper:      #181818;
+  --paper-2:    #1f1f1f;
+  --paper-3:    #262626;
+  --card:       #242424;
+  --ink:        #ececec;
+  --ink-soft:   #a6a6a6;
+  --muted:      #8a8a8a;
+  --faint:      #6e6e6e;
+  --line:       #333333;
+  --line-soft:  #262626;
+  --indigo:     #a3a4f7;
+  --clay:       #d98565;
+  --clay-soft:  #2a2320;
+  --gold:       #ccb06c;
+  --gold-soft:  #29261f;
+  --green:      #63cd91;
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.5);
+  --shadow-md:  0 14px 34px rgba(0,0,0,0.6);
 }
-[data-theme="dark"] .nav { background: rgba(24,22,19,0.85); }
-[data-theme="dark"] .qpill { background: #2d2941; color: #b9b2f5; }
-[data-theme="dark"] .qopt.correct { border-color: #2f6b45; background: #17271c; color: #79c79a; }
+[data-theme="dark"] .nav { background: rgba(24,24,24,0.85); }
+[data-theme="dark"] .footer { background: #141414; color: #a6a6a6; }
+[data-theme="dark"] .qpill { background: #2d2d40; color: #b9b2f5; }
+[data-theme="dark"] .qopt.correct { border-color: #2d4a37; background: #18291c; color: #63cd91; }
 [data-theme="dark"] .qopt.correct .k { background: #2f9e5c; }
-[data-theme="dark"] .qopt.wrong { border-color: #7a3630; background: #2a1713; color: #e9a396; }
+[data-theme="dark"] .qopt.wrong { border-color: #472a20; background: #2c1a15; color: #ef9e8c; }
 [data-theme="dark"] .qopt.wrong .k { background: #c0463a; }
-[data-theme="dark"] .qexpl { background: #17271c; border-color: #2f6b45; color: #79c79a; }
-[data-theme="dark"] .qexpl.wrong { background: #2a1713; border-color: #7a3630; color: #e9a396; }
-[data-theme="dark"] .qdots button { background: #4a4237; }
+[data-theme="dark"] .qexpl { background: #18291c; border-color: #2d4a37; color: #63cd91; }
+[data-theme="dark"] .qexpl.wrong { background: #2c1a15; border-color: #472a20; color: #ef9e8c; }
+[data-theme="dark"] .qdots button { background: #444444; }
 [data-theme="dark"] .note-pill,
 [data-theme="dark"] .form-success,
-[data-theme="dark"] .auth-info { background: #16261d; border-color: #2f5a44; color: #79c79a; }
-[data-theme="dark"] .auth-error { background: #2a1713; border-color: #6e332a; color: #e9a396; }
-[data-theme="dark"] .btn-ghost-light:hover { background: rgba(242,238,229,0.08); }
+[data-theme="dark"] .auth-info { background: #18291c; border-color: #2d4a37; color: #63cd91; }
+[data-theme="dark"] .auth-error { background: #2c1a15; border-color: #472a20; color: #ef9e8c; }
+[data-theme="dark"] .btn-ghost-light:hover { background: rgba(236,236,236,0.08); }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }

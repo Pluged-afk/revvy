@@ -42,5 +42,5 @@ export function applyAppearance() {
   if (document.body) document.body.classList.toggle("no-anim", !animations);
   // Match the browser chrome (address bar) to the theme.
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", resolved === "dark" ? "#1b1916" : "#fbf9f4");
+  if (meta) meta.setAttribute("content", resolved === "dark" ? "#181818" : "#fbf9f4");
 }
