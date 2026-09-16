@@ -82,3 +82,12 @@ export const DIFFICULTY = [
   { name:"Normal", guide:"A standard, fair exam question, the level most students expect by default. Test real understanding and straightforward application (Bloom: Understand or Apply): connect two related ideas, apply a concept to a clear example, or take one clear reasoning step. Distractors should be genuinely plausible and reflect common honest misconceptions, not word games. Solid but not punishing." },
   { name:"Hard",   guide:"Genuinely hard through DEPTH, not trickery. Require multi-step reasoning, connecting several concepts, applying ideas to a NEW or unfamiliar scenario, or analysing and evaluating relationships and trade-offs (Bloom: Apply, Analyze or Evaluate). Distractors are close and demand careful discrimination by someone who truly understands. The challenge must come from how much thinking and how many concepts are needed, NEVER from gotcha wording, deliberate ambiguity, obscure trivia, or tedious busywork. A well-prepared student should still get it by reasoning carefully." },
 ];
+
+// Question-pack top-up options (shown in the packs modal + usage panel).
+// One-time top-ups added to the bonus balance (never expire, used after the
+// daily allowance). Shown from the "limit reached" message and from Settings.
+export const QUESTION_PACKS = [
+  { id:"A", q:"500",   price:"€1.99", blurbKey:"packBlurbA" },
+  { id:"B", q:"1,500", price:"€4.99", blurbKey:"packBlurbB", best:true },
+  { id:"C", q:"3,000", price:"€8.99", blurbKey:"packBlurbC" },
+];
