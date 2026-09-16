@@ -13,6 +13,7 @@ import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, d
 import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
 import { recommendDifficulty, buildLearnerBrief, resultNudge, recommendDailyGoal } from "./lib/studentModel.js";
 import { detectOvertakes } from "./lib/overtake.js";
+import { DEMO_QUIZ } from "./data/demoQuiz.js";
 import { makeBankItem, bankPick, buildAvoidNote } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { previewInterval } from "./lib/fsrs.js";
@@ -2153,6 +2154,15 @@ export default function StudyQuiz() {
       setScreen("quiz");
     } catch (err) { setError(err.message?.includes("parse") ? t.errAiFormat : err.message); setScreen("home"); }
   }, [lang, t]);
+  // Signed-out visitors get a real taste of the loop with a hand-written sampler:
+  // no account and no AI call (so it can't be abused for free generation and
+  // always loads instantly). Marked demo so the results screen invites sign-up.
+  const startDemoQuiz = useCallback(() => {
+    genBlocksRef.current = null;
+    setQuiz({ title: DEMO_QUIZ.title, subject: DEMO_QUIZ.subject, questions: DEMO_QUIZ.questions, type: "mcq", fresh: false, genDiff: "easy", sample: true, demo: true });
+    setQIdx(0); setAnswers([]); setSelected(null); setQuizElim([]);
+    setScreen("quiz");
+  }, []);
   // First-run starter card: decide exactly ONCE whether this load is a genuine
   // first run, and latch it in a ref so persisting "seen" below never hides the
   // card mid-view. For a KNOWN signed-in user we wait for the server blob
@@ -2738,7 +2748,17 @@ export default function StudyQuiz() {
             their own, give them a one-tap path to a real quiz on a ready-made
             topic, so the core loop lands before any upload. Disappears once they
             have their own material. Shown once ever (see showStarter one-shot). */}
-        {showStarter && librarySize(srs.library)===0 && (
+        {/* Signed-out visitor: a real, instant taste of the loop (hand-written,
+            no account, no AI call). Signed-in newcomers get the AI starter grid
+            below instead. */}
+        {!user && (
+          <div style={{background:"linear-gradient(135deg,#4338ca,#6366f1)",borderRadius:16,padding:"18px",marginBottom:18,boxShadow:"0 6px 20px rgba(67,56,202,0.22)"}}>
+            <div style={{fontWeight:800,fontSize:15.5,color:"#fff",marginBottom:3}}>{t.demoTitle||"Try a sample quiz"}</div>
+            <div style={{fontSize:12.5,color:"rgba(255,255,255,0.85)",lineHeight:1.5,marginBottom:14}}>{t.demoSub||"See how Revyy works in 7 quick questions. No signup needed."}</div>
+            <button onClick={startDemoQuiz} style={{background:"#fff",color:"#4338ca",border:"none",borderRadius:11,padding:"11px 20px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 2px 10px rgba(0,0,0,0.14)"}}>{t.demoStart||"Start the sample →"}</button>
+          </div>
+        )}
+        {showStarter && librarySize(srs.library)===0 && user && (
           <div style={{background:"linear-gradient(135deg,#4338ca,#6366f1)",borderRadius:16,padding:"18px 18px 16px",marginBottom:18,boxShadow:"0 6px 20px rgba(67,56,202,0.22)"}}>
             <div style={{fontWeight:800,fontSize:15.5,color:"#fff",marginBottom:3}}>{t.starterGoalTitle||"What are you studying for?"}</div>
             <div style={{fontSize:12.5,color:"rgba(255,255,255,0.85)",lineHeight:1.5,marginBottom:13}}>{t.starterSub||"One tap to a 10-question warm-up. No notes needed."}</div>
@@ -3413,6 +3433,13 @@ export default function StudyQuiz() {
         {stats.streak>0 && <div style={{marginTop:16,display:"flex",justifyContent:"center"}}><span style={{display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.13)",borderRadius:999,padding:"6px 15px"}}><StreakFlame count={stats.streak} size={19}/><span style={{fontSize:12.5,color:"rgba(255,255,255,0.88)",fontWeight:600}}>{t.dayStreakLabel||"day streak"}</span></span></div>}
       </div>
       <div className="rv-center" style={{padding:"20px 16px"}}>
+        {!user && (
+          <div style={{background:"linear-gradient(135deg,#4338ca,#6366f1)",borderRadius:14,padding:"16px",marginBottom:16,textAlign:"center",boxShadow:"0 6px 20px rgba(67,56,202,0.22)"}}>
+            <div style={{fontWeight:800,fontSize:15,color:"#fff",marginBottom:4}}>{t.demoDoneTitle||"That's the Revyy loop."}</div>
+            <div style={{fontSize:12.5,color:"rgba(255,255,255,0.88)",lineHeight:1.5,marginBottom:13}}>{t.demoDoneSub||"Create a free account to make quizzes from your own notes, PDFs and slides, and to save your streak."}</div>
+            <button onClick={()=>navigate("/signup")} style={{background:"#fff",color:"#4338ca",border:"none",borderRadius:11,padding:"11px 22px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 2px 10px rgba(0,0,0,0.14)"}}>{t.demoDoneCta||"Create your free account →"}</button>
+          </div>
+        )}
         {earnedReward && (
           <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--color-sel-tint)",border:"1px solid var(--color-accent)",borderRadius:12,padding:"11px 14px",marginBottom:16}}>
             <Icon name="gem" size={18} style={{color:"var(--color-accent)",flexShrink:0}}/>
@@ -3467,7 +3494,7 @@ export default function StudyQuiz() {
           <button style={{...Sb.btnOutline,flex:1,margin:0,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={printStudySheet}><Icon name="notes" size={16}/>{t.printSheet||"Print / PDF"}</button>
         </div>
         {scoreCardOpen && <ScoreCardModal t={t} onClose={()=>setScoreCardOpen(false)} data={{ score, total:quiz.questions.length, pct: quiz.questions.length?Math.round(score/quiz.questions.length*100):0, subject: quiz.subject||quiz.title||"", rankEmoji: RANKS[myRankInfo.index]?.emoji, rankName:(t["rank_"+RANKS[myRankInfo.index]?.key])||RANKS[myRankInfo.index]?.name, xp: myRankInfo.xp, streak: stats.streak||0 }}/>}
-        <button style={{...Sb.btnOutline,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="trophy" size={16}/>{t.challengeFriend}</span>}</button>
+        {user && <button style={{...Sb.btnOutline,width:"100%",margin:"0 0 14px",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={createShareLink} disabled={shareBusy}>{shareBusy?t.shareCreating:<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="trophy" size={16}/>{t.challengeFriend}</span>}</button>}
         {shareOpen && <ShareModal link={shareLink} err={shareErr} copied={shareCopied} onCopy={copyShare} onClose={()=>setShareOpen(false)} challengeScore={`${score}/${quiz.questions.length}`} t={t}/>}
         {!isPro&&adsOn&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,background:"var(--color-background-secondary)",border:"0.5px dashed var(--color-border-secondary)",borderRadius:10,padding:"8px 14px",fontSize:12,color:"var(--color-text-tertiary)",marginBottom:14}}><Icon name="volume" size={13}/>{t.advertisement}</div>}
         <p style={Sb.secLabel}>{t.review}</p>
@@ -3478,7 +3505,7 @@ export default function StudyQuiz() {
               <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}><span style={{flexShrink:0,display:"inline-flex",marginTop:1}}>{a?.isCorrect?<Icon name="check" size={16} stroke={2.6} style={{color:"#16a34a"}}/>:<Icon name="x" size={16} stroke={2.6} style={{color:"#dc2626"}}/>}</span><span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4}}>{q.question}<SourceMark source={q.source} label={t.srcSeeQuestion} t={t}/></span></div>
               {!a?.isCorrect&&a&&<div style={{fontSize:12,color:"#dc2626",marginBottom:4,paddingLeft:23}}>{t.yourAns} {a.chosen||", "}</div>}
               <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {q.answer||""}<SourceMark source={q.source} label={t.srcSeeAnswer} quoteLabel={t.srcConfirmsAnswer} t={t}/></div>
-              {!a?.isCorrect&&<ExplainBox t={t} ctx={{question:q.question,correct:q.answer||"",picked:a?.chosen||"",subject:quiz.subject}}/>}
+              {!a?.isCorrect&&user&&<ExplainBox t={t} ctx={{question:q.question,correct:q.answer||"",picked:a?.chosen||"",subject:quiz.subject}}/>}
             </div>;
           })
         :
@@ -3491,7 +3518,7 @@ export default function StudyQuiz() {
               <div style={{fontSize:12,color:"#16a34a",marginBottom:6,paddingLeft:23,fontWeight:500}}>{t.correctAns} {(quiz.type==="mcq"||quiz.type==="diagram")?q.options?.[q.correct]:(q.answer||"")}<SourceMark source={q.source} label={t.srcSeeAnswer} quoteLabel={t.srcConfirmsAnswer} t={t}/></div>
               {quiz.type==="written"&&a?.feedback&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingLeft:23,marginBottom:4}}>{a.feedback}</div>}
               {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.55,paddingTop:8,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:23}}>{q.explanation}</div>}
-              {!a?.isCorrect&&quiz.type!=="written"&&<ExplainBox t={t} ctx={{question:q.question,correct:(quiz.type==="mcq"||quiz.type==="diagram")?(q.options?.[q.correct]??""):(q.answer||""),picked:(quiz.type==="mcq"||quiz.type==="diagram")?(q.options?.[a?.selected]??""):(a?.picked||""),subject:quiz.subject}}/>}
+              {!a?.isCorrect&&user&&quiz.type!=="written"&&<ExplainBox t={t} ctx={{question:q.question,correct:(quiz.type==="mcq"||quiz.type==="diagram")?(q.options?.[q.correct]??""):(q.answer||""),picked:(quiz.type==="mcq"||quiz.type==="diagram")?(q.options?.[a?.selected]??""):(a?.picked||""),subject:quiz.subject}}/>}
             </div>;
           })
         }

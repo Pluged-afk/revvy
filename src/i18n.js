@@ -31,6 +31,8 @@ const T_EN = {
   tagline:"Turn any material into a quiz",
   sub:"Upload a PDF, paste notes, take a photo, Revyy builds your quiz in seconds.", start:"Get started →",
   starterTitle:"Try a quick quiz", starterSub:"One tap to a 10-question warm-up. No notes needed.",
+  demoTitle:"Try a sample quiz", demoSub:"See how Revyy works in 7 quick questions. No signup needed.", demoStart:"Start the sample →",
+  demoDoneTitle:"That's the Revyy loop.", demoDoneSub:"Create a free account to make quizzes from your own notes, PDFs and slides, and to save your streak.", demoDoneCta:"Create your free account →",
   starterGoalTitle:"What are you studying for?", starterSubjectsLabel:"Or try a subject",
   dailyGoalTitle:"Daily goal", dailyGoalDone:"Daily goal done!", dailyGoalProgress:"{n} of {g} questions today",
   dailyStreakSafe:"🔥 {s}-day streak, safe for today", dailyStreakKeep:"🔥 {s}-day streak", dailyDoneNoStreak:"Nice. Come back tomorrow to start a streak.",
