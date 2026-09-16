@@ -5,6 +5,11 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Apply the saved theme before first paint so there is no light/dark flash. -->
+    <script>
+      (function(){try{var s=JSON.parse(localStorage.getItem("revyy_settings")||"{}")||{};var t=s.theme==="dark"?"dark":s.theme==="light"?"light":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",t==="dark"?"#1b1916":"#fbf9f4");}catch(e){}})();
+    </script>
+
     <!-- Primary SEO -->
     <title>Revyy: Practice Quizzes & Mock Exams From Your Own Notes</title>
     <meta name="description" content="Revyy is a free study tool for students. Upload a PDF or paste your notes and get practice quizzes and graded mock exams built from your own material. Spaced review brings back what you get wrong, right up to exam day." />

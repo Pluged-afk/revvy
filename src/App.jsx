@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { ClerkProvider } from '@clerk/clerk-react'
+import { applyAppearance } from './lib/appearance.js'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { StudyProvider } from './context/StudyContext.jsx'
 import { LanguageProvider } from './context/LanguageContext.jsx'
@@ -27,6 +29,28 @@ import './site.css'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
+// Applies theme + font-scale from the saved settings to the whole document (the
+// marketing site as well as the app), and keeps them in sync when the settings
+// change (a `revyy-appearance` event the app fires), across tabs (storage), or
+// when the OS colour scheme flips for "system".
+function AppearanceApplier() {
+  useEffect(() => {
+    applyAppearance();
+    const reapply = () => applyAppearance();
+    const onStorage = (e) => { if (!e || e.key === 'revyy_settings') applyAppearance(); };
+    window.addEventListener('revyy-appearance', reapply);
+    window.addEventListener('storage', onStorage);
+    let mq;
+    try { mq = window.matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener?.('change', reapply); } catch { /* ignore */ }
+    return () => {
+      window.removeEventListener('revyy-appearance', reapply);
+      window.removeEventListener('storage', onStorage);
+      try { mq?.removeEventListener?.('change', reapply); } catch { /* ignore */ }
+    };
+  }, []);
+  return null;
+}
+
 // Clerk lives inside the router so its path-based <SignIn>/<SignUp> components
 // navigate through react-router instead of full page reloads.
 function ClerkRoutes() {
@@ -41,6 +65,7 @@ function ClerkRoutes() {
       <LanguageProvider>
       <AuthProvider>
         <DevWidget />
+        <AppearanceApplier />
         <Routes>
           {/* Marketing website, navbar + footer layout */}
           <Route element={<SiteLayout />}>

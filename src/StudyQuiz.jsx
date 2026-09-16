@@ -17,7 +17,7 @@ import { DEMO_QUIZ } from "./data/demoQuiz.js";
 import { makeBankItem, bankPick, buildAvoidNote } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { previewInterval } from "./lib/fsrs.js";
-import { LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, THEME_LIGHT, THEME_DARK, AI_MODEL, DIFFICULTY, ADS_ENABLED, STARTER_EXAMS, STARTER_SUBJECTS, STRIPE_MONTHLY_PRICE, STRIPE_YEARLY_PRICE } from "./studyquiz/constants.js";
+import { LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, AI_MODEL, DIFFICULTY, ADS_ENABLED, STARTER_EXAMS, STARTER_SUBJECTS, STRIPE_MONTHLY_PRICE, STRIPE_YEARLY_PRICE } from "./studyquiz/constants.js";
 import { Sb, CSS } from "./studyquiz/styles.js";
 import { stripEmoji, computeUnread, activityText, timeAgo, parseQuizlet, sectionPerQMarks, sectionMarksTotal, roundMarks, fmtMB, stripFences, shuffleMCQOptions } from "./studyquiz/helpers.js";
 import { AvatarInitial, Medallion, NotifBubble, GroupAvatar, StreakFlame, RankPill, BadgeGlyph, Flair, Logo, PBar, Chip, Segmented, Toggle } from "./studyquiz/components.jsx";
@@ -54,26 +54,6 @@ const SHOW_ARENA_LEADERBOARD = true;
 // purpose; the transcriber pulls the audio out of whatever container it gets.
 const MEDIA_MAX_MB = 100;
 
-// Phone-style light/dark toggle: moon on the left, sun on the right, a knob that
-// slides to the side you're on (left = dark, right = light). `onDark` styles it
-// for a dark surface (the app hero); otherwise it uses theme tokens.
-function ThemeSwitch({ isDark, onToggle, onDark }) {
-  const track = onDark
-    ? { background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.32)" }
-    : { background: "var(--color-background-secondary)", border: "1px solid var(--color-border-secondary)" };
-  const dim = onDark ? "rgba(255,255,255,0.6)" : "var(--color-text-tertiary)";
-  return (
-    <button type="button" role="switch" aria-checked={isDark} aria-label="Toggle dark mode"
-      title={isDark ? "Switch to light mode" : "Switch to dark mode"} onClick={onToggle}
-      style={{ position: "relative", width: 54, height: 30, borderRadius: 999, padding: 0, cursor: "pointer", flexShrink: 0, ...track }}>
-      <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", display: "flex", color: dim, pointerEvents: "none" }}><Icon name="moon" size={13} /></span>
-      <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", display: "flex", color: dim, pointerEvents: "none" }}><Icon name="sun" size={13} /></span>
-      <span style={{ position: "absolute", top: 3, left: isDark ? 3 : 27, width: 24, height: 24, borderRadius: "50%", background: "#fff", color: "#4338ca", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.28)", transition: "left .2s ease" }}>
-        <Icon name={isDark ? "moon" : "sun"} size={13} />
-      </span>
-    </button>
-  );
-}
 
 // ── Limits ────────────────────────────────────────────────────────────
 const FREE_MAX_Q   = 20;
@@ -795,34 +775,10 @@ export default function StudyQuiz() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
-  // ── Theme injection into document.head ──
-  // "system" resolves to light/dark via prefers-color-scheme so the CSS
-  // colour variables are ALWAYS defined (otherwise the settings panel and
-  // other surfaces using var(--color-*) would render transparent).
-  useEffect(()=>{
-    let el=document.getElementById("revyy-theme");
-    if(!el){el=document.createElement("style");el.id="revyy-theme";document.head.appendChild(el);}
-    const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const resolved = settings.theme==="dark" ? "dark"
-      : settings.theme==="light" ? "light"
-      : (prefersDark ? "dark" : "light");
-    el.textContent = resolved==="dark" ? THEME_DARK : THEME_LIGHT;
-  },[settings.theme]);
-
-  // ── Font size injection ──
-  useEffect(()=>{
-    // Scale the WHOLE app, not just body text: most of the UI uses inline pixel
-    // sizes, so a plain font-size rule barely moved. `zoom` scales everything
-    // (inline px included) and, unlike transform:scale, keeps fixed overlays put.
-    const z = settings.fontSize==="small" ? "0.9" : settings.fontSize==="large" ? "1.12" : "1";
-    try { document.body.style.zoom = z; } catch { /* ignore */ }
-    return () => { try { document.body.style.zoom = "1"; } catch { /* ignore */ } };
-  },[settings.fontSize]);
-
-  useEffect(()=>{
-    if(settings.animations) document.body.classList.remove("no-anim");
-    else document.body.classList.add("no-anim");
-  },[settings.animations]);
+  // Theme, font scale and reduced-motion are applied to the WHOLE document by
+  // AppearanceApplier (src/lib/appearance.js) so they hold on the marketing site
+  // too, not just here. applySettings dispatches "revyy-appearance" to re-apply
+  // the moment a setting changes.
 
   const autoAdvanceSec = Math.min(Math.max(parseInt(settings.autoAdvanceSec)||5,1),15);
   // Auto-advance (normal MCQ quiz only, exam mode is separate): once an answer
@@ -843,21 +799,6 @@ export default function StudyQuiz() {
     },delay);
     return ()=>clearTimeout(id);
   },[selected,screen,quiz,qIdx,settings.autoAdvance,settings.feedback,autoAdvanceSec]);
-
-  const updateSetting = (key,val) => {
-    setSettings(prev=>{
-      const next={...prev,[key]:val};
-      window.storage.set("revyy_settings",JSON.stringify(next)).catch(()=>{});
-      return next;
-    });
-  };
-
-  // Live light/dark toggle (also reachable without an account, since full
-  // settings are behind sign-in). Resolves "system" to the OS preference.
-  const isDarkTheme = settings.theme==="dark"
-    || (settings.theme!=="light" && typeof window!=="undefined" && window.matchMedia
-        && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const toggleTheme = () => updateSetting("theme", isDarkTheme ? "light" : "dark");
 
   // ── Feature access (free users unlock via 1-hour ad windows) ─────────
   const QTYPE_FEATURE = { cards:"flashcard", fill:"fillinblank", match:"matchterms" };
@@ -1357,8 +1298,9 @@ export default function StudyQuiz() {
   const confirmDeleteAccount = async () => {
     const { error } = await deleteAccount();
     if (error) return { error };
-    // Wipe locally-stored per-user data too.
+    // Wipe locally-stored per-user data too, then reset appearance to default.
     try { localStorage.removeItem("revyy_settings"); localStorage.removeItem("sq_v3"); } catch { /* ignore */ }
+    window.dispatchEvent(new Event("revyy-appearance"));
     navigate("/", { replace: true });
     await signOut();
     return {};
@@ -1376,6 +1318,8 @@ export default function StudyQuiz() {
     SoundEngine.setVolume(rest.volume);
     if(draftLang && draftLang!==lang) { setLang(draftLang); if(user) saveLanguage(draftLang); }
     window.storage.set("revyy_settings",JSON.stringify(rest)).catch(()=>{});
+    // Re-apply theme + font scale across the whole document (marketing + app).
+    window.dispatchEvent(new Event("revyy-appearance"));
     setSettingsDraft(null);
     setShowSettings(false);
   };
@@ -2729,7 +2673,6 @@ export default function StudyQuiz() {
               ) : (
                 <button onClick={()=>navigate("/login")} style={{background:"rgba(255,255,255,0.16)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,fontSize:12,fontWeight:600,padding:"7px 14px",cursor:"pointer",fontFamily:"inherit"}}>{t.logIn}</button>
               )}
-              <ThemeSwitch isDark={isDarkTheme} onToggle={toggleTheme} onDark />
             </div>
           </div>
           <div className="rv-hero-bar">
@@ -3059,7 +3002,6 @@ export default function StudyQuiz() {
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           {isPro && <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"2px 7px",fontWeight:700}}>PRO</span>}
           <button onClick={()=>setSoundOn(s=>!s)} title={soundOn?t.soundOn:t.soundOff} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",display:"flex",alignItems:"center",color:"var(--color-text-secondary)",opacity:soundOn?1:0.4}}><Icon name="volume" size={17}/></button>
-          <ThemeSwitch isDark={isDarkTheme} onToggle={toggleTheme} />
           <button onClick={()=>openSettings()} title={t.set.title} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",display:"flex",alignItems:"center",color:"var(--color-text-secondary)"}}><Icon name="gear" size={17}/></button>
         </div>
       </div>
