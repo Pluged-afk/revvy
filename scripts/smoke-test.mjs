@@ -7,6 +7,7 @@ import { ARENA, comboMult, basePoints, questionPoints, timerFor, boardUnlocked, 
 import { reviewCard, previewInterval, initStability } from "../src/lib/fsrs.js";
 import { recommendDailyGoal } from "../src/lib/studentModel.js";
 import { detectOvertakes } from "../src/lib/overtake.js";
+import { reminderFor, reminderText } from "../src/lib/reminders.js";
 
 let passed = 0, failed = 0;
 const eq = (got, want, msg) => {
@@ -104,6 +105,20 @@ ok(repass.changed, "overtake: a rival dropping out is a change (re-arms them)");
 eq(detectOvertakes({ friendsXp: [{ id: "a", name: "Ann", xp: 400 }], myXP: 350, seenAhead: [], aheadInit: true }).fresh.map((f) => f.id).join(","), "a", "overtake: a re-armed rival passing again nudges again");
 // Privacy / bad data: a friend with hidden (null) xp is ignored.
 eq(detectOvertakes({ friendsXp: [{ id: "c", name: "Cy", xp: null }], myXP: 0, seenAhead: [], aheadInit: true }).aheadIds.length, 0, "overtake: a hidden-XP friend is ignored");
+
+// ── Study-reminder push eligibility ────────────────────────────────────────
+const RN = Date.now();
+eq(reminderFor({ cards: [] }, RN).send, false, "reminder: no cards -> no push");
+eq(reminderFor({ cards: [{ due: RN + DAY }] }, RN).send, false, "reminder: nothing due yet -> no push");
+eq(reminderFor({ cards: [{ due: RN - DAY }, { due: RN - 2 * DAY }, { due: RN + DAY }] }, RN).dueCount, 2, "reminder: counts only cards due now");
+eq(reminderFor({ cards: [{ due: RN - DAY }] }, RN).send, true, "reminder: a due card triggers a push");
+eq(reminderFor({ cards: [{ due: "soon" }, { due: null }] }, RN).dueCount, 0, "reminder: non-numeric due dates are ignored");
+eq(reminderFor(null, RN).send, false, "reminder: a missing blob is safe");
+eq(reminderFor({ cards: [{ due: RN - DAY }], stats: { streak: 5 } }, RN).streak, 5, "reminder: surfaces the streak");
+ok(reminderText({ dueCount: 1, streak: 0 }).includes("1 review"), "reminder text: singular review");
+ok(reminderText({ dueCount: 3, streak: 0 }).includes("3 reviews"), "reminder text: plural count");
+ok(reminderText({ dueCount: 2, streak: 4 }).includes("4-day streak"), "reminder text: mentions the streak when present");
+ok(!reminderText({ dueCount: 2, streak: 0 }).includes("streak"), "reminder text: no streak clause at streak 0");
 
 console.log(`\nSmoke tests: ${passed} passed, ${failed} failed.`);
 process.exit(failed ? 1 : 0);

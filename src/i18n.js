@@ -430,6 +430,7 @@ const T_EN = {
   set:{
     title:"Settings",
     secAppearance:"APPEARANCE", secSound:"SOUND", secHaptics:"HAPTICS", secBehaviour:"QUIZ BEHAVIOUR", secHelp:"HELP & FEEDBACK",
+    secNotifications:"NOTIFICATIONS", studyReminders:"Study reminders", studyRemindersDesc:"A gentle daily nudge when reviews are due, even with the app closed.", studyRemindersBlocked:"Notifications are blocked in your browser. Allow them for revyy.app to turn this on.", sendTestReminder:"Send a test reminder", reminderSent:"Test sent, check your notifications.", friendOvertakes:"Friend overtakes", friendOvertakesDesc:"A pop-up when a friend passes your XP, so you can climb back.",
     reportBug:"Report a bug or contact us",
     secSubscription:"SUBSCRIPTION", secAccount:"ACCOUNT", secSecurity:"LOGIN & SECURITY",
     language:"Language",

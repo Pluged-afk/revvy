@@ -5,6 +5,8 @@ import { useState, useEffect } from "react";
 import Icon from "../components/Icon.jsx";
 import { Toggle, StreakFlame } from "./components.jsx";
 import { ProModal, PacksModal, ContactModal } from "./modals.jsx";
+import { socialApi } from "./api.js";
+import { enablePush, disablePush, pushState, pushSupported } from "../lib/push.js";
 import { DEFAULT_KEYBINDS, STRIPE_MONTHLY_PRICE, STRIPE_YEARLY_PRICE, QUESTION_PACKS, FREE_DAILY } from "./constants.js";
 import { fmtDate } from "./helpers.js";
 import { LANGS } from "../i18n.js";
@@ -169,6 +171,29 @@ export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onD
   const acctSrs = useSRS();                 // review-deck stats for the header
   const acctStats = useStudyStats();        // streak + accuracy
   const clerk = useClerk();                 // "manage login & security"
+  // Closed-app study reminders (Web Push). State mirrors the live browser
+  // subscription; the toggle subscribes/unsubscribes and registers with the
+  // server. The whole row is hidden when the browser or this deploy can't push.
+  const pushOk = pushSupported();
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBlocked, setPushBlocked] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushTested, setPushTested] = useState(false);
+  useEffect(() => {
+    if (!pushOk) return;
+    let alive = true;
+    pushState().then((st) => { if (alive) { setPushOn(st.subscribed); setPushBlocked(st.blocked); } });
+    return () => { alive = false; };
+  }, [pushOk]);
+  const togglePush = async (v) => {
+    if (pushBusy) return;
+    setPushBusy(true);
+    const r = v ? await enablePush(socialApi) : await disablePush(socialApi);
+    if (v) { setPushOn(!!r.ok); if (r.reason === "blocked") setPushBlocked(true); }
+    else { setPushOn(false); setPushTested(false); }
+    setPushBusy(false);
+  };
+  const rivalOn = acctSrs.notif?.rival !== false;
   const [adBusy, setAdBusy] = useState(false);
   const [packBusy, setPackBusy] = useState("");
   const [showPacks, setShowPacks] = useState(false);
@@ -412,6 +437,17 @@ export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onD
           </SettingRow>
           <SettingRow label={s.notifSounds||"Notification sounds"} desc={!draft.sound?(s.volumeNeedSound||"Turn on sound effects first."):(s.notifSoundsDesc||"Play a chime for friend requests, messages and challenges.")} last>
             <Toggle on={draft.notifSound!==false} onChange={v=>update("notifSound",v)}/>
+          </SettingRow>
+
+          <SectionLabel label={s.secNotifications||"Notifications"}/>
+          {pushOk && <SettingRow label={s.studyReminders||"Study reminders"} desc={pushBlocked?(s.studyRemindersBlocked||"Notifications are blocked in your browser. Allow them for revyy.app to turn this on."):(s.studyRemindersDesc||"A gentle daily nudge when reviews are due, even with the app closed.")}>
+            <Toggle on={pushOn} onChange={togglePush} disabled={pushBusy||pushBlocked}/>
+          </SettingRow>}
+          {pushOk && pushOn && <div style={{margin:"-2px 0 12px",paddingLeft:2}}>
+            <button onClick={async()=>{ if(pushTested)return; setPushTested(true); await socialApi("pushTest"); }} style={{background:"none",border:"none",padding:0,color:"var(--color-accent)",fontSize:12.5,fontWeight:600,cursor:pushTested?"default":"pointer",fontFamily:"inherit",opacity:pushTested?0.6:1}}>{pushTested?(s.reminderSent||"Test sent, check your notifications."):(s.sendTestReminder||"Send a test reminder")}</button>
+          </div>}
+          <SettingRow label={s.friendOvertakes||"Friend overtakes"} desc={s.friendOvertakesDesc||"A pop-up when a friend passes your XP, so you can climb back."} last>
+            <Toggle on={rivalOn} onChange={v=>acctSrs.setNotifPref("rival",v)}/>
           </SettingRow>
 
           <SectionLabel label={s.secHaptics}/>

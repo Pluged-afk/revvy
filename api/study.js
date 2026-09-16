@@ -1,5 +1,6 @@
 import { verifyToken } from "@clerk/backend";
 import { randomBytes } from "crypto";
+import webpush from "web-push";
 import sql, { readBody } from "./db.js";
 
 // Server-synced study data + shared-quiz storage. All one serverless function
@@ -246,6 +247,16 @@ function ensureTables() {
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (challenge_id, clerk_user_id)
       )`,
+      // Web Push subscriptions for closed-app study reminders. One row per browser
+      // endpoint; last_notified dedups the daily cron to once per UTC day.
+      sql`CREATE TABLE IF NOT EXISTS push_subs (
+        endpoint      TEXT PRIMARY KEY,
+        clerk_user_id TEXT        NOT NULL,
+        p256dh        TEXT        NOT NULL,
+        auth          TEXT        NOT NULL,
+        last_notified DATE,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
     ]).then(() => sql`ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS points INT NOT NULL DEFAULT 0`)
       .then(() => sql`ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 1`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS mock_bank_bucket ON mock_bank (exam, section)`)
@@ -268,6 +279,7 @@ function ensureTables() {
       .then(() => sql`CREATE INDEX IF NOT EXISTS group_activity_grp ON group_activity (group_id, at DESC)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS group_messages_grp ON group_messages (group_id, id DESC)`)
       .then(() => sql`CREATE INDEX IF NOT EXISTS group_challenges_grp ON group_challenges (group_id, id DESC)`)
+      .then(() => sql`CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs (clerk_user_id)`)
       .then(() => true).catch(() => { ensured = null; return false; });
   }
   return ensured;
@@ -1479,9 +1491,99 @@ async function challengeSubmit(req, res, body, me) {
   return res.status(200).json({ ok: true, pending, won, rank, players: rows.length, beat });
 }
 
+// ── Closed-app push (study reminders) ───────────────────────────────────────
+// Reminder eligibility, inlined here rather than imported from src/ so this
+// critical function never depends on cross-boundary bundling. Mirrors the
+// tested reference in src/lib/reminders.js (kept in sync; smoke tests guard it).
+function reminderFor(blob, nowMs = Date.now()) {
+  const b = blob && typeof blob === "object" ? blob : {};
+  const cards = Array.isArray(b.cards) ? b.cards : [];
+  const dueCount = cards.filter((c) => c && typeof c.due === "number" && c.due <= nowMs).length;
+  const streak = Math.max(0, Math.round(Number(b.stats?.streak) || 0));
+  return { send: dueCount > 0, dueCount, streak };
+}
+function reminderText(info, t = {}) {
+  const due = Math.max(0, Math.round(Number(info?.dueCount) || 0));
+  const base = due === 1
+    ? (t.pushDueOne || "1 review is due. Keep it fresh.")
+    : (t.pushDueMany || "{n} reviews are due. Keep them fresh.").replace("{n}", due);
+  if (info && info.streak > 0) {
+    return (t.pushStreak || "{msg} Don't lose your {d}-day streak.").replace("{msg}", base).replace("{d}", info.streak);
+  }
+  return base;
+}
+// VAPID is configured from env; when the keys are absent the whole push path
+// stays inert (subscriptions can still be stored, but nothing is ever sent).
+let vapidReady = null;
+function ensureVapid() {
+  if (vapidReady !== null) return vapidReady;
+  const pub = process.env.VAPID_PUBLIC_KEY, priv = process.env.VAPID_PRIVATE_KEY, subj = process.env.VAPID_SUBJECT;
+  if (!pub || !priv || !subj) { vapidReady = false; return false; }
+  try { webpush.setVapidDetails(subj, pub, priv); vapidReady = true; } catch { vapidReady = false; }
+  return vapidReady;
+}
+async function sendPush(sub, payload) {
+  try {
+    await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, JSON.stringify(payload));
+    return true;
+  } catch (e) {
+    // 404/410 = the browser dropped this subscription; forget it so we stop trying.
+    if (e && (e.statusCode === 404 || e.statusCode === 410)) { try { await sql`DELETE FROM push_subs WHERE endpoint=${sub.endpoint}`; } catch { /* ignore */ } }
+    return false;
+  }
+}
+async function pushSubscribe(req, res, body, me) {
+  const endpoint = clean(body.endpoint, 1000);
+  const p256dh = clean(body.p256dh, 300);
+  const auth = clean(body.auth, 300);
+  if (!endpoint || !p256dh || !auth || !/^https:\/\//.test(endpoint)) return res.status(400).json({ error: "Bad subscription." });
+  await sql`INSERT INTO push_subs (endpoint, clerk_user_id, p256dh, auth)
+    VALUES (${endpoint}, ${me}, ${p256dh}, ${auth})
+    ON CONFLICT (endpoint) DO UPDATE SET clerk_user_id=EXCLUDED.clerk_user_id, p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth`;
+  return res.status(200).json({ ok: true });
+}
+async function pushUnsubscribe(req, res, body, me) {
+  const endpoint = clean(body.endpoint, 1000);
+  if (endpoint) await sql`DELETE FROM push_subs WHERE endpoint=${endpoint} AND clerk_user_id=${me}`;
+  return res.status(200).json({ ok: true });
+}
+// Send a reminder to the caller's own devices right now, so they can confirm
+// delivery the moment they enable it (no waiting for the daily cron).
+async function pushTest(req, res, me) {
+  if (!ensureVapid()) return res.status(200).json({ ok: false, reason: "not-configured" });
+  const subs = await sql`SELECT endpoint, p256dh, auth FROM push_subs WHERE clerk_user_id=${me}`;
+  let sent = 0;
+  for (const s of subs) if (await sendPush(s, { title: "Revyy", body: "Reminders are on. We'll nudge you when reviews are due.", tag: "revyy-test", url: "/app" })) sent++;
+  return res.status(200).json({ ok: sent > 0, sent });
+}
+// Daily cron: nudge subscribed learners who have reviews due, once per UTC day.
+async function runReminders(req, res) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || (req.headers.authorization || "") !== `Bearer ${secret}`) return res.status(401).json({ error: "unauthorized" });
+  if (!ensureVapid()) return res.status(200).json({ ok: true, skipped: "vapid-not-configured" });
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = await sql`SELECT s.endpoint, s.p256dh, s.auth, d.data
+    FROM push_subs s JOIN study_data d ON d.clerk_user_id = s.clerk_user_id
+    WHERE s.last_notified IS DISTINCT FROM ${today}::date`;
+  let sent = 0;
+  for (const r of rows) {
+    const info = reminderFor(r.data, Date.now());
+    if (!info.send) continue;
+    if (await sendPush(r, { title: "Revyy", body: reminderText(info), tag: "revyy-due", url: "/app" })) {
+      await sql`UPDATE push_subs SET last_notified=${today}::date WHERE endpoint=${r.endpoint}`;
+      sent++;
+    }
+  }
+  return res.status(200).json({ ok: true, sent, considered: rows.length });
+}
+
 export default async function handler(req, res) {
   try {
     await ensureTables();
+
+    // Daily reminder cron (Vercel Cron -> GET /api/study?cron=reminders). Auth is
+    // the platform CRON_SECRET, not a user session.
+    if (req.method === "GET" && req.query?.cron === "reminders") return runReminders(req, res);
 
     // Public share paths (no account required).
     if (req.method === "GET" && req.query?.shared) {
@@ -1512,6 +1614,9 @@ export default async function handler(req, res) {
       // Friends + study groups
       if (body?.action === "social") return socialOverview(req, res, userId);
       if (body?.action === "notifications") return notifications(req, res, userId);
+      if (body?.action === "pushSubscribe") return pushSubscribe(req, res, body, userId);
+      if (body?.action === "pushUnsubscribe") return pushUnsubscribe(req, res, body, userId);
+      if (body?.action === "pushTest") return pushTest(req, res, userId);
       if (body?.action === "dmSend") return dmSend(req, res, body, userId);
       if (body?.action === "dmThread") return dmThread(req, res, body, userId);
       if (body?.action === "dmChallengeSubmit") return dmChallengeSubmit(req, res, body, userId);
