@@ -6,6 +6,7 @@ import { RANKS, rankFor, rankOf } from "../src/lib/badges.js";
 import { ARENA, comboMult, basePoints, questionPoints, timerFor, boardUnlocked, serveDifficulty } from "../src/lib/arena.js";
 import { reviewCard, previewInterval, initStability } from "../src/lib/fsrs.js";
 import { recommendDailyGoal } from "../src/lib/studentModel.js";
+import { detectOvertakes } from "../src/lib/overtake.js";
 
 let passed = 0, failed = 0;
 const eq = (got, want, msg) => {
@@ -76,6 +77,33 @@ const heavyDays = { recent: [1, 2, 3, 4].map((k) => ({ at: RNOW - k * DAY, total
 eq(recommendDailyGoal({ stats: { answered: 5000 }, perf: heavyDays }), 40, "heavy learner's goal capped at 40");
 const todayOnly = { recent: [{ at: RNOW, total: 200, correct: 150 }] };
 eq(recommendDailyGoal({ stats: { answered: 200 }, perf: todayOnly }), 5, "today's own sessions don't move today's goal");
+
+// ── Friend-overtake nudge ──────────────────────────────────────────────────
+const fx = [{ id: "a", name: "Ann", xp: 300 }, { id: "b", name: "Bo", xp: 100 }];
+// First sync (aheadInit false): seed a baseline, never nudge, even though Ann is ahead.
+const seed = detectOvertakes({ friendsXp: fx, myXP: 200, seenAhead: [], aheadInit: false });
+eq(seed.fresh.length, 0, "overtake: first sync seeds silently, no fresh crossings");
+ok(seed.changed, "overtake: first sync counts as a change (needs to persist the seed)");
+eq(JSON.stringify(seed.aheadIds), JSON.stringify(["a"]), "overtake: Ann (300) is ahead of my 200, Bo (100) is not");
+// Steady state: Ann already known-ahead, nothing changed -> no write, no nudge.
+const steady = detectOvertakes({ friendsXp: fx, myXP: 200, seenAhead: ["a"], aheadInit: true });
+eq(steady.fresh.length, 0, "overtake: a known rival still ahead is not a fresh crossing");
+ok(!steady.changed, "overtake: unchanged standings skip the blob write");
+// Fresh overtake: Bo climbs past me while I only knew about Ann.
+const crossed = detectOvertakes({ friendsXp: [{ id: "a", name: "Ann", xp: 300 }, { id: "b", name: "Bo", xp: 250 }], myXP: 200, seenAhead: ["a"], aheadInit: true });
+eq(crossed.fresh.map((f) => f.id).join(","), "b", "overtake: Bo crossing above fires exactly one fresh nudge");
+ok(crossed.changed, "overtake: a fresh crossing is a change");
+// Dedup: after Bo is acknowledged, no repeat nudge.
+eq(detectOvertakes({ friendsXp: [{ id: "a", name: "Ann", xp: 300 }, { id: "b", name: "Bo", xp: 250 }], myXP: 200, seenAhead: ["a", "b"], aheadInit: true }).fresh.length, 0, "overtake: acknowledged rival is not re-nudged");
+// Re-pass: I climb above Ann; she drops out of the ahead set (no nudge), which re-arms her.
+const repass = detectOvertakes({ friendsXp: [{ id: "a", name: "Ann", xp: 300 }], myXP: 350, seenAhead: ["a"], aheadInit: true });
+eq(repass.aheadIds.length, 0, "overtake: re-passing a rival removes them from the ahead set");
+eq(repass.fresh.length, 0, "overtake: re-passing never nudges");
+ok(repass.changed, "overtake: a rival dropping out is a change (re-arms them)");
+// Re-overtake: Ann passes me again after being re-armed -> nudges again.
+eq(detectOvertakes({ friendsXp: [{ id: "a", name: "Ann", xp: 400 }], myXP: 350, seenAhead: [], aheadInit: true }).fresh.map((f) => f.id).join(","), "a", "overtake: a re-armed rival passing again nudges again");
+// Privacy / bad data: a friend with hidden (null) xp is ignored.
+eq(detectOvertakes({ friendsXp: [{ id: "c", name: "Cy", xp: null }], myXP: 0, seenAhead: [], aheadInit: true }).aheadIds.length, 0, "overtake: a hidden-XP friend is ignored");
 
 console.log(`\nSmoke tests: ${passed} passed, ${failed} failed.`);
 process.exit(failed ? 1 : 0);

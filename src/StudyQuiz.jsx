@@ -12,6 +12,7 @@ import { usePlans } from "./context/StudyContext.jsx";
 import { buildPlan, parseChapters, planProgress, nextDayIndex, isPlanComplete, dayState } from "./lib/planner.js";
 import { computeReadiness, weakTopics, topicMastery } from "./lib/insights.js";
 import { recommendDifficulty, buildLearnerBrief, resultNudge, recommendDailyGoal } from "./lib/studentModel.js";
+import { detectOvertakes } from "./lib/overtake.js";
 import { makeBankItem, bankPick, buildAvoidNote } from "./lib/questionBank.js";
 import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from "./lib/studyLibrary.js";
 import { previewInterval } from "./lib/fsrs.js";
@@ -2514,14 +2515,10 @@ export default function StudyQuiz() {
   // writes the blob when the standings actually shift.
   useEffect(() => {
     if (!notifData || !Array.isArray(notifData.friendsXp) || !srs.loaded) return;
-    const myx = Number(myXP) || 0;
-    const ahead = notifData.friendsXp.filter((f) => f && typeof f.xp === "number" && f.xp > myx);
-    const aheadIds = ahead.map((f) => f.id);
-    const inited = srs.notif?.seen?.aheadInit === true;
-    const seen = new Set(srs.notif?.seen?.ahead || []);
-    const fresh = inited ? ahead.filter((f) => !seen.has(f.id)) : [];
-    const dropped = [...seen].some((id) => !aheadIds.includes(id));
-    if (inited && !fresh.length && !dropped) return; // standings unchanged
+    const { aheadIds, fresh, changed, inited } = detectOvertakes({
+      friendsXp: notifData.friendsXp, myXP, seenAhead: srs.notif?.seen?.ahead, aheadInit: srs.notif?.seen?.aheadInit,
+    });
+    if (!changed) return; // standings unchanged -> no write, no nudge
     const id = setTimeout(() => {
       srs.markNotifSeen({ ahead: aheadIds, aheadInit: true });
       if (inited && fresh.length && srs.notif?.rival !== false) {
