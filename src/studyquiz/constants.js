@@ -91,3 +91,9 @@ export const QUESTION_PACKS = [
   { id:"B", q:"1,500", price:"€4.99", blurbKey:"packBlurbB", best:true },
   { id:"C", q:"3,000", price:"€8.99", blurbKey:"packBlurbC" },
 ];
+
+// Side 160x600 banners on desktop (where there's empty margin), a 320x50
+// bottom banner on mobile. Visibility is controlled by CSS media queries.
+// Placeholder ad boxes are OFF while pursuing AdSense approval (see lib/ads.jsx).
+// Real ads come from AdSense Auto Ads via the loader in index.html once approved.
+export const ADS_ENABLED = false; // was: import.meta.env.VITE_ADS_ENABLED === "true"
