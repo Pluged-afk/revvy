@@ -137,3 +137,10 @@ export const STARTER_SUBJECTS = [
   { id: "starter_gk", emoji: "💡", title: "General Knowledge", subject: "Trivia",
     summary: "A varied mix of common knowledge. Water is made of two hydrogen atoms and one oxygen atom. There are eight planets in the solar system; Jupiter is the largest and Mercury is closest to the Sun. Light travels faster than sound, which is why lightning is seen before thunder. The human body has 206 bones and the heart has four chambers. Shakespeare wrote Romeo and Juliet and Hamlet. The Mona Lisa was painted by Leonardo da Vinci. A triangle's angles add up to 180 degrees. The freezing point of water is 0 degrees Celsius and boiling is 100. The speed of light is about 300,000 kilometres per second. Photosynthesis produces the oxygen we breathe." },
 ];
+
+// Stripe price ids (env-driven), shared by the settings panel + checkout.
+export const STRIPE_MONTHLY_PRICE = import.meta.env.VITE_STRIPE_MONTHLY_PRICE;
+export const STRIPE_YEARLY_PRICE  = import.meta.env.VITE_STRIPE_YEARLY_PRICE;
+
+// Free daily question allowance (shown in the settings plan lists).
+export const FREE_DAILY = 50;
