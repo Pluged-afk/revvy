@@ -1180,7 +1180,21 @@ async function notifications(req, res, me) {
   // Per-friend direct-message totals received (client diffs vs its seen counts).
   const dmRows = await sql`SELECT sender, COUNT(*)::int AS n FROM friend_messages WHERE recipient=${me} GROUP BY sender`;
   const dms = dmRows.map((r) => ({ id: r.sender, msg: r.n }));
-  return res.status(200).json({ friendReqs, groups, dms });
+  // Accepted friends' public XP, for the friend-overtake nudge. flairFor already
+  // honours the "hide my status" flag (xp comes back null when hidden), and the
+  // client compares each friend against its own live XP, so a hidden own-profile
+  // never skews the check.
+  const fids = (await sql`SELECT CASE WHEN requester=${me} THEN addressee ELSE requester END AS fid
+    FROM friendships WHERE status='accepted' AND (requester=${me} OR addressee=${me})`).map((r) => r.fid).filter(Boolean);
+  let friendsXp = [];
+  if (fids.length) {
+    const flair = await flairFor(fids);
+    const names = await usernamesFor(fids);
+    friendsXp = fids
+      .filter((id) => flair[id] && typeof flair[id].xp === "number")
+      .map((id) => ({ id, name: names[id] || "student", xp: flair[id].xp }));
+  }
+  return res.status(200).json({ friendReqs, groups, dms, friendsXp });
 }
 
 async function groupCreate(req, res, body, me) {

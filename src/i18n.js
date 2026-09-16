@@ -123,6 +123,7 @@ const T_EN = {
   socialTabFriends:"Friends", socialTabGroups:"Groups",
   notifAlertsLabel:"Alerts", notifReqLabel:"Requests", notifMsgLabel:"Messages", notifOff:"off",
   notifFriendReq:"{n} new friend request{s}", notifChallengeReq:"{n} new challenge{s}", notifNewMsg:"{n} new message{s}",
+  notifOvertake:"{name} just passed you, {xp} XP. Reclaim your spot.", notifOvertakeMany:"{name} and {n} others passed you. Climb back up.",
   dmMessageWord:"Message", friendWord:"Friend",
   dmEmpty:"No messages yet. Say hi, share a study set, or challenge them.",
   dmShareSet:"Share a set", dmChallenge:"Challenge", dmShareScore:"Share score",

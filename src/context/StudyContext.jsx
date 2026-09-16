@@ -81,10 +81,14 @@ function normNotif(n) {
   const f = (s.f && typeof s.f === "object") ? s.f : {};
   const cleanF = {};
   for (const [k, v] of Object.entries(f)) cleanF[String(k)] = Math.max(0, Math.round(Number(v) || 0));
+  // ids of friends already known to be ahead of you on XP (overtake dedup), and a
+  // one-time seed flag so existing users don't get a false "everyone passed you".
+  const ahead = Array.isArray(s.ahead) ? [...new Set(s.ahead.map(String))].slice(0, 100) : [];
   return {
-    seen: { friendReqs: Math.max(0, Math.round(Number(s.friendReqs) || 0)), g: cleanG, f: cleanF },
+    seen: { friendReqs: Math.max(0, Math.round(Number(s.friendReqs) || 0)), g: cleanG, f: cleanF, ahead, aheadInit: s.aheadInit === true },
     req: n.req !== false, // pop-ups for friend/challenge requests (default on)
     msg: n.msg !== false, // pop-ups for group + direct messages (default on)
+    rival: n.rival !== false, // pop-up when a friend overtakes your XP (default on)
   };
 }
 function emptyData() {
@@ -306,10 +310,14 @@ function mergeNotif(a, b) {
   }
   const f = {};
   for (const k of new Set([...Object.keys(A.seen.f), ...Object.keys(B.seen.f)])) f[k] = Math.max(A.seen.f[k] || 0, B.seen.f[k] || 0);
+  // Union the acknowledged-ahead sets so a nudge shown on one device isn't
+  // replayed on another; the next poll on each device corrects it to the truth.
+  const ahead = [...new Set([...A.seen.ahead, ...B.seen.ahead])].slice(0, 100);
   return {
-    seen: { friendReqs: Math.max(A.seen.friendReqs, B.seen.friendReqs), g, f },
+    seen: { friendReqs: Math.max(A.seen.friendReqs, B.seen.friendReqs), g, f, ahead, aheadInit: A.seen.aheadInit || B.seen.aheadInit },
     req: A.req !== false && B.req !== false,
     msg: A.msg !== false && B.msg !== false,
+    rival: A.rival !== false && B.rival !== false,
   };
 }
 
@@ -576,19 +584,23 @@ export function StudyProvider({ children }) {
     if (!patch) return;
     commit((p) => {
       const n = normNotif(p.notif);
-      const seen = { friendReqs: n.seen.friendReqs, g: { ...n.seen.g }, f: { ...n.seen.f } };
+      const seen = { friendReqs: n.seen.friendReqs, g: { ...n.seen.g }, f: { ...n.seen.f }, ahead: [...n.seen.ahead], aheadInit: n.seen.aheadInit };
       if (typeof patch.friendReqs === "number") seen.friendReqs = Math.max(seen.friendReqs, Math.round(patch.friendReqs));
       if (patch.g) for (const [k, v] of Object.entries(patch.g)) {
         const cur = seen.g[k] || { m: 0, c: 0 };
         seen.g[k] = { m: typeof v.m === "number" ? Math.max(cur.m, Math.round(v.m)) : cur.m, c: typeof v.c === "number" ? Math.max(cur.c, Math.round(v.c)) : cur.c };
       }
       if (patch.f) for (const [k, v] of Object.entries(patch.f)) seen.f[k] = Math.max(seen.f[k] || 0, Math.round(Number(v) || 0));
+      // Overtake tracker: replace the "ahead" set with who is ahead now, and latch
+      // the seed flag so the first sync only establishes a baseline (no nudge).
+      if (Array.isArray(patch.ahead)) seen.ahead = [...new Set(patch.ahead.map(String))].slice(0, 100);
+      if (patch.aheadInit === true) seen.aheadInit = true;
       return { ...p, notif: { ...n, seen } };
     });
   }, [commit]);
   // Toggle a pop-up preference ("req" | "msg"). The unread bubble is unaffected.
   const setNotifPref = useCallback((key, on) => {
-    if (key !== "req" && key !== "msg") return;
+    if (key !== "req" && key !== "msg" && key !== "rival") return;
     commit((p) => { const n = normNotif(p.notif); return { ...p, notif: { ...n, [key]: !!on } }; });
   }, [commit]);
   // Permanently mark the first-run starter card as seen (idempotent one-shot).

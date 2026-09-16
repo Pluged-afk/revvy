@@ -2506,6 +2506,36 @@ export default function StudyQuiz() {
   const badgeEval = useMemo(() => evaluateBadges({ stats: srs.stats, mockScores: srs.mockScores, badges: srs.badges }), [srs.stats, srs.mockScores, srs.badges]);
   const earnedBadgeCount = badgeEval.earnedIds.length;
   const myXP = myRankInfo.xp;
+  // Friend-overtake nudge: when a friend's lifetime XP crosses above yours, a
+  // single gentle pop-up invites you back to reclaim your spot. Deduped per
+  // friend via the persisted "ahead" set (re-passing them re-arms it), collapsed
+  // to one toast per poll, and seeded silently on first run so an existing user
+  // never gets a false "everyone passed you". Gated by the rival pref; only
+  // writes the blob when the standings actually shift.
+  useEffect(() => {
+    if (!notifData || !Array.isArray(notifData.friendsXp) || !srs.loaded) return;
+    const myx = Number(myXP) || 0;
+    const ahead = notifData.friendsXp.filter((f) => f && typeof f.xp === "number" && f.xp > myx);
+    const aheadIds = ahead.map((f) => f.id);
+    const inited = srs.notif?.seen?.aheadInit === true;
+    const seen = new Set(srs.notif?.seen?.ahead || []);
+    const fresh = inited ? ahead.filter((f) => !seen.has(f.id)) : [];
+    const dropped = [...seen].some((id) => !aheadIds.includes(id));
+    if (inited && !fresh.length && !dropped) return; // standings unchanged
+    const id = setTimeout(() => {
+      srs.markNotifSeen({ ahead: aheadIds, aheadInit: true });
+      if (inited && fresh.length && srs.notif?.rival !== false) {
+        const lead = fresh.slice().sort((a, b) => a.xp - b.xp)[0]; // the closest rival
+        const txt = fresh.length === 1
+          ? (t.notifOvertake || "{name} just passed you, {xp} XP. Reclaim your spot.").replace("{name}", stripEmoji(lead.name)).replace("{xp}", Number(lead.xp).toLocaleString())
+          : (t.notifOvertakeMany || "{name} and {n} others passed you. Climb back up.").replace("{name}", stripEmoji(lead.name)).replace("{n}", fresh.length - 1);
+        setNotifToast({ text: txt });
+        if (settings.notifSound !== false) SoundEngine.ping();
+      }
+    }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifData, myXP]);
   // Phased home: a brand-new learner (no quiz finished, no material yet) sees
   // only the core action; the social / gamification / coach surfaces reveal
   // themselves once they've felt the loop once, so the first screen never
