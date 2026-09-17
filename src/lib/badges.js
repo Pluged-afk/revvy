@@ -50,12 +50,29 @@ export function rankFor(xp) {
   const toNext = next ? Math.max(0, Math.min(1, (xp - cur.min) / (next.min - cur.min))) : null;
   return { ...cur, index: idx, xp, next, toNext };
 }
-// rank is competitive: it tracks your best arena run, not study activity (founder
-// call). same 7 tiers, arena-scaled thresholds. computeXP stays around for other
-// signals but no longer drives the rank.
+// Study XP that feeds rank: lifetime practice, accuracy, difficulty, streaks,
+// hard passes, perfect quizzes and challenge wins. Kept on the same scale as an
+// arena score (see RANKS floors) so a dedicated studier climbs the ladder from
+// study alone, never having to touch the Arena.
+export function studyRankXP(stats) {
+  const s = stats || {};
+  return Math.max(0, Math.round(
+    (Number(s.answered) || 0) * 0.5 +        // participation
+    (Number(s.correct) || 0) * 0.5 +         // accuracy
+    (Number(s.diffXP) || 0) +                // harder correct answers worth more
+    (Number(s.best) || 0) * 20 +             // best streak
+    (Number(s.hardPasses) || 0) * 10 +       // clearing Hard sets
+    (Number(s.perfectQuizzes) || 0) * 15 +   // 100% quizzes
+    (Number(s.challengeWins) || 0) * 40,     // head-to-head wins
+  ));
+}
+
+// rank is your best arena run PLUS your lifetime study XP, on the same ladder, so
+// arena players and dedicated studiers both climb (and doing both climbs fastest).
 export function rankOf(study) {
   const s = (study && study.stats) ? study.stats : (study || {});
-  return rankFor(Math.max(0, Math.round(Number(s.arenaBest) || 0)));
+  const arenaBest = Math.max(0, Math.round(Number(s.arenaBest) || 0));
+  return rankFor(arenaBest + studyRankXP(s));
 }
 
 // Flatten the study blob into the plain numbers every badge check reads.

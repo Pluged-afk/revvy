@@ -29,7 +29,7 @@ import { UsernameModal, ProModal, PacksModal, UnlockModal, ScoreCardModal, Ranks
 import { ExitModal, PauseOverlay, TimeUpModal, ResumeModal, Confetti, RankPromotion, AdBanners, ActivatingOverlay, MockPassagePanel } from "./studyquiz/overlays.jsx";
 import { Seg, SettingsPanel } from "./studyquiz/settings.jsx";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
-import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
+import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, studyRankXP, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
 import ArenaGame from "./components/ArenaGame.jsx";
 import Icon from "./components/Icon.jsx";
@@ -2338,7 +2338,10 @@ export default function StudyQuiz() {
     // Fire the one-time celebration here (only when a game is DONE) and mark the
     // tier celebrated so the reactive rank-up effect below never double-fires.
     const newBest = Math.max(prevBest, Math.round(Number((r && r.best) ?? finalScore) || 0));
-    const fromIdx = rankFor(prevBest).index, toIdx = rankFor(newBest).index;
+    // Rank now combines arena + study XP, so compare on the SAME combined scale
+    // (study part held constant across this run) to detect a genuine promotion.
+    const studyBase = studyRankXP(srs.stats);
+    const fromIdx = rankFor(prevBest + studyBase).index, toIdx = rankFor(newBest + studyBase).index;
     if (toIdx > fromIdx) {
       _celebratedRankIdx = toIdx; prevRankRef.current = toIdx;
       SoundEngine.rankUp(); fireBurst();
@@ -2737,10 +2740,14 @@ export default function StudyQuiz() {
             </svg>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:14,color:dailyMet?"#fff":"var(--color-text-primary)"}}>{dailyMet?(t.dailyGoalDone||"Daily goal done!"):(t.dailyGoalTitle||"Daily goal")}</div>
-              <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:dailyMet?"rgba(255,255,255,0.9)":"var(--color-text-secondary)"}}>
-                {dailyMet
-                  ? ((stats.streak||0)>0 ? (t.dailyStreakSafe||"🔥 {s}-day streak, safe for today").replace("{s}",stats.streak) : (t.dailyDoneNoStreak||"Nice. Come back tomorrow to start a streak."))
-                  : (t.dailyGoalProgress||"{n} of {g} questions today").replace("{n}",dailyToday).replace("{g}",DAILY_GOAL) + ((stats.streak||0)>0 ? " · " + (t.dailyStreakKeep||"🔥 {s}-day streak").replace("{s}",stats.streak) : "")}
+              <div style={{fontSize:11.5,marginTop:2,lineHeight:1.4,color:dailyMet?"rgba(255,255,255,0.9)":"var(--color-text-secondary)",display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                {dailyMet ? (
+                  (stats.streak||0)>0
+                    ? <><StreakFlame count={stats.streak} size={15} showCount={false}/><span>{(t.dailyStreakSafe||"{s}-day streak, safe for today").replace("{s}",stats.streak)}</span></>
+                    : <span>{t.dailyDoneNoStreak||"Nice. Come back tomorrow to start a streak."}</span>
+                ) : (
+                  <><span>{(t.dailyGoalProgress||"{n} of {g} questions today").replace("{n}",dailyToday).replace("{g}",DAILY_GOAL)}</span>{(stats.streak||0)>0 && <><span aria-hidden="true">·</span><StreakFlame count={stats.streak} size={15} showCount={false}/><span>{(t.dailyStreakKeep||"{s}-day streak").replace("{s}",stats.streak)}</span></>}</>
+                )}
               </div>
             </div>
           </div>
@@ -4229,7 +4236,7 @@ export default function StudyQuiz() {
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                   {isResult && <span style={{fontSize:16,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:"var(--color-text-primary)"}}>{d.score}/{d.total} · {d.pct}%</span>}
                   <RankPill index={d.rank} t={t} small/>
-                  {d.streak>0 && <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:12.5,fontWeight:700,color:"#f97316"}}>🔥 {d.streak}</span>}
+                  {d.streak>0 && <StreakFlame count={d.streak} size={14}/>}
                   {d.accuracy!=null && <span style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{d.accuracy}% {t.accuracyLbl||"accuracy"}</span>}
                   {d.xp!=null && <span style={{fontSize:12.5,fontFamily:"monospace",fontWeight:700,color:"var(--color-accent)"}}>{Number(d.xp).toLocaleString()} XP</span>}
                 </div>
@@ -4867,7 +4874,7 @@ export default function StudyQuiz() {
           {!arenaBusy && (<>
             {/* Your competitive Arena RANK (Novice..Luminary from your best run),
                 with this month's season standing below. */}
-            {(()=>{ const r=RANKS[myRankInfo.index]; const nm=(t["rank_"+r.key])||r.name; const nextNm=myRankInfo.next?((t["rank_"+myRankInfo.next.key])||myRankInfo.next.name):null; const best=srs.stats?.arenaBest||0; const toNextPts=myRankInfo.next?Math.max(0,myRankInfo.next.min-best):0; const st=arenaSeasonData; const days=st?.endsAt?Math.max(0,Math.ceil((new Date(st.endsAt).getTime()-Date.now())/86400000)):null; return (
+            {(()=>{ const r=RANKS[myRankInfo.index]; const nm=(t["rank_"+r.key])||r.name; const nextNm=myRankInfo.next?((t["rank_"+myRankInfo.next.key])||myRankInfo.next.name):null; const best=srs.stats?.arenaBest||0; const toNextPts=myRankInfo.next?Math.max(0,myRankInfo.next.min-myRankInfo.xp):0; const st=arenaSeasonData; const days=st?.endsAt?Math.max(0,Math.ceil((new Date(st.endsAt).getTime()-Date.now())/86400000)):null; return (
               <div style={{background:`linear-gradient(135deg, ${r.color}22, ${r.color}0d)`,border:`1px solid ${r.color}66`,borderRadius:16,padding:16,marginBottom:14}}>
                 <div style={{display:"flex",alignItems:"center",gap:13}}>
                   <div style={{width:52,height:52,borderRadius:14,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:r.color+"26"}} aria-hidden="true"><Icon name={r.icon} size={26} stroke={1.8} style={{color:r.color}}/></div>

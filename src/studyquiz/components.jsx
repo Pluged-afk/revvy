@@ -46,16 +46,26 @@ export function GroupAvatar({ name, size = 40 }) {
 // A streak flame that gets HOTTER as the count grows: bigger glow, a warmer
 // colour (amber -> orange -> red), and a livelier flicker. The number rides
 // alongside so a glance reads both the streak and its intensity.
-export function StreakFlame({ count = 0, size = 22, showZero = false }) {
+// The streak flame. A line-drawn SVG flame (not emoji) that grows bigger and
+// more aggressive the longer the streak: it scales up in size, deepens from
+// amber through orange to red, thickens its outline and throws a hotter glow.
+// The day count sits next to it in a small monospace label. `showCount={false}`
+// draws just the flame (for callers that render their own number/label after).
+export function StreakFlame({ count = 0, size = 22, showZero = false, showCount = true }) {
   const n = Math.max(0, Math.round(count));
   if (!n && !showZero) return null;
-  const heat = Math.min(1, n / 30);
-  const glow = 3 + Math.round(heat * 15);
-  const color = n >= 30 ? "#ef4444" : n >= 14 ? "#f97316" : n >= 7 ? "#fb923c" : "#f59e0b";
+  const heat = Math.min(1, n / 45);                       // ramps to full over ~6 weeks
+  const flameSize = Math.round(size * (1 + heat * 0.6));   // up to ~1.6x bigger
+  const glow = 2 + Math.round(heat * 16);
+  const stroke = 1.5 + heat * 1.0;                         // bolder outline as it heats
+  const color = n >= 60 ? "#dc2626" : n >= 30 ? "#ef4444" : n >= 14 ? "#f97316" : n >= 7 ? "#fb923c" : "#f59e0b";
+  const hot = n >= 14;
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-      <span aria-hidden="true" className={n >= 7 ? "rv-flame rv-flame-hot" : "rv-flame"} style={{ fontSize: size, lineHeight: 1, filter: `drop-shadow(0 0 ${glow}px ${color}${n >= 7 ? "cc" : "88"})` }}>🔥</span>
-      <span style={{ fontWeight: 800, fontFamily: "monospace", color, fontSize: Math.round(size * 0.72) }}>{n}</span>
+      <span aria-hidden="true" style={{ display: "inline-flex", color, filter: `drop-shadow(0 0 ${glow}px ${color}${hot ? "cc" : "88"})` }}>
+        <Icon name="flame" size={flameSize} stroke={stroke} />
+      </span>
+      {showCount && <span style={{ fontWeight: 800, fontFamily: "monospace", color, fontSize: Math.round(size * 0.66) }}>{n}</span>}
     </span>
   );
 }
