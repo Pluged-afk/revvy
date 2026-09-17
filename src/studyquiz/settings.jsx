@@ -146,7 +146,7 @@ function KeyBindings({ bindings, onChange, t }) {
   );
 }
 
-export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, onOpenBadges = () => {}, t }) {
+export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, onOpenBadges = () => {}, onOpenStreak = null, t }) {
   const s = t.set || {};
   const { user, username, saveUsername, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
   // Public display name editor (the account name shown everywhere).
@@ -279,11 +279,13 @@ export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onD
             <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:10}}>{t.progressTitle}</div>
             <div style={{display:"flex",gap:8}}>
               {[
-                { v: <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center"}}><StreakFlame count={acctStats.streak} size={17} showZero/></span>, l: t.dayStreak },
+                { v: <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center"}}><StreakFlame count={acctStats.streak} size={17} showZero/></span>, l: t.dayStreak, onClick: onOpenStreak },
                 { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : "0%", l: t.accuracyLbl },
                 { v: acctSrs.totalCount, l: t.inReviewLbl },
-              ].map(({ v, l }, i) => (
-                <div key={i} style={{flex:1,background:"var(--color-background-secondary)",borderRadius:12,padding:"12px 4px",textAlign:"center",border:"0.5px solid var(--color-border-tertiary)"}}>
+              ].map(({ v, l, onClick }, i) => (
+                <div key={i} onClick={onClick || undefined} role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined}
+                  onKeyDown={onClick ? (e)=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); onClick(); } } : undefined}
+                  style={{flex:1,background:"var(--color-background-secondary)",borderRadius:12,padding:"12px 4px",textAlign:"center",border:onClick?"0.5px solid var(--color-accent)":"0.5px solid var(--color-border-tertiary)",cursor:onClick?"pointer":"default"}}>
                   <div style={{fontSize:15.5,fontWeight:800,color:"var(--color-text-primary)"}}>{v}</div>
                   <div style={{fontSize:10,color:"var(--color-text-secondary)",marginTop:3}}>{l}</div>
                 </div>
