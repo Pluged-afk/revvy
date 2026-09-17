@@ -26,7 +26,7 @@ export default function TermsOfService() {
 
         <h2>2. Your account</h2>
         <ul>
-          <li>Most features require an account, which is handled by our sign-in provider (Clerk) using your email and a password or Google sign-in.</li>
+          <li>Most features require an account, which is handled by our sign-in provider using your email and a password or Google sign-in.</li>
           <li>You are responsible for keeping your login secure and for activity under your account.</li>
           <li>You must be old enough to hold an account under your local rules (generally 13, or 16 in parts of the EU).</li>
         </ul>
@@ -40,14 +40,14 @@ export default function TermsOfService() {
 
         <h2>4. Payments and refunds</h2>
         <ul>
-          <li>Pro subscriptions (monthly or yearly) are billed through Stripe and charged when you subscribe and at each renewal.</li>
+          <li>Pro subscriptions (monthly or yearly) are billed through our payment provider and charged when you subscribe and at each renewal.</li>
           <li>You can cancel at any time. Your access continues until the end of the period you have already paid for.</li>
           <li>Except where the law requires otherwise, payments are non-refundable, but we will consider reasonable refund requests in good faith.</li>
         </ul>
 
         <h2>5. Your material and content</h2>
         <ul>
-          <li>You keep ownership of the material you upload. You give us permission to process it for the purpose of generating your quiz, including sending it to our AI provider (Anthropic), transcribing audio or video with our transcription provider (AssemblyAI), and running an automated safety check on it.</li>
+          <li>You keep ownership of the material you upload. You give us permission to process it for the purpose of generating your quiz, including sending it to our AI provider, transcribing audio or video with our transcription provider, and running an automated safety check on it.</li>
           <li>You confirm you have the right to use and upload the material, and that it is not unlawful or infringing.</li>
           <li>If you create a share link, you are making that quiz's content available to anyone who has the link. Do not share content you do not have the right to distribute.</li>
         </ul>
@@ -64,10 +64,9 @@ export default function TermsOfService() {
 
         <h2>7. Third-party services</h2>
         <p>
-          Revyy relies on other providers to work, including Clerk (sign-in), Stripe (payments),
-          Anthropic (AI generation and content checks), AssemblyAI (audio and video transcription),
-          Neon (database), Vercel (hosting), Google (advertising) and Resend (contact email). Your
-          use of Revyy is also subject to their terms where relevant.
+          Revyy relies on other providers to work, including for sign-in, payments, AI generation
+          and content checks, audio and video transcription, database and hosting, advertising and
+          contact email. Your use of Revyy is also subject to their terms where relevant.
         </p>
 
         <h2>8. Account suspension</h2>

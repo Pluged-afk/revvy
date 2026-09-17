@@ -23,7 +23,7 @@ const PRO_MONTHLY = [
   "250 questions a day",
   "All four quiz types, no ads",
   "Unlimited custom exams from your notes",
-  "Full mock tests: SAT, ACT, GRE and 5 more",
+  "Full mock tests: SAT, ACT, GRE and 5 more (up to 2 a day)",
   "Up to 100 questions per quiz",
   "Unlimited uploads, plus lecture audio and video",
   "Cancel anytime",
@@ -43,7 +43,7 @@ const FAQ = [
   { q: "What languages does it support?", a: "Twenty, including Spanish, French, German, Portuguese, Japanese, Hindi and Arabic. You can generate and answer quizzes in your own language." },
   { q: "Can I cancel anytime?", a: "Yes. You can manage or cancel your subscription whenever you like from the billing portal. You keep Pro until the end of the period you already paid for, with no cancellation fee." },
   { q: "When am I charged?", a: "You are charged when you upgrade, then automatically each period (monthly or yearly) until you cancel." },
-  { q: "What payment methods do you accept?", a: "All major credit and debit cards, handled securely by Stripe. We never see or store your card details." },
+  { q: "What payment methods do you accept?", a: "All major credit and debit cards, handled securely by our payment provider. We never see or store your card details." },
   { q: "Is my data safe?", a: "We do not keep your uploaded files. They are used to build your quiz and then discarded. Our Privacy Policy has the full detail." },
 ];
 
