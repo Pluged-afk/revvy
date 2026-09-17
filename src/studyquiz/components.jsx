@@ -60,11 +60,13 @@ export function StreakFlame({ count = 0, size = 22, showZero = false, showCount 
   const stroke = 1.5 + heat;                              // bolder outline as it heats
   const color = tier.color;
   const fx = tier.fx || 0;                                // 0 = calm, 1..3 = animated glow
-  // Animated tiers get their pulsing glow from CSS (via --fc / --fgmax); calm
-  // tiers keep a soft static glow (none at all on a 0-day, unlit flame).
+  // Animated tiers get a slow, layered glow from CSS (via --fc / --fg1 / --fg2);
+  // the glow reach grows with the tier. Calm tiers keep a soft static glow (none
+  // at all on a 0-day, unlit flame).
+  const glowVars = fx >= 3 ? { "--fg1": "9px", "--fg2": "23px" } : fx === 2 ? { "--fg1": "6px", "--fg2": "16px" } : { "--fg1": "4px", "--fg2": "11px" };
   const flameStyle = fx
-    ? { display: "inline-flex", color, "--fc": color, "--fgmax": fx >= 3 ? "18px" : fx === 2 ? "13px" : "9px" }
-    : { display: "inline-flex", color, filter: n ? `drop-shadow(0 0 ${2 + Math.round(heat * 12)}px ${color}${n >= 14 ? "cc" : "88"})` : "none" };
+    ? { display: "inline-flex", color, "--fc": color, ...glowVars }
+    : { display: "inline-flex", color, filter: n ? `drop-shadow(0 0 ${2 + Math.round(heat * 10)}px ${color}${n >= 14 ? "cc" : "88"})` : "none" };
   const animClass = fx >= 3 ? "rv-flame-anim lvl3" : fx === 2 ? "rv-flame-anim lvl2" : fx === 1 ? "rv-flame-anim" : undefined;
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>

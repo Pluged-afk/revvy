@@ -298,6 +298,13 @@ const PATHS = {
       <circle cx="12" cy="11" r="1.5" fill="#f4b83a" stroke="none" />
     </>
   ),
+  // "Unranked" (never entered the Arena): a dashed ring with a dash.
+  rank_unranked: (
+    <>
+      <circle cx="12" cy="12" r="8.5" strokeDasharray="2.6 2.8" />
+      <path d="M8.5 12h7" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 24, stroke = 1.6, className, style }) {

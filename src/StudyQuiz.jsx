@@ -29,7 +29,7 @@ import { UsernameModal, ProModal, PacksModal, UnlockModal, ScoreCardModal, Ranks
 import { ExitModal, PauseOverlay, TimeUpModal, ResumeModal, Confetti, RankPromotion, AdBanners, ActivatingOverlay, MockPassagePanel } from "./studyquiz/overlays.jsx";
 import { Seg, SettingsPanel } from "./studyquiz/settings.jsx";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
-import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, studyRankXP, streakTier, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
+import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, studyRankXP, streakTier, STREAK_TIERS, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
 import ArenaGame from "./components/ArenaGame.jsx";
 import Icon from "./components/Icon.jsx";
@@ -1924,6 +1924,7 @@ export default function StudyQuiz() {
   const [burstConfetti, setBurstConfetti] = useState(false);
   const [rankToast, setRankToast] = useState(null);   // a RANKS entry when the tier goes up
   const [streakToast, setStreakToast] = useState(null); // a STREAK_TIERS entry when the flame is promoted
+  const [showStreak, setShowStreak] = useState(false); // the streak-tiers info panel (tap the flame)
   const [promotion, setPromotion] = useState(null);   // {fromIdx,toIdx,best} when a run promotes you
   const prevRankRef = useRef(null);
   const prevStreakRef = useRef(null);
@@ -2615,6 +2616,43 @@ export default function StudyQuiz() {
       </div>
     </div>
   ) : null;
+  // Streak info panel: tap the flame by your name to see the tier ladder, the
+  // days each needs and the name earned, with your current tier highlighted.
+  const streakInfoEl = showStreak ? (() => {
+    const cur = streakTier(stats.streak || 0);
+    const tiers = STREAK_TIERS.filter((tr) => tr.min >= 1);
+    return (
+      <div style={{position:"fixed",inset:0,zIndex:922,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowStreak(false)}>
+        <div onClick={(e)=>e.stopPropagation()} style={{background:"var(--color-background-primary)",borderRadius:18,padding:"20px",maxWidth:360,width:"100%",maxHeight:"85vh",overflowY:"auto",boxShadow:"0 20px 50px rgba(0,0,0,0.45)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:11,marginBottom:6}}>
+            <StreakFlame count={stats.streak||0} size={28} showZero showCount={false}/>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:11,fontWeight:800,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.streakWord||"Streak"}</div>
+              <div style={{fontSize:19,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:cur.color}}>{(stats.streak||0)>0?(t.streakDaysN||"{n}-day streak").replace("{n}",stats.streak):(t.streakNone||"No streak yet")}</div>
+            </div>
+          </div>
+          <div style={{fontSize:12.5,color:"var(--color-text-secondary)",marginBottom:14,lineHeight:1.5}}>{t.streakInfoSub||"Study any day to keep your flame lit. Hit these milestones to promote it."}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {tiers.map((tr)=>{
+              const reached=(stats.streak||0)>=tr.min, isCur=tr.key===cur.key;
+              return (
+                <div key={tr.key} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 11px",borderRadius:12,border:"1px solid "+(isCur?tr.color:"var(--color-border-secondary)"),background:isCur?tr.color+"14":"transparent",opacity:reached?1:0.6}}>
+                  <span style={{width:28,display:"flex",justifyContent:"center",flexShrink:0}}>{reached?<StreakFlame count={tr.min} size={20} showCount={false}/>:<Icon name="flame" size={17} style={{color:"var(--color-text-tertiary)"}}/>}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:reached?tr.color:"var(--color-text-secondary)"}}>{(t["streakTier_"+tr.key])||tr.name}</div>
+                    <div style={{fontSize:11.5,color:"var(--color-text-tertiary)"}}>{(t.streakDaysReq||"{n} days").replace("{n}",tr.min)}</div>
+                  </div>
+                  {isCur ? <span style={{fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:.4,color:tr.color,flexShrink:0}}>{t.streakYouHere||"You're here"}</span>
+                    : reached ? <Icon name="check" size={16} stroke={2.4} style={{color:tr.color,flexShrink:0}}/> : null}
+                </div>
+              );
+            })}
+          </div>
+          <button onClick={()=>setShowStreak(false)} style={{...Sb.btnGhost,width:"100%",marginTop:14,fontSize:13}}>{t.closeWord||"Close"}</button>
+        </div>
+      </div>
+    );
+  })() : null;
   // Rank promotion: the full one-time celebration shown after a run that climbs
   // a tier (set only in onArenaEnd, so it never replays on reopen).
   const promotionEl = promotion ? (
@@ -2680,7 +2718,7 @@ export default function StudyQuiz() {
     <div style={Sb.root}><style>{CSS}</style>
       <ActivatingOverlay show={activating}/>
       {badgeToastEl}{rankToastEl}{streakToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
-      {joinPreviewEl}
+      {joinPreviewEl}{streakInfoEl}
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(35,31,26,0.16)"}}>{t.welcomePro}</div>}
       <div style={Sb.hero}>
@@ -2693,18 +2731,27 @@ export default function StudyQuiz() {
                 // never see (or click) "Log in" before Clerk finishes loading.
                 <span aria-hidden="true" style={{width:30,height:30,borderRadius:"50%",background:"rgba(255,255,255,0.18)",flexShrink:0}}/>
               ) : user ? (
+                <>
                 <button onClick={()=>openSettings()} title={t.accountLbl} aria-label={t.accountLbl}
                   style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
                   <span style={{position:"relative",width:30,height:30,borderRadius:"50%",overflow:"hidden",flexShrink:0,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",...(isPro?{boxShadow:"0 0 0 2px #fbbf24, 0 0 0 4px rgba(251,191,36,0.35)"}:{})}}>
                     {(username||user.email||"?").charAt(0).toUpperCase()}
                     {user.image && <img src={user.image} alt="" onError={(e)=>e.currentTarget.remove()} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>}
                   </span>
-                  <span style={{fontSize:14,fontWeight:600,color:"#fff",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{username||user.email?.split("@")[0]||t.accountLbl}</span>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:15,lineHeight:1,flexShrink:0}} title={(t["rank_"+(RANKS[myRankInfo.index]?.key)])||RANKS[myRankInfo.index]?.name} aria-hidden="true">
-                    <Icon name={RANKS[myRankInfo.index]?.icon} size={15} stroke={2} style={{color:"#fff"}}/>
-                    {flairEquipped && <BadgeGlyph id={flairEquipped} size={16} t={t}/>}
-                  </span>
+                  <span style={{fontSize:14,fontWeight:600,color:"#fff",maxWidth:104,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{username||user.email?.split("@")[0]||t.accountLbl}</span>
                 </button>
+                {(stats.streak||0)>0 && (
+                  <button onClick={()=>setShowStreak(true)} title={t.streakWord||"Streak"} aria-label={t.streakWord||"Streak"}
+                    style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:999,padding:"3px 8px",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                    <StreakFlame count={stats.streak} size={16}/>
+                  </button>
+                )}
+                <button onClick={()=>setScreen("badges")} title={t.badgesTitle||"Badges & rank"} aria-label={t.badgesTitle||"Badges & rank"}
+                  style={{display:"inline-flex",alignItems:"center",gap:3,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:999,padding:"4px 9px",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                  <Icon name={RANKS[myRankInfo.index]?.icon} size={15} stroke={2} style={{color:"#fff"}}/>
+                  {flairEquipped && <BadgeGlyph id={flairEquipped} size={15} t={t}/>}
+                </button>
+                </>
               ) : (
                 <button onClick={()=>navigate("/login")} style={{background:"rgba(255,255,255,0.16)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,fontSize:12,fontWeight:600,padding:"7px 14px",cursor:"pointer",fontFamily:"inherit"}}>{t.logIn}</button>
               )}
@@ -4615,7 +4662,7 @@ export default function StudyQuiz() {
                 </div>
                 <div style={{textAlign:"right"}}>
                   <div style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:"var(--color-text-primary)"}}>{myRankInfo.xp.toLocaleString()}</div>
-                  <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>{t.arenaBestLabel||"best run"}</div>
+                  <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>{t.xpWord||"XP"}</div>
                 </div>
                 <Icon name="chevron" size={16} stroke={2} style={{color:"var(--color-text-tertiary)",flexShrink:0}}/>
               </div>
@@ -4623,10 +4670,26 @@ export default function StudyQuiz() {
                 <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:14,overflow:"hidden"}}><div style={{width:`${Math.round((myRankInfo.toNext||0)*100)}%`,height:"100%",background:r.color}}/></div>
                 <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:6}}>{(t.rankToNext||"{n} XP to {r}").replace("{n}",Math.max(0,myRankInfo.next.min-myRankInfo.xp).toLocaleString()).replace("{r}",nextNm)}</div>
               </>) : <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:12}}>{t.rankMax||"You've reached the top tier. Legendary."}</div>}
-              <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",marginTop:8,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="bolt" size={12} style={{flexShrink:0}}/>{t.xpAdaptiveHint||"Your rank climbs with your best Endless Arena run."}</div>
+              <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",marginTop:8,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="bolt" size={12} style={{flexShrink:0}}/>{t.rankSourceHint||"Your rank climbs with your Arena runs and your studying."}</div>
             </div>
           ); })()}
         {showRanks && <RanksModal currentIndex={myRankInfo.index} xp={myRankInfo.xp} t={t} onClose={()=>setShowRanks(false)}/>}
+        {/* Arena rank: competitive standing from your best Endless Arena run, kept
+            separate from the overall rank (which also counts study). Unranked
+            until you actually play the Arena. */}
+        {(()=>{ const ab=srs.stats?.arenaBest||0; const ar=ab>0?rankFor(ab):null;
+          const arNm=ar?((t["rank_"+ar.key])||ar.name):(t.unranked||"Unranked"); const c=ar?ar.color:"#9ca3af";
+          return (
+            <div style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 14px",marginBottom:16}}>
+              <div style={{width:44,height:44,borderRadius:"50%",background:c+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} aria-hidden="true"><Icon name={ar?ar.icon:"rank_unranked"} size={22} stroke={1.8} style={{color:c}}/></div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.arenaRankLabel||"Arena rank"}</div>
+                <div style={{fontSize:16,fontWeight:800,color:c,fontFamily:"'Fraunces',Georgia,serif"}}>{arNm}</div>
+                {!ar && <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:1}}>{t.arenaUnrankedHint||"Play the Endless Arena to get ranked."}</div>}
+              </div>
+              {ab>0 && <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:16,fontWeight:800,fontFamily:"monospace",color:"var(--color-text-primary)"}}>{ab.toLocaleString()}</div><div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{t.arenaBestLabel||"best run"}</div></div>}
+            </div>
+          ); })()}
 
         {/* Link to the global leaderboard */}
         {globalUnlocked && <button onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:"transparent",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 14px",marginBottom:16,fontSize:13,fontWeight:700,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}><span aria-hidden="true">🏆</span>{t.globalBoardSee||"See the global leaderboard"}</button>}
@@ -4906,7 +4969,7 @@ export default function StudyQuiz() {
           {!arenaBusy && (<>
             {/* Your competitive Arena RANK (Novice..Luminary from your best run),
                 with this month's season standing below. */}
-            {(()=>{ const r=RANKS[myRankInfo.index]; const nm=(t["rank_"+r.key])||r.name; const nextNm=myRankInfo.next?((t["rank_"+myRankInfo.next.key])||myRankInfo.next.name):null; const best=srs.stats?.arenaBest||0; const toNextPts=myRankInfo.next?Math.max(0,myRankInfo.next.min-myRankInfo.xp):0; const st=arenaSeasonData; const days=st?.endsAt?Math.max(0,Math.ceil((new Date(st.endsAt).getTime()-Date.now())/86400000)):null; return (
+            {(()=>{ const best=srs.stats?.arenaBest||0; const ar=best>0?rankFor(best):null; const r=ar||{color:"#9ca3af",icon:"rank_unranked",key:"unranked",name:"Unranked"}; const nm=ar?((t["rank_"+r.key])||r.name):(t.unranked||"Unranked"); const nextNm=ar&&ar.next?((t["rank_"+ar.next.key])||ar.next.name):null; const toNextPts=ar&&ar.next?Math.max(0,ar.next.min-best):0; const st=arenaSeasonData; const days=st?.endsAt?Math.max(0,Math.ceil((new Date(st.endsAt).getTime()-Date.now())/86400000)):null; return (
               <div style={{background:`linear-gradient(135deg, ${r.color}22, ${r.color}0d)`,border:`1px solid ${r.color}66`,borderRadius:16,padding:16,marginBottom:14}}>
                 <div style={{display:"flex",alignItems:"center",gap:13}}>
                   <div style={{width:52,height:52,borderRadius:14,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:r.color+"26"}} aria-hidden="true"><Icon name={r.icon} size={26} stroke={1.8} style={{color:r.color}}/></div>
@@ -4919,10 +4982,10 @@ export default function StudyQuiz() {
                     <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>{t.arenaBestLabel||"best run"}</div>
                   </div>
                 </div>
-                {myRankInfo.next ? (<>
-                  <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:13,overflow:"hidden"}}><div style={{width:`${Math.round((myRankInfo.toNext||0)*100)}%`,height:"100%",background:r.color}}/></div>
+                {ar && ar.next ? (<>
+                  <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:13,overflow:"hidden"}}><div style={{width:`${Math.round((ar.toNext||0)*100)}%`,height:"100%",background:r.color}}/></div>
                   <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:6}}>{(t.arenaToNextRank||"+{n} pts to {r}").replace("{n}",toNextPts.toLocaleString()).replace("{r}",nextNm)}</div>
-                </>) : <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:12}}>{t.arenaTopRank||"Top rank. A Luminary of the Arena."}</div>}
+                </>) : ar ? <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:12}}>{t.arenaTopRank||"Top rank. A Luminary of the Arena."}</div> : <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:12}}>{t.arenaUnrankedHint||"Play the Endless Arena to get ranked."}</div>}
                 {st?.you && days!=null && <div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:10,paddingTop:10,borderTop:`0.5px solid ${r.color}33`,display:"flex",justifyContent:"space-between",gap:8}}><span>{(t.arenaSeasonPos||"#{r} of {n} this season").replace("{r}",st.you.rank).replace("{n}",st.players)}</span><span style={{color:"var(--color-text-tertiary)"}}>{days===0?(t.arenaSeasonEndsToday||"Ends today"):(t.arenaSeasonEnds||"{n}d left").replace("{n}",days)}</span></div>}
               </div>
             ); })()}

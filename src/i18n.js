@@ -152,6 +152,8 @@ const T_EN = {
   arenaSeasonEnds:"{n}d left", arenaSeasonEndsToday:"Ends today", arenaToNextTier:"+{n} pts to {r}", arenaTopTier:"Top tier, you're at the summit this season.",
   arenaThisSeason:"This season", arenaAllTime:"All time", arenaSeasonEmpty:"No scores yet this season. Play a run to claim the top spot.",
   arenaRankLabel:"Arena rank", arenaBestLabel:"best run", arenaToNextRank:"+{n} pts to {r}", arenaTopRank:"Top rank. A Luminary of the Arena.",
+  unranked:"Unranked", arenaUnrankedHint:"Play the Endless Arena to get ranked.", rankSourceHint:"Your rank climbs with your Arena runs and your studying.", xpWord:"XP",
+  streakWord:"Streak", streakDaysN:"{n}-day streak", streakNone:"No streak yet", streakInfoSub:"Study any day to keep your flame lit. Hit these milestones to promote it.", streakDaysReq:"{n} days", streakYouHere:"You're here", closeWord:"Close",
   unameTitle:"Pick a username", unameSub:"This is your public name on the leaderboard. You can change it later in settings.",
   unamePlaceholder:"username", unameSave:"Save name", unameSaving:"Saving…", unameLater:"Maybe later", unameErr:"Could not save that name.",
   mockResumeTitle:"Pick up where you left off", mockResumeContinue:"Continue exam", mockResumeStartOver:"Start over",
