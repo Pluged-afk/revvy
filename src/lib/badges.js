@@ -75,6 +75,32 @@ export function rankOf(study) {
   return rankFor(arenaBest + studyRankXP(s));
 }
 
+// Streak tiers: the flame gets a rougher, wilder icon and a hotter colour the
+// longer the run holds. `min` is the day threshold that PROMOTES the flame, and
+// crossing one (from `spark` up) fires a one-time celebration. `icon` names a
+// flame in Icon.jsx; tier names are localized via streakTier_<key>. Kept pure so
+// the flame component, the celebration and tests all read the same ladder.
+export const STREAK_TIERS = [
+  { key: "cold",      min: 0,   name: "No streak",  icon: "flame",       color: "#9ca3af" },
+  { key: "spark",     min: 1,   name: "Spark",      icon: "flame",       color: "#f59e0b" },
+  { key: "ember",     min: 3,   name: "Ember",      icon: "flame",       color: "#f59e0b" },
+  { key: "kindled",   min: 7,   name: "Kindled",    icon: "flame_rough", color: "#fb923c" },
+  { key: "blaze",     min: 14,  name: "Blaze",      icon: "flame_rough", color: "#f97316" },
+  { key: "wildfire",  min: 30,  name: "Wildfire",   icon: "flame_wild",  color: "#ef4444" },
+  { key: "inferno",   min: 60,  name: "Inferno",    icon: "flame_wild",  color: "#dc2626" },
+  { key: "firestorm", min: 100, name: "Firestorm",  icon: "flame_wild",  color: "#b91c1c" },
+  { key: "eternal",   min: 200, name: "Eternal",    icon: "flame_wild",  color: "#7c3aed" },
+  { key: "phoenix",   min: 365, name: "Phoenix",    icon: "flame_wild",  color: "#7c3aed" },
+];
+
+// The streak tier for a day count: the highest tier whose floor is met.
+export function streakTier(days) {
+  const n = Math.max(0, Math.round(Number(days) || 0));
+  let i = 0;
+  for (let k = 0; k < STREAK_TIERS.length; k++) if (n >= STREAK_TIERS[k].min) i = k;
+  return { ...STREAK_TIERS[i], index: i, days: n };
+}
+
 // Flatten the study blob into the plain numbers every badge check reads.
 export function buildCtx(study = {}) {
   const s = study.stats || {}, m = study.mockScores || {};

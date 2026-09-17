@@ -36,6 +36,7 @@ const T_EN = {
   starterGoalTitle:"What are you studying for?", starterSubjectsLabel:"Or try a subject",
   dailyGoalTitle:"Daily goal", dailyGoalDone:"Daily goal done!", dailyGoalProgress:"{n} of {g} questions today",
   dailyStreakSafe:"{s}-day streak, safe for today", dailyStreakKeep:"{s}-day streak", dailyDoneNoStreak:"Nice. Come back tomorrow to start a streak.",
+  streakUpLabel:"Streak promoted", streakUpSub:"{n} days in a row. You've been consistent, keep the fire alive!",
   whatUpload:"WHAT YOU CAN UPLOAD",
   features:[
     ["📄","PDFs","Upload lecture slides, textbooks, or any PDF document"],

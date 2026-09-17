@@ -29,7 +29,7 @@ import { UsernameModal, ProModal, PacksModal, UnlockModal, ScoreCardModal, Ranks
 import { ExitModal, PauseOverlay, TimeUpModal, ResumeModal, Confetti, RankPromotion, AdBanners, ActivatingOverlay, MockPassagePanel } from "./studyquiz/overlays.jsx";
 import { Seg, SettingsPanel } from "./studyquiz/settings.jsx";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
-import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, studyRankXP, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
+import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, studyRankXP, streakTier, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
 import ArenaGame from "./components/ArenaGame.jsx";
 import Icon from "./components/Icon.jsx";
@@ -90,6 +90,7 @@ const LIBRARY_REUSE_MAX = 4; // vetted bank questions reused in a 10-Q "quiz eve
 // list.
 let _celebratedRankIdx = -1;
 let _celebratedStreak = -1;
+let _celebratedStreakTier = -1;
 
 // LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, THEME_LIGHT and THEME_DARK now live
 // in ./studyquiz/constants.js (imported at the top of this file).
@@ -1922,9 +1923,11 @@ export default function StudyQuiz() {
   // Celebration effects (confetti burst + rank-up toast + streak-advance sound).
   const [burstConfetti, setBurstConfetti] = useState(false);
   const [rankToast, setRankToast] = useState(null);   // a RANKS entry when the tier goes up
+  const [streakToast, setStreakToast] = useState(null); // a STREAK_TIERS entry when the flame is promoted
   const [promotion, setPromotion] = useState(null);   // {fromIdx,toIdx,best} when a run promotes you
   const prevRankRef = useRef(null);
   const prevStreakRef = useRef(null);
+  const prevStreakTierRef = useRef(null);
   const badgeBaselineRef = useRef(null); // ids the learner already qualified for at load (never celebrated)
   const fireBurst = useCallback(() => { setBurstConfetti(true); setTimeout(() => setBurstConfetti(false), 3800); }, []);
   // Which collapsible home cards are expanded (default collapsed to a tidy header).
@@ -2539,6 +2542,24 @@ export default function StudyQuiz() {
     if (s > prevStreakRef.current && s > _celebratedStreak) { _celebratedStreak = s; SoundEngine.streak(s); }
     prevStreakRef.current = s;
   }, [stats.streak, srs.loaded]);
+  // Streak-tier PROMOTION: a one-time celebration (flame + message + confetti)
+  // when the run crosses into a higher tier (Ember 3, Kindled 7, Blaze 14,
+  // Wildfire 30, ...). Mirrors the rank-up pattern: gated on srs.loaded and
+  // seeded on first load so it never replays on a new login/device, only when the
+  // streak genuinely crosses a milestone in-session.
+  useEffect(() => {
+    if (!srs.loaded) return;
+    const tierObj = streakTier(stats.streak || 0);
+    const tier = tierObj.index;
+    if (prevStreakTierRef.current == null) { prevStreakTierRef.current = tier; if (_celebratedStreakTier < 0) _celebratedStreakTier = tier; return; }
+    if (tier > prevStreakTierRef.current && tier > _celebratedStreakTier && tier >= 2) { // >=2 == 3+ days
+      _celebratedStreakTier = tier;
+      SoundEngine.rankUp(); fireBurst();
+      setStreakToast(tierObj);
+      setTimeout(() => setStreakToast(null), 6000);
+    }
+    prevStreakTierRef.current = tier;
+  }, [stats.streak, srs.loaded, fireBurst]);
   // Auto-dismiss the badge toast.
   useEffect(() => {
     if (!badgeToast) return;
@@ -2580,6 +2601,17 @@ export default function StudyQuiz() {
         <div style={{fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.rankUpLabel||"Rank up!"}</div>
         <div style={{fontSize:24,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:rankToast.color,margin:"2px 0 4px"}}>{(t["rank_"+rankToast.key])||rankToast.name}</div>
         <div style={{fontSize:12.5,color:"var(--color-text-secondary)"}}>{t.rankUpSub||"You've leveled up. Keep climbing."}</div>
+      </div>
+    </div>
+  ) : null;
+  // Streak-promotion banner: a centred burst when the flame reaches a new tier.
+  const streakToastEl = streakToast ? (
+    <div style={{position:"fixed",inset:0,zIndex:906,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",padding:16}}>
+      <div className="rv-rank-burst" onClick={()=>setStreakToast(null)} style={{pointerEvents:"auto",cursor:"pointer",textAlign:"center",background:"var(--color-background-primary)",border:`2px solid ${streakToast.color}`,borderRadius:20,padding:"22px 26px",boxShadow:`0 18px 50px ${streakToast.color}55`,maxWidth:330}}>
+        <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><StreakFlame count={streakToast.days} size={46} showCount={false}/></div>
+        <div style={{fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.streakUpLabel||"Streak milestone"}</div>
+        <div style={{fontSize:24,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:streakToast.color,margin:"2px 0 4px"}}>{(t["streakTier_"+streakToast.key])||streakToast.name}</div>
+        <div style={{fontSize:13,color:"var(--color-text-secondary)"}}>{(t.streakUpSub||"{n} days in a row. You've been consistent, keep the fire alive!").replace("{n}",streakToast.days)}</div>
       </div>
     </div>
   ) : null;
@@ -2647,7 +2679,7 @@ export default function StudyQuiz() {
   if (screen==="home") return (
     <div style={Sb.root}><style>{CSS}</style>
       <ActivatingOverlay show={activating}/>
-      {badgeToastEl}{rankToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
+      {badgeToastEl}{rankToastEl}{streakToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
       {joinPreviewEl}
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(35,31,26,0.16)"}}>{t.welcomePro}</div>}
@@ -3370,7 +3402,7 @@ export default function StudyQuiz() {
   // ── RESULTS ──────────────────────────────────────────────────────
   if (screen==="results" && quiz) return (
     <div style={Sb.root}><style>{CSS}</style>
-      {badgeToastEl}{rankToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
+      {badgeToastEl}{rankToastEl}{streakToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
       <AdBanners isPro={isPro} bottom={false}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(35,31,26,0.16)"}}>{t.welcomePro}</div>}
       <div style={{background:"#312e81",padding:"36px 20px 28px",textAlign:"center"}}>
@@ -3824,7 +3856,7 @@ export default function StudyQuiz() {
     return (
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {badgeToastEl}{rankToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
+      {badgeToastEl}{rankToastEl}{streakToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(35,31,26,0.16)"}}>{t.welcomePro}</div>}
         {showConfetti&&<Confetti/>}
         <div style={{background:theme.bg,padding:"40px 20px 32px",textAlign:"center"}}>
@@ -4827,7 +4859,7 @@ export default function StudyQuiz() {
     const r = arenaResult;
     return (
       <div style={Sb.root}><style>{CSS}</style>
-        {badgeToastEl}{rankToastEl}{promotionEl}{notifToastEl}{burstConfetti&&<Confetti/>}
+        {badgeToastEl}{rankToastEl}{streakToastEl}{promotionEl}{notifToastEl}{burstConfetti&&<Confetti/>}
         <AdBanners isPro={isPro}/>
         <div style={{background:"#312e81",padding:"36px 20px 28px",textAlign:"center"}}>
           {r.subject && <div style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.75)",marginBottom:8,display:"inline-flex",alignItems:"center",gap:6}}><Icon name="bolt" size={13}/>{r.subject.title}</div>}

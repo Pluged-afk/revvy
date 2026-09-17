@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { ClerkProvider } from '@clerk/clerk-react'
 import { applyAppearance } from './lib/appearance.js'
@@ -55,9 +55,22 @@ function AppearanceApplier() {
 // navigate through react-router instead of full page reloads.
 function ClerkRoutes() {
   const navigate = useNavigate()
+  // Theme Clerk's cards to match the app so text stays readable in both modes.
+  // (Default Clerk text was near-invisible on its white card when the app is in
+  // dark mode.) data-theme is set on <html> before first paint, so reading it
+  // once here is correct on load; a rare mid-session theme flip needs a reload
+  // of the auth card, which is acceptable for a logged-out page.
+  const clerkAppearance = useMemo(() => {
+    const dark = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark'
+    const variables = dark
+      ? { colorPrimary: '#a3a4f7', colorText: '#ececec', colorTextSecondary: '#a6a6a6', colorBackground: '#242424', colorInputText: '#ececec', colorInputBackground: '#1f1f1f', colorNeutral: '#ececec' }
+      : { colorPrimary: '#4f46e5', colorText: '#1e293b', colorTextSecondary: '#64748b', colorBackground: '#ffffff', colorInputText: '#1e293b', colorInputBackground: '#ffffff' }
+    return { variables }
+  }, [])
   return (
     <ClerkProvider
       publishableKey={PUBLISHABLE_KEY}
+      appearance={clerkAppearance}
       routerPush={(to) => navigate(to)}
       routerReplace={(to) => navigate(to, { replace: true })}
     >

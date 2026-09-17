@@ -12,7 +12,6 @@ export default function Login() {
             path="/login"
             signUpUrl="/signup"
             fallbackRedirectUrl="/app"
-            appearance={{ variables: { colorPrimary: "#4f46e5" } }}
           />
         </div>
       </div>

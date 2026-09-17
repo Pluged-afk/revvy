@@ -1,7 +1,7 @@
 // Presentational leaf components extracted from StudyQuiz.jsx (avatars, badges,
 // rank pill, streak flame). Pure, no hooks; imported back verbatim.
 import Icon from "../components/Icon.jsx";
-import { RANKS, BADGE_BY_ID } from "../lib/badges.js";
+import { RANKS, BADGE_BY_ID, streakTier } from "../lib/badges.js";
 
 // Round initial-letter avatar used across friends + groups (no external image).
 export function AvatarInitial({ name, size = 34 }) {
@@ -54,16 +54,17 @@ export function GroupAvatar({ name, size = 40 }) {
 export function StreakFlame({ count = 0, size = 22, showZero = false, showCount = true }) {
   const n = Math.max(0, Math.round(count));
   if (!n && !showZero) return null;
+  const tier = streakTier(n);                             // icon + heat colour for this streak
   const heat = Math.min(1, n / 45);                       // ramps to full over ~6 weeks
   const flameSize = Math.round(size * (1 + heat * 0.6));   // up to ~1.6x bigger
-  const glow = 2 + Math.round(heat * 16);
-  const stroke = 1.5 + heat * 1.0;                         // bolder outline as it heats
-  const color = n >= 60 ? "#dc2626" : n >= 30 ? "#ef4444" : n >= 14 ? "#f97316" : n >= 7 ? "#fb923c" : "#f59e0b";
+  const glow = n ? 2 + Math.round(heat * 16) : 0;         // an unlit (0-day) flame has no glow
+  const stroke = 1.5 + heat * 1.0;                        // bolder outline as it heats
+  const color = tier.color;
   const hot = n >= 14;
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-      <span aria-hidden="true" style={{ display: "inline-flex", color, filter: `drop-shadow(0 0 ${glow}px ${color}${hot ? "cc" : "88"})` }}>
-        <Icon name="flame" size={flameSize} stroke={stroke} />
+      <span aria-hidden="true" style={{ display: "inline-flex", color, filter: glow ? `drop-shadow(0 0 ${glow}px ${color}${hot ? "cc" : "88"})` : "none" }}>
+        <Icon name={tier.icon} size={flameSize} stroke={stroke} />
       </span>
       {showCount && <span style={{ fontWeight: 800, fontFamily: "monospace", color, fontSize: Math.round(size * 0.66) }}>{n}</span>}
     </span>

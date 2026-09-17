@@ -141,6 +141,22 @@ const PATHS = {
     </>
   ),
   flame: <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3a2.5 2.5 0 0 0 2.5 2.5z" />,
+  // Streak-tier flames: the plain flame, then a hotter one with an inner core,
+  // then a raging one with an inner core plus side heat licks. Same silhouette
+  // so the set stays consistent; the added tongues read as more intense fire.
+  flame_rough: (
+    <>
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+      <path d="M12 20a2.8 2.8 0 0 0 2.8-2.8c0-1.4-1-2.1-1.7-3.2-.6 1.1-1.9 1.6-1.9 3.1A2.1 2.1 0 0 0 12 20z" />
+    </>
+  ),
+  flame_wild: (
+    <>
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+      <path d="M12 20a2.8 2.8 0 0 0 2.8-2.8c0-1.4-1-2.1-1.7-3.2-.6 1.1-1.9 1.6-1.9 3.1A2.1 2.1 0 0 0 12 20z" />
+      <path d="M18.7 12.8c1 .9 1.5 2.1 1.5 3.4M5.3 12.8c-1 .9-1.5 2.1-1.5 3.4" />
+    </>
+  ),
   volume: (
     <>
       <path d="M4 9v6h4l5 4V5L8 9H4z" />
