@@ -75,22 +75,22 @@ export function rankOf(study) {
   return rankFor(arenaBest + studyRankXP(s));
 }
 
-// Streak tiers: the flame gets a rougher, wilder icon and a hotter colour the
-// longer the run holds. `min` is the day threshold that PROMOTES the flame, and
-// crossing one (from `spark` up) fires a one-time celebration. `icon` names a
-// flame in Icon.jsx; tier names are localized via streakTier_<key>. Kept pure so
-// the flame component, the celebration and tests all read the same ladder.
+// Streak tiers: the flame gets a rougher, wilder icon, a hotter colour and a
+// stronger glow the longer the run holds. `min` is the day threshold that
+// PROMOTES the flame, and crossing one (from Kindled up) fires a one-time
+// celebration. `fx` is the animated-glow level (0 = none; the first two lit
+// tiers stay calm, then it intensifies to 3 at Phoenix). `icon` names a flame in
+// Icon.jsx; tier names are localized via streakTier_<key>. Pure, so the flame
+// component, the celebration and tests all read the same ladder.
 export const STREAK_TIERS = [
-  { key: "cold",      min: 0,   name: "No streak",  icon: "flame",       color: "#9ca3af" },
-  { key: "spark",     min: 1,   name: "Spark",      icon: "flame",       color: "#f59e0b" },
-  { key: "ember",     min: 3,   name: "Ember",      icon: "flame",       color: "#f59e0b" },
-  { key: "kindled",   min: 7,   name: "Kindled",    icon: "flame_rough", color: "#fb923c" },
-  { key: "blaze",     min: 14,  name: "Blaze",      icon: "flame_rough", color: "#f97316" },
-  { key: "wildfire",  min: 30,  name: "Wildfire",   icon: "flame_wild",  color: "#ef4444" },
-  { key: "inferno",   min: 60,  name: "Inferno",    icon: "flame_wild",  color: "#dc2626" },
-  { key: "firestorm", min: 100, name: "Firestorm",  icon: "flame_wild",  color: "#b91c1c" },
-  { key: "eternal",   min: 200, name: "Eternal",    icon: "flame_wild",  color: "#7c3aed" },
-  { key: "phoenix",   min: 365, name: "Phoenix",    icon: "flame_wild",  color: "#7c3aed" },
+  { key: "cold",      min: 0,   name: "No streak", icon: "flame",       color: "#9ca3af", fx: 0 },
+  { key: "spark",     min: 1,   name: "Spark",     icon: "flame",       color: "#f59e0b", fx: 0 },
+  { key: "kindled",   min: 14,  name: "Kindled",   icon: "flame_rough", color: "#fb923c", fx: 0 },
+  { key: "blaze",     min: 30,  name: "Blaze",     icon: "flame_rough", color: "#f97316", fx: 1 },
+  { key: "wildfire",  min: 60,  name: "Wildfire",  icon: "flame_wild",  color: "#ef4444", fx: 1 },
+  { key: "inferno",   min: 90,  name: "Inferno",   icon: "flame_wild",  color: "#dc2626", fx: 2 },
+  { key: "firestorm", min: 180, name: "Firestorm", icon: "flame_wild",  color: "#b91c1c", fx: 2 },
+  { key: "phoenix",   min: 365, name: "Phoenix",   icon: "flame_wild",  color: "#7c3aed", fx: 3 },
 ];
 
 // The streak tier for a day count: the highest tier whose floor is met.

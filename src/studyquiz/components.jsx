@@ -54,16 +54,21 @@ export function GroupAvatar({ name, size = 40 }) {
 export function StreakFlame({ count = 0, size = 22, showZero = false, showCount = true }) {
   const n = Math.max(0, Math.round(count));
   if (!n && !showZero) return null;
-  const tier = streakTier(n);                             // icon + heat colour for this streak
-  const heat = Math.min(1, n / 45);                       // ramps to full over ~6 weeks
+  const tier = streakTier(n);                             // icon + heat colour + effect level
+  const heat = Math.min(1, n / 90);                       // ramps to full over ~3 months
   const flameSize = Math.round(size * (1 + heat * 0.6));   // up to ~1.6x bigger
-  const glow = n ? 2 + Math.round(heat * 16) : 0;         // an unlit (0-day) flame has no glow
-  const stroke = 1.5 + heat * 1.0;                        // bolder outline as it heats
+  const stroke = 1.5 + heat;                              // bolder outline as it heats
   const color = tier.color;
-  const hot = n >= 14;
+  const fx = tier.fx || 0;                                // 0 = calm, 1..3 = animated glow
+  // Animated tiers get their pulsing glow from CSS (via --fc / --fgmax); calm
+  // tiers keep a soft static glow (none at all on a 0-day, unlit flame).
+  const flameStyle = fx
+    ? { display: "inline-flex", color, "--fc": color, "--fgmax": fx >= 3 ? "18px" : fx === 2 ? "13px" : "9px" }
+    : { display: "inline-flex", color, filter: n ? `drop-shadow(0 0 ${2 + Math.round(heat * 12)}px ${color}${n >= 14 ? "cc" : "88"})` : "none" };
+  const animClass = fx >= 3 ? "rv-flame-anim lvl3" : fx === 2 ? "rv-flame-anim lvl2" : fx === 1 ? "rv-flame-anim" : undefined;
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-      <span aria-hidden="true" style={{ display: "inline-flex", color, filter: glow ? `drop-shadow(0 0 ${glow}px ${color}${hot ? "cc" : "88"})` : "none" }}>
+      <span aria-hidden="true" className={animClass} style={flameStyle}>
         <Icon name={tier.icon} size={flameSize} stroke={stroke} />
       </span>
       {showCount && <span style={{ fontWeight: 800, fontFamily: "monospace", color, fontSize: Math.round(size * 0.66) }}>{n}</span>}

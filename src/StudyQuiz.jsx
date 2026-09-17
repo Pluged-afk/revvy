@@ -2543,10 +2543,10 @@ export default function StudyQuiz() {
     prevStreakRef.current = s;
   }, [stats.streak, srs.loaded]);
   // Streak-tier PROMOTION: a one-time celebration (flame + message + confetti)
-  // when the run crosses into a higher tier (Ember 3, Kindled 7, Blaze 14,
-  // Wildfire 30, ...). Mirrors the rank-up pattern: gated on srs.loaded and
-  // seeded on first load so it never replays on a new login/device, only when the
-  // streak genuinely crosses a milestone in-session.
+  // when the run crosses into a higher tier (Kindled 14, Blaze 30, Wildfire 60,
+  // Inferno 90, Firestorm 180, Phoenix 365). Mirrors the rank-up pattern: gated
+  // on srs.loaded and seeded on first load so it never replays on a new
+  // login/device, only when the streak genuinely crosses a milestone in-session.
   useEffect(() => {
     if (!srs.loaded) return;
     const tierObj = streakTier(stats.streak || 0);

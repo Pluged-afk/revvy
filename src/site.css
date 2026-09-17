@@ -488,3 +488,16 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 }
 .rv-adpopup-close:hover { background: rgba(35,31,26,0.12); }
 @media (max-width: 720px) { .rv-adpopup { height: 92px; } }
+
+/* Streak flame effects: a breathing glow that gets stronger and faster with the
+   tier. StreakFlame adds .rv-flame-anim (+ .lvl2 / .lvl3) and sets --fc (the
+   flame colour) and --fgmax (peak glow radius). Only tiers 3+ animate; the first
+   two lit tiers keep a soft static glow. Reduced-motion falls back to static. */
+@keyframes rv-flame-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px var(--fc)); transform: scale(1); }
+  50%      { filter: drop-shadow(0 0 var(--fgmax, 9px) var(--fc)); transform: scale(1.06); }
+}
+.rv-flame-anim { animation: rv-flame-glow 1.7s ease-in-out infinite; transform-origin: 50% 90%; will-change: filter, transform; }
+.rv-flame-anim.lvl2 { animation-duration: 1.1s; }
+.rv-flame-anim.lvl3 { animation-duration: 0.72s; }
+.no-anim .rv-flame-anim { animation: none; filter: drop-shadow(0 0 4px var(--fc)); }
