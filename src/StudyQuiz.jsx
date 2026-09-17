@@ -20,7 +20,7 @@ import { previewInterval } from "./lib/fsrs.js";
 import { LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, AI_MODEL, DIFFICULTY, ADS_ENABLED, STARTER_EXAMS, STARTER_SUBJECTS, STRIPE_MONTHLY_PRICE, STRIPE_YEARLY_PRICE } from "./studyquiz/constants.js";
 import { Sb, CSS } from "./studyquiz/styles.js";
 import { stripEmoji, computeUnread, activityText, timeAgo, parseQuizlet, sectionPerQMarks, sectionMarksTotal, roundMarks, fmtMB, stripFences, shuffleMCQOptions } from "./studyquiz/helpers.js";
-import { AvatarInitial, Medallion, NotifBubble, GroupAvatar, StreakFlame, RankPill, BadgeGlyph, Flair, Logo, PBar, Chip, Segmented, Toggle } from "./studyquiz/components.jsx";
+import { AvatarInitial, Medallion, NotifBubble, GroupAvatar, StreakFlame, RankPill, Flair, Logo, PBar, Chip, Segmented, Toggle } from "./studyquiz/components.jsx";
 import { Haptics, SoundEngine } from "./studyquiz/audio.js";
 import { authHeader, registerToken, callClaude, readStream, deDash, explainAnswer, followupAnswer, regenerateQuestion, verifyFlaggedQuestion, gateContent, gateMessage } from "./studyquiz/ai.js";
 import { AutoAdvanceBar, Flashcard, FillBlank, WrittenAnswer, MatchQuiz, SourceMark } from "./studyquiz/quiz.jsx";
@@ -2848,7 +2848,6 @@ export default function StudyQuiz() {
           <div onClick={()=>setScreen("badges")} className="rv-tile" style={Sb.navTile}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
               <Medallion color={RANKS[myRankInfo.index]?.color||"#4338ca"}><Icon name={RANKS[myRankInfo.index]?.icon} size={19} stroke={2}/></Medallion>
-              {flairEquipped && <BadgeGlyph id={flairEquipped} size={19} t={t}/>}
             </div>
             <div style={{minWidth:0}}>
               <div style={Sb.navTileTitle}>{t.badgesTitle||"Badges & rank"}</div>
@@ -4648,15 +4647,18 @@ export default function StudyQuiz() {
         <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.badgesTitle||"Badges & rank"}</span><span/>
       </div>
       <div className="rv-center-narrow" style={{padding:"18px 16px 44px"}}>
-        {/* Rank header */}
+        {/* Rank header: your overall rank (Arena + study), with your Arena-only
+            standing folded in below as a sub-line (Unranked until you play), so
+            there is only ONE rank card, never two competing ones. */}
         {(()=>{ const r=RANKS[myRankInfo.index]; const nm=(t["rank_"+r.key])||r.name;
           const nextNm=myRankInfo.next?((t["rank_"+myRankInfo.next.key])||myRankInfo.next.name):null;
+          const ab=srs.stats?.arenaBest||0; const ar=ab>0?rankFor(ab):null; const arNm=ar?((t["rank_"+ar.key])||ar.name):(t.unranked||"Unranked");
           return (
             <div onClick={()=>setShowRanks(true)} style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:16,padding:"16px 16px 18px",marginBottom:16,cursor:"pointer"}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
                 <div style={{width:52,height:52,borderRadius:"50%",background:r.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} aria-hidden="true"><Icon name={r.icon} size={26} stroke={1.8} style={{color:r.color}}/></div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.yourRank||"Your rank"}</div>
+                  <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.yourRankHdr||"Your rank"}</div>
                   <div style={{fontSize:20,fontWeight:800,color:r.color,fontFamily:"'Fraunces',Georgia,serif"}}>{nm}</div>
                 </div>
                 <div style={{textAlign:"right"}}>
@@ -4670,25 +4672,13 @@ export default function StudyQuiz() {
                 <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:6}}>{(t.rankToNext||"{n} XP to {r}").replace("{n}",Math.max(0,myRankInfo.next.min-myRankInfo.xp).toLocaleString()).replace("{r}",nextNm)}</div>
               </>) : <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:12}}>{t.rankMax||"You've reached the top tier. Legendary."}</div>}
               <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",marginTop:8,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="bolt" size={12} style={{flexShrink:0}}/>{t.rankSourceHint||"Your rank climbs with your Arena runs and your studying."}</div>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:9,paddingTop:9,borderTop:"0.5px solid var(--color-border-tertiary)",display:"flex",alignItems:"center",gap:7}}>
+                <Icon name={ar?ar.icon:"rank_unranked"} size={14} stroke={2} style={{color:ar?ar.color:"#9ca3af",flexShrink:0}}/>
+                <span style={{minWidth:0}}>{t.arenaRankLabel||"Arena rank"}: <b style={{color:ar?ar.color:"var(--color-text-secondary)",fontWeight:800}}>{arNm}</b>{ab>0?` · ${ab.toLocaleString()} ${t.arenaBestLabel||"best run"}`:` · ${t.arenaUnrankedHint||"Play the Endless Arena to get ranked."}`}</span>
+              </div>
             </div>
           ); })()}
         {showRanks && <RanksModal currentIndex={myRankInfo.index} xp={myRankInfo.xp} t={t} onClose={()=>setShowRanks(false)}/>}
-        {/* Arena rank: competitive standing from your best Endless Arena run, kept
-            separate from the overall rank (which also counts study). Unranked
-            until you actually play the Arena. */}
-        {(()=>{ const ab=srs.stats?.arenaBest||0; const ar=ab>0?rankFor(ab):null;
-          const arNm=ar?((t["rank_"+ar.key])||ar.name):(t.unranked||"Unranked"); const c=ar?ar.color:"#9ca3af";
-          return (
-            <div style={{display:"flex",alignItems:"center",gap:12,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"13px 14px",marginBottom:16}}>
-              <div style={{width:44,height:44,borderRadius:"50%",background:c+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} aria-hidden="true"><Icon name={ar?ar.icon:"rank_unranked"} size={22} stroke={1.8} style={{color:c}}/></div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.arenaRankLabel||"Arena rank"}</div>
-                <div style={{fontSize:16,fontWeight:800,color:c,fontFamily:"'Fraunces',Georgia,serif"}}>{arNm}</div>
-                {!ar && <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:1}}>{t.arenaUnrankedHint||"Play the Endless Arena to get ranked."}</div>}
-              </div>
-              {ab>0 && <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:16,fontWeight:800,fontFamily:"monospace",color:"var(--color-text-primary)"}}>{ab.toLocaleString()}</div><div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{t.arenaBestLabel||"best run"}</div></div>}
-            </div>
-          ); })()}
 
         {/* Link to the global leaderboard */}
         {globalUnlocked && <button onClick={()=>{ if(requireLogin()) return; openGlobalBoard(); }} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:"transparent",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 14px",marginBottom:16,fontSize:13,fontWeight:700,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}><span aria-hidden="true">🏆</span>{t.globalBoardSee||"See the global leaderboard"}</button>}

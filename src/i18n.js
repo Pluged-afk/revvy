@@ -100,7 +100,7 @@ const T_EN = {
   chalRecordStrong:"You're on a winning streak, so Revyy is serving you harder, smarter questions.",
   chalRecordHint:"Win more head-to-head and Revyy raises the difficulty of the questions it generates for you.",
   // Badges + rank (trophy case)
-  badgesTitle:"Badges & rank", yourRank:"Arena rank", rankToNext:"{n} pts to {r}",
+  badgesTitle:"Badges & rank", yourRank:"Arena rank", yourRankHdr:"Your rank", rankToNext:"{n} pts to {r}",
   rankMax:"You've reached the top tier. Legendary.",
   rankAllTitle:"Ranks", rankAllSub:"Climb by scoring higher in the Endless Arena.", rankCurrent:"You", rankYourXp:"Your best Arena run: {n} pts",
   badgesEarnedCount:"{n} of {m} badges", badgesPublicOn:"Shown publicly", badgesPublicOff:"Hidden",
