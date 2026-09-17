@@ -146,7 +146,7 @@ function KeyBindings({ bindings, onChange, t }) {
   );
 }
 
-export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, onOpenBadges = () => {}, onOpenStreak = null, t }) {
+export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, onOpenBadges = () => {}, onOpenStreak = null, onOpenAccuracy = null, onOpenReview = null, t }) {
   const s = t.set || {};
   const { user, username, saveUsername, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
   // Public display name editor (the account name shown everywhere).
@@ -280,8 +280,8 @@ export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onD
             <div style={{display:"flex",gap:8}}>
               {[
                 { v: <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center"}}><StreakFlame count={acctStats.streak} size={17} showZero/></span>, l: t.dayStreak, onClick: onOpenStreak },
-                { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : "0%", l: t.accuracyLbl },
-                { v: acctSrs.totalCount, l: t.inReviewLbl },
+                { v: acctStats.accuracy != null ? `${acctStats.accuracy}%` : "0%", l: t.accuracyLbl, onClick: onOpenAccuracy },
+                { v: acctSrs.totalCount, l: t.inReviewLbl, onClick: onOpenReview },
               ].map(({ v, l, onClick }, i) => (
                 <div key={i} onClick={onClick || undefined} role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined}
                   onKeyDown={onClick ? (e)=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); onClick(); } } : undefined}
