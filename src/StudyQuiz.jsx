@@ -2748,8 +2748,7 @@ export default function StudyQuiz() {
                 )}
                 <button onClick={()=>setScreen("badges")} title={t.badgesTitle||"Badges & rank"} aria-label={t.badgesTitle||"Badges & rank"}
                   style={{display:"inline-flex",alignItems:"center",gap:3,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:999,padding:"4px 9px",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
-                  <Icon name={RANKS[myRankInfo.index]?.icon} size={15} stroke={2} style={{color:"#fff"}}/>
-                  {flairEquipped && <BadgeGlyph id={flairEquipped} size={15} t={t}/>}
+                  <Icon name={RANKS[myRankInfo.index]?.icon} size={16} stroke={2} style={{color:"#fff"}}/>
                 </button>
                 </>
               ) : (
