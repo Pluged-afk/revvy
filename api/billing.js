@@ -17,6 +17,17 @@ const PACKS = {
   C: { questions: 3000, priceId: "price_1TiAcbGXyNWRBegioXFNLBKW" },
 };
 
+// The signed-in user's id, taken from the verified Clerk session token, never
+// from the request body. Checkout and the billing portal act on a specific
+// account, so they must not trust a client-supplied id.
+async function userIdFromToken(req) {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return null;
+  try { const p = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY }); return p.sub || null; }
+  catch { return null; }
+}
+
 function getBaseUrl(req) {
   const origin = req.headers.origin;
   if (origin && /^https?:\/\//.test(origin)) return origin.replace(/\/$/, "");
@@ -29,8 +40,10 @@ function getBaseUrl(req) {
 // action=checkout: creates a Stripe Checkout session (subscription, charged
 // immediately, no trial) and returns its URL.
 async function checkout(req, res, stripe, body) {
-  const { priceId, userId, userEmail } = body;
-  if (!priceId || !userId) return res.status(400).json({ error: "Missing priceId or userId." });
+  const userId = await userIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: "Please sign in first." });
+  const { priceId, userEmail } = body;
+  if (!priceId) return res.status(400).json({ error: "Missing priceId." });
 
   // Reuse the saved Stripe customer if this user already has one.
   let existingCustomerId = null;
@@ -66,8 +79,9 @@ async function checkout(req, res, stripe, body) {
 
 // action=portal: opens the Stripe Customer Portal (manage / cancel).
 async function portal(req, res, stripe, body) {
-  const { userId, flow } = body;
-  if (!userId) return res.status(400).json({ error: "Missing userId." });
+  const userId = await userIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: "Please sign in first." });
+  const { flow } = body;
 
   let customerId, subscriptionId;
   try {

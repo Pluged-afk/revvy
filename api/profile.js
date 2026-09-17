@@ -60,10 +60,12 @@ async function getProfile(req, res) {
 }
 
 // POST action=create: ensure a profile row exists for the signed-in Clerk user.
-// Idempotent. id and clerk_user_id are both set to the Clerk user id.
+// Idempotent. The user id comes from the verified session token (never the
+// body), so a caller can only ever create or touch their own row.
 async function createProfile(req, res, body) {
-  const { userId, email } = body;
-  if (!userId) return res.status(400).json({ error: "Missing userId." });
+  const userId = await userIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: "Invalid session." });
+  const { email } = body;
   try {
     await sql`
       INSERT INTO profiles (id, clerk_user_id, email)
@@ -78,18 +80,15 @@ async function createProfile(req, res, body) {
   }
 }
 
-// POST action=delete: removes the user's profile row from Neon. The Clerk user
-// record itself is deleted client-side via clerkUser.delete() (a secure,
-// self-only call), so no Clerk secret is needed here.
-//
-// NOTE (hardening): this trusts the userId in the body. For production, verify
-// the Clerk session token (Authorization: Bearer …) with @clerk/backend before
-// deleting, so a caller can only delete their own row.
-async function deleteAccount(req, res, body) {
-  const { userId } = body;
-  if (!userId) return res.status(400).json({ error: "Missing userId." });
+// POST action=delete: removes the user's profile row from the database. The
+// Clerk user record itself is deleted client-side via clerkUser.delete() (a
+// secure, self-only call). The user id comes from the verified session token,
+// so a caller can only ever delete their own row, never someone else's.
+async function deleteAccount(req, res) {
+  const userId = await userIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: "Invalid session." });
   try {
-    await sql`DELETE FROM profiles WHERE id = ${userId}`;
+    await sql`DELETE FROM profiles WHERE clerk_user_id = ${userId} OR id = ${userId}`;
     console.log("[profile:delete] removed profile row for", userId);
     return res.status(200).json({ success: true });
   } catch (e) {
@@ -143,7 +142,7 @@ export default async function handler(req, res) {
   if (req.method === "POST") {
     const body = await readBody(req);
     if (body.action === "create") return createProfile(req, res, body);
-    if (body.action === "delete") return deleteAccount(req, res, body);
+    if (body.action === "delete") return deleteAccount(req, res);
     if (body.action === "setUsername") return setUsername(req, res, body);
     if (body.action === "setLanguage") return setLanguage(req, res, body);
     return res.status(400).json({ error: "Unknown action." });
