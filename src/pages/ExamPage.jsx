@@ -48,7 +48,7 @@ export default function ExamPage() {
             <h1>{seo.h1}</h1>
             <p className="hero-sub">{seo.lede}</p>
             <div className="hero-btns">
-              <Link to="/app" className="btn btn-primary btn-lg">
+              <Link to={`/app?mock=${exam}`} className="btn btn-primary btn-lg">
                 Start practising free <Icon name="arrow" size={18} />
               </Link>
               <Link to={`/blog/${seo.guide}`} className="btn btn-ghost btn-lg">
@@ -168,7 +168,7 @@ export default function ExamPage() {
             <div className="cta-band">
               <h2>Start your {mock.name} practice now</h2>
               <p>Answer your first questions in under a minute, with an explanation on every one. No card, no commitment.</p>
-              <Link to="/app" className="btn btn-light btn-lg">
+              <Link to={`/app?mock=${exam}`} className="btn btn-light btn-lg">
                 Start practising free <Icon name="arrow" size={18} />
               </Link>
             </div>

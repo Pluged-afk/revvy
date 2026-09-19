@@ -1262,6 +1262,18 @@ export default function StudyQuiz() {
   const discardResume=()=>{ try{ sessionStorage.removeItem("revyy_exam"); }catch{ /* ignore */ } setExamResume(null); };
   const fmtClock=(s)=>{ const m=Math.floor(s/60), ss=s%60; return m+":"+String(ss).padStart(2,"0"); };
 
+  // Deep link from the /practice/<exam> landing pages: /app?mock=<id> opens that
+  // exam's mock intro directly (Pro can start it; free sees the Pro gate there).
+  useEffect(() => {
+    let id;
+    try { id = new URLSearchParams(window.location.search).get("mock"); } catch { return; }
+    if (!id || !getMock(id)) return;
+    try { const u = new URL(window.location.href); u.searchParams.delete("mock"); window.history.replaceState({}, "", u.pathname + u.search); } catch { /* ignore */ }
+    // Deferred so it isn't a synchronous set-state in the effect body.
+    const tm = setTimeout(() => { setMockPresetId(id); setMockGenErr(""); setScreen("mock_intro"); }, 0);
+    return () => clearTimeout(tm);
+  }, []);
+
   // After returning from Stripe checkout (?upgraded=true): the webhook writes
   // is_pro asynchronously, so poll Supabase for a fresh value until it flips
   // to true (or we give up), showing an "activating" overlay meanwhile.
@@ -1838,9 +1850,10 @@ export default function StudyQuiz() {
     if (!isPro) { setShowProModal(true); return; }
     setMockGenErr("");
     clearMockResume(); // a fresh exam supersedes any half-finished one
-    // Server-enforced, account-tied daily cap: atomically reserve one mock.
-    const cap = await consumeMock();
-    if (!cap || cap.allowed === false) { setMockGenErr(t.mockDailyLimit.replace("{n}", cap?.mock_daily_cap ?? 2)); return; }
+    // Early cap hint from the cached usage, so we don't spend an AI generation
+    // when the user is clearly out of mocks. The authoritative daily reservation
+    // happens AFTER the exam is built (below), so a failed build never costs a slot.
+    if (usage && usage.mocks_remaining === 0) { setMockGenErr(t.mockDailyLimit.replace("{n}", usage.mock_daily_cap ?? 2)); return; }
     const exam = getMock(mockPresetId) || MOCK_EXAMS[0];
     setScreen("mock_gen");
     try {
@@ -1854,6 +1867,11 @@ export default function StudyQuiz() {
       const sec0 = exam.sections[0];
       const qs = await buildMockSection(exam, sec0, tilt);
       if (!qs.length) throw new Error("Couldn't generate the exam, please try again.");
+      // A real exam exists now, so reserve the daily mock slot (server-enforced,
+      // atomic, account-tied). Because a generation failure throws above this, a
+      // failed build never burns one of the day's mocks.
+      const cap = await consumeMock();
+      if (!cap || cap.allowed === false) { setMockGenErr(t.mockDailyLimit.replace("{n}", cap?.mock_daily_cap ?? 2)); setScreen("mock_intro"); return; }
       submittedSecRef.current = -1;
       // Carry the WHOLE exam spec into state (scoreMode, goodScore, adaptive,
       // routing, totals) so scoreMock has everything it needs at the end.

@@ -168,6 +168,16 @@ export async function buildMockSection(exam, section, tilt) {
     const results = await Promise.all(sizes.map((n) => callMockSection(exam, section, tilt, exemplars, avoid, n).catch(() => ({ questions: [] }))));
     const seen = new Set(); const out = [];
     for (const r of results) for (const q of (r.questions || [])) { const k = String(q.question || "").toLowerCase().trim(); if (k && !seen.has(k)) { seen.add(k); out.push(q); } }
+    // If chunks fell short (a failed batch or duplicates), top the shortfall up
+    // once so the section keeps its authentic length. Fail-soft: any error just
+    // leaves it slightly short, which still scores fairly against its own count.
+    const short = section.count - out.length;
+    if (short > 0 && out.length > 0) {
+      const top = [];
+      for (let rem = short; rem > 0; rem -= MOCK_CHUNK) top.push(Math.min(MOCK_CHUNK, rem));
+      const more = await Promise.all(top.map((n) => callMockSection(exam, section, tilt, exemplars, avoid, n).catch(() => ({ questions: [] }))));
+      for (const r of more) for (const q of (r.questions || [])) { const k = String(q.question || "").toLowerCase().trim(); if (k && !seen.has(k)) { seen.add(k); out.push(q); } }
+    }
     mockContributeGlobal(exam.name, section.name, out);
     return out.slice(0, section.count);
   }
@@ -179,6 +189,13 @@ export async function buildMockSection(exam, section, tilt) {
   // style exemplars), and contribute the questions back for everyone.
   const { exemplars, avoid } = await mockDrawGlobal(exam.name, section.name);
   const results = await Promise.all(needs.map((n) => callMockSection(exam, section, tilt, exemplars, avoid, n).catch(() => null)));
+  // Retry any passage group that came back empty, once, so a transient failure on
+  // one passage doesn't silently drop a chunk of the section. Fail-soft.
+  const failed = results.map((r, i) => (!r || !r.questions?.length) ? i : -1).filter((i) => i >= 0);
+  if (failed.length) {
+    const retried = await Promise.all(failed.map((i) => callMockSection(exam, section, tilt, exemplars, avoid, needs[i]).catch(() => null)));
+    failed.forEach((i, k) => { if (retried[k]?.questions?.length) results[i] = retried[k]; });
+  }
   const out = [];
   results.forEach((r, g) => {
     if (!r || !r.questions.length) return;
