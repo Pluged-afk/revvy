@@ -5219,7 +5219,7 @@ export default function StudyQuiz() {
           <span className={low?"rv-timer-flash":""} style={{fontSize:15,fontWeight:800,color:low?"#dc2626":"#4338ca",fontVariantNumeric:"tabular-nums"}}>{mm}:{String(ss).padStart(2,"0")}</span>
         </div>
         <PBar v={mockQIdx} max={sec.questions.length}/>
-        <div className={hasPassage?"rv-center":"rv-center-narrow"} style={{padding:"16px 16px 32px"}}>
+        <div className={hasPassage?"rv-mock-wide":"rv-center-narrow"} style={{padding:"16px 16px 32px"}}>
           {hasPassage
             ? <div className="rv-mock-split"><div className="rv-mock-passage"><MockPassagePanel passage={q._passage} svg={q._psvg} activeU={activeU} label={sec.name}/></div>{questionCol}</div>
             : questionCol}

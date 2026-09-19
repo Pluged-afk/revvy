@@ -136,5 +136,7 @@ export const CSS = `
     .rv-center{max-width:800px;margin:0 auto;width:100%;padding:32px 40px!important;}
     .rv-center-narrow{max-width:680px;margin:0 auto;width:100%;padding:32px 40px!important;}
     .rv-exam-body{max-width:960px;margin:0 auto;width:100%;padding:28px 40px!important;}
+    /* Mock two-panel (passage left, question right) reads wider, like the real test UI */
+    .rv-mock-wide{max-width:1080px;margin:0 auto;width:100%;padding:24px 36px!important;}
   }
 `;

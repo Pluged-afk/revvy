@@ -64,7 +64,11 @@ export function sanitizeMockQs(qs) {
   ).map((q) => {
     const svg = safeSvg(q.svg);
     const base = { question: deDash(q.question), options: q.options.map(deDash), correct: q.correct, explanation: deDash(q.explanation) };
-    return svg ? { ...base, svg } : base;
+    // Per-question stimulus (SAT/PSAT R&W, GRE/GMAT Verbal RC): kept so the runner
+    // can show it in the left panel beside the question, like the real test.
+    const passage = typeof q.passage === "string" ? deDash(q.passage.trim()).slice(0, 1400) : "";
+    const withSvg = svg ? { ...base, svg } : base;
+    return passage ? { ...withSvg, passage } : withSvg;
   });
 }
 
@@ -79,6 +83,18 @@ export async function callMockSection(exam, section, tilt, exemplars = [], avoid
   const nOpt = section.options || 4;
   const count = n || section.count;
   const optTemplate = Array(nOpt).fill('"..."').join(",");
+  // Standalone sections whose real test shows the reading text in a LEFT panel
+  // beside the question (SAT/PSAT R&W always; GRE/GMAT Verbal only for the
+  // reading-comprehension items). The model returns the text in a per-question
+  // "passage" field, kept out of the stem, so the runner can split the view.
+  const wantsStimulus = section.stimulus === true;
+  const optStimulus = section.stimulus === "optional";
+  const stimRule = wantsStimulus
+    ? ` SPLIT LAYOUT: put the short text each question is based on in a separate "passage" field (the 1-3 sentence passage, poem, or notes excerpt), and keep "question" as ONLY the question itself (e.g. "Which choice best states the main purpose of the text?"). It renders in a panel beside the question, exactly like the real test, so EVERY question must have a non-empty "passage" and the question must NOT repeat that text.`
+    : optStimulus
+    ? ` SPLIT LAYOUT: for reading-comprehension items, put the passage in a separate "passage" field and keep "question" as only the question; for text-completion, vocabulary, sentence-equivalence or critical-reasoning items where the text IS the prompt, set "passage" to an empty string "".`
+    : "";
+  const stimField = (wantsStimulus || optStimulus) ? `"passage":"...",` : "";
   // Universal mock learning: a few good crowd-generated questions as STYLE
   // exemplars (never to copy) + recent flagged-bad stems to avoid.
   const exBlock = (exemplars && exemplars.length)
@@ -127,8 +143,8 @@ Provide EXACTLY ${count} multiple-choice questions.
 ${wantsFigures ? `\nFIGURES ARE MANDATORY: a real ${exam.name} ${section.name} form is full of diagrams. AT LEAST ${kFig} of the ${count} questions MUST be geometry, coordinate-geometry, trigonometry, or data-interpretation questions, and EACH of those MUST carry an accurate inline "svg" figure the question genuinely depends on (a triangle/circle/polygon with labelled sides or angles, a coordinate plane with plotted points/lines/parabolas, a number line, or a bar/line/scatter chart). Draw each figure to the EXACT numbers in the question and consistent with the correct answer. Fewer than ${kFig} figures does NOT look like a real ${exam.name} and is unacceptable. Purely algebraic or arithmetic questions need no figure.\n${svgRules}\n` : ""}
 ${tiltLine} Vary difficulty across the real exam's hard range, but never make a question easy.
 ${realismLine}
-Each question object: "question" (the full stem, with any context written into it), "options" (EXACTLY ${nOpt} choices), "correct" (0-based index of the ONE correct option), "explanation" (one short sentence)${wantsFigures ? `, and "svg" (the figure, or omit it for a figure-free question)` : ""}. CRITICAL: work every calculation out FIRST, then key the matching option; double-check numbers and units. Exactly ONE correct option each; discard any you are not certain of. The "explanation" must be a single clean final sentence and must NEVER second-guess or recalculate itself (no "wait", "let me recalculate", "actually"); if you catch a mistake while writing it, fix the "correct" index so it matches the value you land on, do not narrate the correction.${exBlock}${avoidBlock}
-Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."${wantsFigures ? `,"svg":"<svg viewBox='0 0 200 200'>…</svg> only when the question needs a figure"` : ""}}]}
+Each question object: "question" (${(wantsStimulus||optStimulus) ? `only the question itself, with any reading text placed in "passage" instead of here` : "the full stem, with any context written into it"}), "options" (EXACTLY ${nOpt} choices), "correct" (0-based index of the ONE correct option), "explanation" (one short sentence)${wantsFigures ? `, and "svg" (the figure, or omit it for a figure-free question)` : ""}. CRITICAL: work every calculation out FIRST, then key the matching option; double-check numbers and units. Exactly ONE correct option each; discard any you are not certain of. The "explanation" must be a single clean final sentence and must NEVER second-guess or recalculate itself (no "wait", "let me recalculate", "actually"); if you catch a mistake while writing it, fix the "correct" index so it matches the value you land on, do not narrate the correction.${stimRule}${exBlock}${avoidBlock}
+Return ONLY raw JSON, no markdown: {"questions":[{${stimField}"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."${wantsFigures ? `,"svg":"<svg viewBox='0 0 200 200'>…</svg> only when the question needs a figure"` : ""}}]}
 The "questions" array MUST contain ${count} items${wantsFigures ? `, at least ${kFig} of them with an "svg"` : ""}.`;
     // Figure-heavy sections run longer (each SVG is ~500-1000 tokens), so give
     // them more headroom to avoid truncating a chunk mid-figure.
@@ -176,7 +192,10 @@ export async function buildMockSection(exam, section, tilt) {
     const { exemplars, avoid } = await mockDrawGlobal(exam.name, section.name);
     const results = await Promise.all(sizes.map((n) => callMockSection(exam, section, tilt, exemplars, avoid, n).catch(() => ({ questions: [] }))));
     const seen = new Set(); const out = [];
-    for (const r of results) for (const q of (r.questions || [])) { const k = String(q.question || "").toLowerCase().trim(); if (k && !seen.has(k)) { seen.add(k); out.push(q); } }
+    // Dedup on stimulus + question: with the passage split out, the bare question
+    // ("Which choice completes the text...") repeats across items, so keying on
+    // the question alone would wrongly drop valid ones.
+    for (const r of results) for (const q of (r.questions || [])) { const k = (String(q.passage || "") + "||" + String(q.question || "")).toLowerCase().trim(); if (k && !seen.has(k)) { seen.add(k); out.push(q); } }
     // If chunks fell short (a failed batch or duplicates), top the shortfall up
     // once so the section keeps its authentic length. Fail-soft: any error just
     // leaves it slightly short, which still scores fairly against its own count.
@@ -185,10 +204,17 @@ export async function buildMockSection(exam, section, tilt) {
       const top = [];
       for (let rem = short; rem > 0; rem -= MOCK_CHUNK) top.push(Math.min(MOCK_CHUNK, rem));
       const more = await Promise.all(top.map((n) => callMockSection(exam, section, tilt, exemplars, avoid, n).catch(() => ({ questions: [] }))));
-      for (const r of more) for (const q of (r.questions || [])) { const k = String(q.question || "").toLowerCase().trim(); if (k && !seen.has(k)) { seen.add(k); out.push(q); } }
+      for (const r of more) for (const q of (r.questions || [])) { const k = (String(q.passage || "") + "||" + String(q.question || "")).toLowerCase().trim(); if (k && !seen.has(k)) { seen.add(k); out.push(q); } }
     }
-    mockContributeGlobal(exam.name, section.name, out);
-    return out.slice(0, section.count);
+    // A per-question stimulus (SAT/PSAT R&W, GRE/GMAT Verbal RC) becomes the
+    // left-panel passage so the runner shows the real two-panel layout; any
+    // figure moves into that panel with its text. Items with no stimulus stay
+    // single-column, exactly as those questions look on the real test.
+    const tagged = out.map((q, i) => q.passage
+      ? { ...q, passage: undefined, svg: "", _passage: q.passage, _psvg: q.svg || "", _pIdx: i }
+      : q);
+    mockContributeGlobal(exam.name, section.name, tagged);
+    return tagged.slice(0, section.count);
   }
   const size = section.passageSize || section.count;
   const groups = Math.min(MOCK_MAX_PASSAGES, Math.max(1, Math.ceil(section.count / size)));

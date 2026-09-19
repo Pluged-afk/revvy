@@ -6,6 +6,10 @@
 // Section fields:
 //   count, minutes, options   authentic length, time, and answer-choice count
 //   format   "standalone" | "passage" | "english"  (how it is generated + shown)
+//   stimulus   true | "optional"  (standalone only): each question carries its OWN
+//              short text in a separate "passage" field, shown in a left panel
+//              beside the question, like the real two-panel test UI (SAT/PSAT R&W
+//              always; GRE/GMAT Verbal only for the reading-comprehension items)
 //   passageSize   questions per passage (passage / english formats)
 //   group, groupName   sections scored together as one measure (defaults to the section)
 //   noComposite   scored + shown, but NOT part of the composite (e.g. ACT Science STEM)
@@ -37,8 +41,8 @@ export const MOCK_EXAMS = [
     id: "sat", name: "SAT", blurb: "Reading & Writing · Math",
     note: "Digital SAT · 2 sections · scored 400-1600", scoreMode: "sum", scaleMin: 200, scaleMax: 800, goodScore: 1200,
     sections: [
-      { id: "rw", name: "Reading & Writing", count: 54, minutes: 64, options: 4, format: "standalone",
-        instr: "Digital SAT Reading and Writing. Each question is self-contained: a SHORT passage (1-3 sentences, or a brief poem/notes excerpt) then ONE question testing central ideas and details, command of evidence (textual or quantitative), words in context, text structure and purpose, cross-text connections, or Standard English conventions (grammar, punctuation, sentence boundaries, agreement). FOUR choices. Span the full digital-SAT difficulty range." },
+      { id: "rw", name: "Reading & Writing", count: 54, minutes: 64, options: 4, format: "standalone", stimulus: true,
+        instr: "Digital SAT Reading and Writing. Each question is self-contained: a SHORT text (1-3 sentences, or a brief poem/notes excerpt) then ONE question testing central ideas and details, command of evidence (textual or quantitative), words in context, text structure and purpose, cross-text connections, or Standard English conventions (grammar, punctuation, sentence boundaries, agreement). FOUR choices. Span the full digital-SAT difficulty range." },
       { id: "math", name: "Math", count: 44, minutes: 70, options: 4, format: "standalone",
         instr: "Digital SAT Math. FOUR-choice questions covering Algebra, Advanced Math (quadratics, exponentials, functions), Problem-Solving and Data Analysis (ratios, rates, percentages, probability, statistics), and Geometry and Trigonometry. Self-contained and solvable by hand; include an inline <svg> when a figure is needed. Span the full difficulty range." },
     ],
@@ -47,8 +51,8 @@ export const MOCK_EXAMS = [
     id: "psat", name: "PSAT/NMSQT", blurb: "Reading & Writing · Math",
     note: "Digital PSAT · 2 sections · scored 320-1520", scoreMode: "sum", scaleMin: 160, scaleMax: 760, goodScore: 1100,
     sections: [
-      { id: "rw", name: "Reading & Writing", count: 54, minutes: 64, options: 4, format: "standalone",
-        instr: "Digital PSAT/NMSQT Reading and Writing (same style as the digital SAT). Each question is self-contained: a SHORT passage (1-3 sentences) then ONE question on central ideas and details, command of evidence, words in context, text structure and purpose, or Standard English conventions. FOUR choices." },
+      { id: "rw", name: "Reading & Writing", count: 54, minutes: 64, options: 4, format: "standalone", stimulus: true,
+        instr: "Digital PSAT/NMSQT Reading and Writing (same style as the digital SAT). Each question is self-contained: a SHORT text (1-3 sentences) then ONE question on central ideas and details, command of evidence, words in context, text structure and purpose, or Standard English conventions. FOUR choices." },
       { id: "math", name: "Math", count: 44, minutes: 70, options: 4, format: "standalone",
         instr: "Digital PSAT/NMSQT Math (same style as the digital SAT). Algebra, functions and quadratics, ratios/percentages/statistics, and geometry/trigonometry. FOUR choices, self-contained, solvable by hand; inline <svg> when a figure is needed." },
     ],
@@ -57,8 +61,8 @@ export const MOCK_EXAMS = [
     id: "gre", name: "GRE", blurb: "Verbal · Quantitative",
     note: "GRE General · 2 measures · scored 260-340", scoreMode: "sum", scaleMin: 130, scaleMax: 170, goodScore: 320,
     sections: [
-      { id: "verbal", name: "Verbal Reasoning", count: 27, minutes: 41, options: 5, format: "standalone",
-        instr: "GRE Verbal Reasoning. Mix reading comprehension (a short passage in the stem + a question on meaning, inference, or the author's purpose), single-blank text completion (a sentence with one blank, pick the best word), and questions on graduate-level vocabulary in context. FIVE choices with challenging, close distractors." },
+      { id: "verbal", name: "Verbal Reasoning", count: 27, minutes: 41, options: 5, format: "standalone", stimulus: "optional",
+        instr: "GRE Verbal Reasoning. Mix reading comprehension (a short passage the question is based on + a question on meaning, inference, or the author's purpose), single-blank text completion (a sentence with one blank, pick the best word), and questions on graduate-level vocabulary in context. FIVE choices with challenging, close distractors." },
       { id: "quant", name: "Quantitative Reasoning", count: 27, minutes: 47, options: 5, format: "standalone",
         instr: "GRE Quantitative Reasoning. Problem-solving and data interpretation across arithmetic, algebra, geometry, and statistics at an advanced level, plus some quantitative-comparison questions (compare Quantity A and Quantity B; options are 'A is greater / B is greater / equal / cannot be determined'). Include data-interpretation questions with an inline <svg> chart. FIVE choices." },
     ],
@@ -95,8 +99,8 @@ export const MOCK_EXAMS = [
     sections: [
       { id: "quant", name: "Quantitative Reasoning", count: 21, minutes: 45, options: 5, format: "standalone",
         instr: "GMAT Focus Quantitative Reasoning. Problem-solving in arithmetic, algebra, and word problems (no geometry). Self-contained, no calculator needed. FIVE choices with close numeric distractors." },
-      { id: "verbal", name: "Verbal Reasoning", count: 23, minutes: 45, options: 5, format: "standalone",
-        instr: "GMAT Focus Verbal Reasoning. Critical reasoning (evaluate, strengthen, or weaken a short argument) and reading comprehension (a short passage in the stem + a question). FIVE choices with close distractors." },
+      { id: "verbal", name: "Verbal Reasoning", count: 23, minutes: 45, options: 5, format: "standalone", stimulus: "optional",
+        instr: "GMAT Focus Verbal Reasoning. Critical reasoning (evaluate, strengthen, or weaken a short argument, kept in the question) and reading comprehension (a short passage the question is based on + a question). FIVE choices with close distractors." },
       { id: "di", name: "Data Insights", count: 20, minutes: 45, options: 5, format: "standalone",
         instr: "GMAT Focus Data Insights. Data interpretation from a described table or graph (use an inline <svg>), multi-source reasoning, two-part analysis, and data sufficiency. FIVE choices." },
     ],
