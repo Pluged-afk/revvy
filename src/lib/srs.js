@@ -72,6 +72,8 @@ export function useSRS() {
     // First-run starter card: a persisted one-shot + a "server blob ready" flag.
     starterSeen: study?.starterSeen ?? false,
     markStarterSeen: study?.markStarterSeen || (() => {}),
+    onboarding: study?.onboarding ?? null,
+    completeOnboarding: study?.completeOnboarding || (() => {}),
     loaded: study?.loaded ?? false,
     daily: study?.daily || { date: null, count: 0 },
     subjectArena: study?.subjectArena || {},

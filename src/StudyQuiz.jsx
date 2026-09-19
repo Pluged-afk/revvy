@@ -28,6 +28,7 @@ import { MOCK_LS_Q, MOCK_LS_P, clearMockResume, readMockProgress, readMockResume
 import { UsernameModal, ProModal, PacksModal, UnlockModal, ScoreCardModal, RanksModal, ShareModal, ContactModal } from "./studyquiz/modals.jsx";
 import { ExitModal, PauseOverlay, TimeUpModal, ResumeModal, Confetti, RankPromotion, AdBanners, ActivatingOverlay, MockPassagePanel } from "./studyquiz/overlays.jsx";
 import { Seg, SettingsPanel } from "./studyquiz/settings.jsx";
+import { Onboarding } from "./studyquiz/onboarding.jsx";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
 import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, studyRankXP, streakTier, STREAK_TIERS, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
@@ -2702,6 +2703,28 @@ export default function StudyQuiz() {
     // Immediate confirmation so the user sees notifications actually work.
     if (p === "granted") notify(t.notifOnTitle||"Reminders on", t.notifOnBody||"We'll nudge you to keep your streak and review what's due.");
   };
+  // Apply and persist the one-time signup onboarding choices, then mark it done
+  // on the account (syncs, so it never re-shows on any device).
+  const finishOnboarding = async (c = {}) => {
+    setSettings(prev => {
+      const next = { ...prev, ...(c.theme ? { theme: c.theme } : {}), ...(typeof c.shareArena === "boolean" ? { shareArena: c.shareArena } : {}) };
+      window.storage.set("revyy_settings", JSON.stringify(next)).catch(()=>{});
+      return next;
+    });
+    window.dispatchEvent(new Event("revyy-appearance"));
+    if (c.lang && c.lang !== lang) { setLang(c.lang); if (user) saveLanguage(c.lang); }
+    if (c.reminders) { try { await enableReminders(); } catch { /* non-blocking */ } }
+    srs.completeOnboarding({ purpose: c.purpose || "", tos: !!c.tos });
+  };
+  // New accounts only, and only once: gated on srs.loaded (real account data is
+  // merged before this flips true, so a returning user on a new device never
+  // sees it) + no stored completion + a recently-created account.
+  const acctIsNew = !!user?.createdAt && (Date.now() - new Date(user.createdAt).getTime()) < 30 * 24 * 3600 * 1000;
+  const acctFresh = !((srs.stats?.answered || 0) > 0) && (srs.cards?.length || 0) === 0; // no study activity yet
+  const showOnboarding = srs.loaded && !!user && !srs.onboarding?.done && acctIsNew && acctFresh;
+  const onboardingEl = showOnboarding
+    ? <Onboarding t={t} langs={LANGS} initial={{ theme: settings.theme, lang, shareArena: settings.shareArena }} onFinish={finishOnboarding} />
+    : null;
   // Tick a coached day off (once) when its quiz/exam results appear.
   useEffect(() => {
     if (!planSession) return;
@@ -2721,7 +2744,7 @@ export default function StudyQuiz() {
     <div style={Sb.root}><style>{CSS}</style>
       <ActivatingOverlay show={activating}/>
       {badgeToastEl}{rankToastEl}{streakToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
-      {joinPreviewEl}{streakInfoEl}
+      {joinPreviewEl}{streakInfoEl}{onboardingEl}
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(35,31,26,0.16)"}}>{t.welcomePro}</div>}
       <div style={Sb.hero}>

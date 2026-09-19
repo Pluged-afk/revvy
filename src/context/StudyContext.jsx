@@ -92,7 +92,7 @@ function normNotif(n) {
   };
 }
 function emptyData() {
-  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), notif: normNotif({}), starterSeen: false, daily: { date: null, count: 0 }, subjectArena: {}, updatedAt: 0 };
+  return { cards: [], examDate: null, stats: normStats({}), plans: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), mockScores: {}, wallet: normWallet({}), streakSavers: 0, savedProgress: 0, badges: normBadges({}), notif: normNotif({}), starterSeen: false, onboarding: null, daily: { date: null, count: 0 }, subjectArena: {}, updatedAt: 0 };
 }
 const asTopicStats = (t) => (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
 
@@ -145,6 +145,8 @@ function loadLocal() {
       // Persisted one-shot flag: must survive a local reload or the first-run
       // starter card would resurface every time a guest reopens the app.
       starterSeen: !!blob.starterSeen,
+      // Account-tied one-time signup onboarding record ({done,at,purpose,tos}).
+      onboarding: (blob.onboarding && typeof blob.onboarding === "object") ? blob.onboarding : null,
       daily: (blob.daily && typeof blob.daily === "object") ? { date: blob.daily.date || null, count: Math.max(0, Math.round(Number(blob.daily.count) || 0)) } : { date: null, count: 0 },
       subjectArena: (blob.subjectArena && typeof blob.subjectArena === "object" && !Array.isArray(blob.subjectArena)) ? blob.subjectArena : {},
       updatedAt: blob.updatedAt || 0,
@@ -167,6 +169,7 @@ function loadLocal() {
     badges: normBadges({}),
     notif: normNotif({}),
     starterSeen: false,
+    onboarding: null,
     daily: { date: null, count: 0 },
     subjectArena: {},
     updatedAt: 0,
@@ -247,6 +250,9 @@ function mergeStudy(server, local) {
     // Sticky one-shot: once the first-run starter card has been seen on ANY
     // device, it stays seen everywhere so it never resurfaces.
     starterSeen: !!(server.starterSeen || local.starterSeen),
+    // Signup onboarding is completed once per account, so keep whichever side
+    // recorded it, so it never re-shows on another device.
+    onboarding: server.onboarding || local.onboarding || null,
     // Daily goal counter: if either side counted today, keep today's higher
     // count (never sum, to avoid double-counting the same session); otherwise
     // keep whichever side's date is more recent.
@@ -607,6 +613,12 @@ export function StudyProvider({ children }) {
   const markStarterSeen = useCallback(() => {
     commit((p) => (p.starterSeen ? p : { ...p, starterSeen: true }));
   }, [commit]);
+  // Record that the signup onboarding is done (account-tied, once). `info` can
+  // carry {purpose, tos}. Idempotent: once set it stays set, so the flow never
+  // re-shows on this or any other device.
+  const completeOnboarding = useCallback((info = {}) => {
+    commit((p) => (p.onboarding?.done ? p : { ...p, onboarding: { done: true, at: Date.now(), ...info } }));
+  }, [commit]);
   // Subject-arena best: keep the higher score for a subject key.
   const recordSubjectArena = useCallback((key, score) => {
     const k = String(key || "").trim(); const s = Math.max(0, Math.round(Number(score) || 0));
@@ -713,7 +725,7 @@ export function StudyProvider({ children }) {
     completeActivity, usePowerup, grantPowerups, recordChallengeResult,
     syncBadges, equipBadge, setBadgesPublic, markBadgesSeen,
     notif: data.notif, markNotifSeen, setNotifPref,
-    starterSeen: data.starterSeen, markStarterSeen, loaded, daily: data.daily,
+    starterSeen: data.starterSeen, markStarterSeen, onboarding: data.onboarding, completeOnboarding, loaded, daily: data.daily,
     subjectArena: data.subjectArena, recordSubjectArena,
     bankAdd, bankReject, bankUsed, addLibraryDoc, removeLibraryDoc, recordMockScore,
     savePlan, deletePlan, completePlanDay, setPlanDayStatus,
