@@ -5154,7 +5154,9 @@ export default function StudyQuiz() {
           </div>
           <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"#fffbeb",border:"0.5px solid #f59e0b44",borderRadius:10,padding:"11px 14px",fontSize:12,color:"#92400e",lineHeight:1.5,marginBottom:14}}><Icon name="clock" size={15} style={{flexShrink:0,marginTop:1}}/><span>{t.mockWarn}</span></div>
           {mockGenErr && <div style={{background:"var(--color-background-danger)",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"var(--color-text-danger)",marginBottom:14,display:"flex",alignItems:"flex-start",gap:7}}><Icon name="alert" size={15} style={{flexShrink:0,marginTop:1}}/><span>{mockGenErr}</span></div>}
-          {isPro
+          {authLoading
+            ? <button disabled style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,opacity:0.5,cursor:"default"}}><Icon name="cap" size={17}/>{t.mockStart}</button>
+            : isPro
             ? <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={startMock}><Icon name="cap" size={17}/>{t.mockStart}</button>
             : <button style={{...Sb.btnPrimary,width:"100%",background:"#f59e0b",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>{if(requireLogin())return;setShowProModal(true);}}><Icon name="spark" size={16}/>{t.mockProOnly}</button>}
           {isPro && usage && <p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>{t.mockLeftLabel.replace("{n}",usage.mocks_remaining ?? 2).replace("{cap}",usage.mock_daily_cap ?? 2)}</p>}
@@ -5328,7 +5330,7 @@ export default function StudyQuiz() {
                   <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 13px 12px 11px",marginBottom:9,border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${ok?"#22c55e":"#ef4444"}`}} className="fade-in">
                     <div style={{display:"flex",gap:8,alignItems:"flex-start"}}><span style={{flexShrink:0,display:"inline-flex",marginTop:1}}>{ok?<Icon name="check" size={15} stroke={2.6} style={{color:"#16a34a"}}/>:<Icon name="x" size={15} stroke={2.6} style={{color:"#dc2626"}}/>}</span><span style={{fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{q.question}</span></div>
                     {q.svg && <div style={{margin:"10px 0 2px",paddingLeft:22,display:"flex"}}><img alt="Figure" src={"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.svg)} style={{maxWidth:"100%",maxHeight:240,background:"#fff",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)",padding:8,boxSizing:"border-box"}}/></div>}
-                    {!ok&&<div style={{fontSize:12,color:"#dc2626",marginTop:5,paddingLeft:22}}>{t.yourAns} {chosen!=null?q.options[chosen]:", "}</div>}
+                    {!ok&&<div style={{fontSize:12,color:"#dc2626",marginTop:5,paddingLeft:22}}>{t.yourAns} {chosen!=null?q.options[chosen]:t.noAnswerLbl}</div>}
                     <div style={{fontSize:12,color:"#16a34a",marginTop:3,paddingLeft:22,fontWeight:500}}>{t.correctAns} {q.options[q.correct]}</div>
                     {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingTop:6,marginTop:6,borderTop:"0.5px solid var(--color-border-tertiary)",paddingLeft:22}}>{q.explanation}</div>}
                     {!ok&&<ExplainBox t={t} ctx={{question:q.question,correct:q.options[q.correct],picked:chosen!=null?q.options[chosen]:"",subject:sec.name}}/>}

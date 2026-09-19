@@ -43,15 +43,24 @@ export function readMockResume() {
   } catch { return null; }
 }
 
-// Keep only well-formed MCQs (a ballooning explanation signals the model could
-// not solve it cleanly, drop those rather than ship a mis-keyed question).
+// A one-sentence answer justification never legitimately second-guesses itself.
+// When the model writes "... = $70.50. Wait, let me recalculate: 0.80 x 85 = 68"
+// it has almost always keyed the FIRST (wrong) option and landed on a different
+// value in the text, so the answer key is wrong. Drop any question whose
+// explanation shows that self-correction rather than ship a mis-keyed one.
+const RECONSIDERS = /\b(wait|hold on|scratch that|oops)\b|on second thought|let me (re-?calculat|recomput|redo|re-?check|try that)|recalculat|recomput|i made an? (error|mistake)|\bmy mistake\b|correction:|actually,\s+(i|it|the|that|no)\b/i;
+
+// Keep only well-formed MCQs (a ballooning or self-correcting explanation signals
+// the model could not solve it cleanly, drop those rather than ship a mis-keyed
+// question).
 export function sanitizeMockQs(qs) {
   return (Array.isArray(qs) ? qs : []).filter((q) =>
     q && typeof q.question === "string" && q.question.length > 2 &&
     Array.isArray(q.options) && q.options.length >= 2 &&
     q.options.every((o) => typeof o === "string" && o.trim().length) &&
     Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length &&
-    String(q.explanation || "").length <= 400
+    String(q.explanation || "").length <= 400 &&
+    !RECONSIDERS.test(String(q.explanation || ""))
   ).map((q) => {
     const svg = safeSvg(q.svg);
     const base = { question: deDash(q.question), options: q.options.map(deDash), correct: q.correct, explanation: deDash(q.explanation) };
@@ -107,7 +116,7 @@ ${instr}
 ${rule}
 ${tiltLine}
 ${realismLine}
-Each question has "options" (EXACTLY ${nOpt} choices), "correct" (the 0-based index of the ONE correct option, which you work out carefully first), and "explanation" (one short sentence). Make distractors close and genuinely ${exam.name}-hard, not trivial.
+Each question has "options" (EXACTLY ${nOpt} choices), "correct" (the 0-based index of the ONE correct option, which you work out carefully first), and "explanation" (one short sentence). The "explanation" must be a single clean final sentence and must NEVER second-guess or recalculate itself (no "wait", "let me recalculate", "actually"); if you catch a mistake while writing it, fix the "correct" index so it matches, do not narrate the correction. Make distractors close and genuinely ${exam.name}-hard, not trivial.
 ${figRule}${exBlock}${avoidBlock}
 Return ONLY raw JSON, no markdown: {"passage":"the full passage text${fmt==="english"?", with the revised portions wrapped in <u>...</u> in reading order":""}","svg":"OPTIONAL inline <svg>…</svg>","questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."}]}`;
     maxTokens = Math.min(count * 450 + 7000, 40000);
@@ -118,7 +127,7 @@ Provide EXACTLY ${count} multiple-choice questions.
 ${wantsFigures ? `\nFIGURES ARE MANDATORY: a real ${exam.name} ${section.name} form is full of diagrams. AT LEAST ${kFig} of the ${count} questions MUST be geometry, coordinate-geometry, trigonometry, or data-interpretation questions, and EACH of those MUST carry an accurate inline "svg" figure the question genuinely depends on (a triangle/circle/polygon with labelled sides or angles, a coordinate plane with plotted points/lines/parabolas, a number line, or a bar/line/scatter chart). Draw each figure to the EXACT numbers in the question and consistent with the correct answer. Fewer than ${kFig} figures does NOT look like a real ${exam.name} and is unacceptable. Purely algebraic or arithmetic questions need no figure.\n${svgRules}\n` : ""}
 ${tiltLine} Vary difficulty across the real exam's hard range, but never make a question easy.
 ${realismLine}
-Each question object: "question" (the full stem, with any context written into it), "options" (EXACTLY ${nOpt} choices), "correct" (0-based index of the ONE correct option), "explanation" (one short sentence)${wantsFigures ? `, and "svg" (the figure, or omit it for a figure-free question)` : ""}. CRITICAL: work every calculation out FIRST, then key the matching option; double-check numbers and units. Exactly ONE correct option each; discard any you are not certain of.${exBlock}${avoidBlock}
+Each question object: "question" (the full stem, with any context written into it), "options" (EXACTLY ${nOpt} choices), "correct" (0-based index of the ONE correct option), "explanation" (one short sentence)${wantsFigures ? `, and "svg" (the figure, or omit it for a figure-free question)` : ""}. CRITICAL: work every calculation out FIRST, then key the matching option; double-check numbers and units. Exactly ONE correct option each; discard any you are not certain of. The "explanation" must be a single clean final sentence and must NEVER second-guess or recalculate itself (no "wait", "let me recalculate", "actually"); if you catch a mistake while writing it, fix the "correct" index so it matches the value you land on, do not narrate the correction.${exBlock}${avoidBlock}
 Return ONLY raw JSON, no markdown: {"questions":[{"question":"...","options":[${optTemplate}],"correct":0,"explanation":"..."${wantsFigures ? `,"svg":"<svg viewBox='0 0 200 200'>…</svg> only when the question needs a figure"` : ""}}]}
 The "questions" array MUST contain ${count} items${wantsFigures ? `, at least ${kFig} of them with an "svg"` : ""}.`;
     // Figure-heavy sections run longer (each SVG is ~500-1000 tokens), so give
