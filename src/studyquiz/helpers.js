@@ -138,36 +138,24 @@ export function normFill(s) {
     .trim()
     .replace(/^(the|a|an)\s+/, "");
 }
-// Bounded Levenshtein edit distance (small strings).
-function editDistance(a, b) {
-  if (a === b) return 0;
-  const m = a.length, n = b.length;
-  if (!m) return n; if (!n) return m;
-  let prev = Array.from({ length: n + 1 }, (_, i) => i);
-  for (let i = 1; i <= m; i++) {
-    const cur = [i];
-    for (let j = 1; j <= n; j++) {
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    }
-    prev = cur;
-  }
-  return prev[n];
-}
-// Grade a fill-in-the-blank response fairly: a normalized exact match, any
-// AI-supplied acceptable alternative, a simple singular/plural variant, or a
-// close typo (edit distance scaled to the answer length, so a genuinely
-// different word never slips through). Cheap and offline, no AI call. This
-// replaces the old "first 5 chars appear anywhere" heuristic, which both passed
-// wrong answers and failed correct ones.
+// Grade a fill-in-the-blank response. Deliberately STRICT so a different but
+// similar-looking WORD is NEVER marked right: only a normalized exact match, an
+// AI-supplied acceptable alternative, or a singular/plural form of the same word.
+// We intentionally do NO fuzzy edit-distance matching, because a genuine typo and
+// a different real word can be the identical single edit (compliment/complement,
+// desert/dessert, form/from, affect/effect) and no offline algorithm can tell
+// them apart. Genuine typos are instead handled by the model's per-question
+// `accept` list (which includes likely misspellings), so a match is always
+// against a vetted answer, never a coincidental look-alike. Cheap, no AI call.
 export function gradeFill(userVal, answer, accept = []) {
   const u = normFill(userVal);
   if (!u) return false;
   const candidates = [answer, ...(Array.isArray(accept) ? accept : [])].map(normFill).filter(Boolean);
   for (const c of candidates) {
     if (u === c) return true;
-    if (u + "s" === c || c + "s" === u || u + "es" === c || c + "es" === u) return true; // plural/singular
-    const tol = c.length <= 4 ? 0 : c.length <= 7 ? 1 : 2; // typo tolerance, never for very short answers
-    if (tol > 0 && editDistance(u, c) <= tol) return true;
+    // singular/plural of the SAME word (skip very short stems where +s could
+    // form an unrelated word, e.g. as/ass, bu/bus).
+    if (u.length >= 3 && c.length >= 3 && (u + "s" === c || c + "s" === u || u + "es" === c || c + "es" === u)) return true;
   }
   return false;
 }
