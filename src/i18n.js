@@ -53,6 +53,7 @@ const T_EN = {
   tabs:["📁 File","✏️ Text","🔗 URL","📷 Photo"],
   dropTitle:"Drop your file here or tap to browse",
   dropSub:"PDF · Images (JPG, PNG) · Text files (.txt, .md)",
+  dropSubImg:"Images only (JPG, PNG) for diagram quizzes",
   tapChange:"Tap to change file",
   tapOpen:"Tap to open",
   arenaTitle:"Endless Arena", arenaTagline:"One life. Answer general-knowledge questions until you miss. Harder questions, and confusing choices, are worth more.",

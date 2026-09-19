@@ -1343,6 +1343,9 @@ export default function StudyQuiz() {
   const loadFile = useCallback(async (f) => {
     if (!f) return;
     setError("");
+    // Diagram quizzes mark parts on an uploaded image, so only images are valid,
+    // block anything else dropped in (the picker is already image-only for it).
+    if (qType==="diagram" && !(f.type||"").startsWith("image/")) { setError(t.diagramNeedsImage||"Diagram quizzes need an image. Upload a diagram or photo."); return; }
     const fileMB  = f.size/1024/1024;
     const limitMB = fileLimitMB();
     if (fileMB > PRO_FILE_MB) { setError(t.errFileOverPro.replace("{size}",fmtMB(f.size)).replace("{max}",PRO_FILE_MB)); return; }
@@ -1358,7 +1361,7 @@ export default function StudyQuiz() {
       return;
     }
     await processFile(f, limitMB);
-  },[fileLimitMB, processFile, isPro]);
+  },[fileLimitMB, processFile, isPro, qType]);
 
   const generate = useCallback(async () => {
     if (requireLogin()) return;   // logged-out visitors are sent to sign-up
@@ -3106,16 +3109,17 @@ export default function StudyQuiz() {
             {value:"text",label:stripEmoji(t.tabs[1]),icon:TAB_ICONS.text},
             {value:"photo",label:stripEmoji(t.tabs[3]),icon:TAB_ICONS.photo},
             {value:"media",label:stripEmoji(t.mediaTab),icon:TAB_ICONS.media,locked:!isPro},
-          ]}/>
+          // Diagram quizzes mark parts on an uploaded image, so only image inputs apply.
+          ].filter(o=>qType!=="diagram" || o.value==="file" || o.value==="photo")}/>
         </div>
         {tab==="file" && (
           <div style={{...Sb.dropzone,position:"relative",...(drag?{borderColor:"#4338ca",background:"var(--color-sel-tint)"}:{}),...(file?{borderStyle:"solid",borderColor:"#4338ca"}:{})}}
             onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);loadFile(e.dataTransfer.files[0]);}}
             onClick={()=>file?openFile(file):fileRef.current.click()}>
-            <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,image/*" style={{display:"none"}} onChange={e=>loadFile(e.target.files[0])}/>
+            <input ref={fileRef} type="file" accept={qType==="diagram"?"image/*":".pdf,.txt,.md,.csv,image/*"} style={{display:"none"}} onChange={e=>loadFile(e.target.files[0])}/>
             {file&&<button onClick={e=>{e.stopPropagation();setFile(null);}} title={t.tapToRemove} aria-label={t.tapToRemove} style={{position:"absolute",top:8,right:8,width:24,height:24,borderRadius:"50%",background:"#ef4444",color:"#fff",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,fontFamily:"inherit",zIndex:2}}>✕</button>}
-            {file?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name={file.type==="image"?"camera":"notes"} size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(file.sizeMB*1024*1024)} · {t.tapOpen}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="folder" size={32} stroke={1.5}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.dropTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.dropSub}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{isPro?t.unlimited:t.maxFileFree.replace("{n}",fileLimitMB())}</div></>)}
+            {file?(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name={file.type==="image"?"camera":"notes"} size={30} stroke={1.5}/></div><div style={{fontWeight:600,fontSize:14,color:"var(--color-text-primary)"}}>{file.name}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmtMB(file.sizeMB*1024*1024)} · {t.tapOpen}</div></>):(<><div style={{color:"var(--color-accent)",marginBottom:2}}><Icon name="folder" size={32} stroke={1.5}/></div><div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{t.dropTitle}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{qType==="diagram"?(t.dropSubImg||"Images only, JPG or PNG"):t.dropSub}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{isPro?t.unlimited:t.maxFileFree.replace("{n}",fileLimitMB())}</div></>)}
           </div>
         )}
         {tab==="file" && !isPro && (
@@ -3179,7 +3183,7 @@ export default function StudyQuiz() {
                 const unlocked = canUseQType(type);
                 const active = qType===type;
                 return (
-                  <button key={type} onClick={()=>{ if(unlocked) setQType(type); else if(type==="written"||type==="diagram") setShowProModal(true); else setUnlockFeature(QTYPE_FEATURE[type]); }} style={{
+                  <button key={type} onClick={()=>{ if(unlocked){ setQType(type); if(type==="diagram" && tab!=="file" && tab!=="photo") setTab("photo"); } else if(type==="written"||type==="diagram") setShowProModal(true); else setUnlockFeature(QTYPE_FEATURE[type]); }} style={{
                     display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,padding:"11px 8px",
                     border:active?"1.5px solid var(--color-accent)":"1px solid var(--color-border-secondary)",
                     borderRadius:11,cursor:"pointer",fontFamily:"inherit",fontSize:12.5,fontWeight:600,
