@@ -43,7 +43,7 @@ const T_EN = {
     ["🖼️","Images","Photos of handwritten notes, whiteboards, or diagrams"],
     ["✏️","Text","Copy-paste content from websites, docs, or anywhere"],
     ["🔗","URL / Link","Enter a webpage link and we study it for you"],
-    ["🎯","4 Quiz Types","Multiple choice, flashcards, fill-in-blank, matching"],
+    ["🎯","6 Quiz Types","Multiple choice, flashcards, fill-in, match, short answer, diagram"],
     ["💡","Explanations","Every answer comes with a clear reason why it's correct"],
   ],
   // Extra "what you can upload" card, appended after the URL entry is filtered
@@ -303,6 +303,7 @@ const T_EN = {
   notNow:"Not now", fileTooLarge:"File too large",
   freeFileLimitNote:"Free plan allows files up to", adFileLimitNote:"Your ad unlock allows up to",
   quizTypes:{ mcq:"Multiple Choice", cards:"Flashcards", fill:"Fill in Blank", match:"Match Terms", written:"Short Answer", diagram:"Diagram" },
+  quizTypeDesc:{ mcq:"Pick the right answer from four options, graded instantly.", cards:"Flip a card and grade yourself, a study and review mode rather than a scored test.", fill:"Type the missing word; close spellings and common variants are accepted.", match:"Match each term to its definition.", written:"Write a short answer and the AI grades it against a model answer.", diagram:"Label the parts of a diagram you upload; this one needs an image." },
   diagramNeedsImage:"Diagram quizzes need an image. Upload a diagram or photo first, then choose Diagram.",
   lockedTitles:{ questions:"More Questions (up to 100 + custom)", cards:"Flashcards", fill:"Fill in Blank", match:"Match Terms", files:"Larger File Uploads" },
   lockedAdLabels:{ questions:"up to 50 questions + custom input", cards:"Flashcards quiz type", fill:"Fill in Blank quiz type", match:"Match Terms quiz type", files:"larger file uploads" },

@@ -3193,6 +3193,7 @@ export default function StudyQuiz() {
                 );
               })}
             </div>
+            {t.quizTypeDesc?.[qType] && <div style={{fontSize:11.5,color:"var(--color-text-tertiary)",lineHeight:1.5}}>{t.quizTypeDesc[qType]}</div>}
           </div>
           <div style={{...Sb.settingRow,flexDirection:"column",alignItems:"flex-start",gap:8}}>
             <div style={{display:"flex",justifyContent:"space-between",width:"100%",alignItems:"center"}}>

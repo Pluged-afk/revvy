@@ -6,6 +6,7 @@ import Icon from "../components/Icon.jsx";
 import { Sb } from "./styles.js";
 import { Haptics } from "./audio.js";
 import { gradeWritten } from "./ai.js";
+import { gradeFill } from "./helpers.js";
 
 // Sliding countdown bar shown while auto-advance waits before the next
 // question. Fills 0→100% over `sec` seconds via CSS animation. The `runId`
@@ -46,8 +47,7 @@ export function Flashcard({ q, onNext, t }) {
 export function FillBlank({ q, onNext, isLast, t, feedback="immediate", autoAdvance=false, autoSec=5 }) {
   const [val,setVal]         = useState("");
   const [checked,setChecked] = useState(false);
-  const correct = (q.answer||"").toLowerCase().trim();
-  const isRight = val.toLowerCase().trim()===correct || correct.includes(val.toLowerCase().trim().slice(0,5));
+  const isRight = gradeFill(val, q.answer, q.accept);
   const parts = q.question.split("___");
   const instant = feedback==="immediate";
   const submit = () => {

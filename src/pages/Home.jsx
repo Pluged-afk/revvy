@@ -202,7 +202,7 @@ const FREE_PERKS = [
 ];
 const PRO_PERKS = [
   "250 questions a day",
-  "All four quiz types, no ads",
+  "All six quiz types, no ads",
   "Unlimited custom exams from your notes",
   "Full mock tests: SAT, ACT, GRE and 5 more",
   "Up to 100 questions per quiz",

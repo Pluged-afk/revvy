@@ -16,6 +16,8 @@ const FEATURES = [
   { icon: "layers", title: "Flashcards", desc: "Flip a card, test your recall, and mark what you knew. Best for definitions, dates and vocabulary." },
   { icon: "pencil", title: "Fill in the blank", desc: "Type the missing term instead of picking it, so you retrieve the fact rather than just recognising it." },
   { icon: "link", title: "Match terms", desc: "Pair terms with their definitions on a quick matching grid. A fast warm-up before a harder round." },
+  { icon: "pencil", title: "Short answer", desc: "Write a sentence or two in your own words; the AI grades it against a model answer and explains what was missing. A Pro feature.", pro: true },
+  { icon: "camera", title: "Diagram labelling", desc: "Upload a diagram or photo and get quizzed on its parts, each one pinned on the image where it belongs. A Pro feature.", pro: true },
   { icon: "exam", title: "Custom exam mode", desc: "Turn your own notes into a timed paper with sections, multiple choice and written answers, then get a grade and a breakdown of where the marks went." },
   { icon: "trophy", title: "Standardized mock tests", desc: "Full mocks of the SAT, ACT, GRE and five other tests, with their real sections, timing and score scale. A Pro feature.", pro: true },
   { icon: "chat", title: "An explanation for every answer", desc: "A short, plain reason the correct answer is correct, so even a wrong guess teaches you something before you move on." },
@@ -33,6 +35,8 @@ const ROWS = [
   ["Questions per day", "50 (up to 70 with ads)", "250"],
   ["Multiple choice quizzes", true, true],
   ["Flashcards, fill-in and match", "With ads", true],
+  ["Short answer (AI-graded)", false, true],
+  ["Diagram labelling from your images", false, true],
   ["Questions per quiz", "Up to 20", "Up to 100"],
   ["An explanation for every answer", true, true],
   ["Adaptive difficulty", true, true],
@@ -56,7 +60,7 @@ function Cell({ v, pro }) {
 export default function Features() {
   usePageMeta(
     "Revyy Features: Quiz Types, Exam Mode, Mock Tests and Uploads",
-    "Four quiz types, custom timed exams, full mocks of the SAT, ACT, GRE and more, adaptive difficulty, spaced-repetition review, uploads from PDF, photo, audio or video, Quizlet import, and 20 languages."
+    "Six quiz types, custom timed exams, full mocks of the SAT, ACT, GRE and more, adaptive difficulty, spaced-repetition review, uploads from PDF, photo, audio or video, Quizlet import, and 20 languages."
   );
   return (
     <>
@@ -64,7 +68,7 @@ export default function Features() {
         <div className="container">
           <span className="eyebrow">Features</span>
           <h1>Everything you need to practise, in one place</h1>
-          <p className="hero-sub">Four quiz types, custom timed exams, full standardized mock tests, and a review deck that keeps bringing back what you forget, all built from the material you upload.</p>
+          <p className="hero-sub">Six quiz types, custom timed exams, full standardized mock tests, and a review deck that keeps bringing back what you forget, all built from the material you upload.</p>
         </div>
       </section>
 

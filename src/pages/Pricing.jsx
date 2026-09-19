@@ -21,7 +21,7 @@ const FREE = [
 
 const PRO_MONTHLY = [
   "250 questions a day",
-  "All four quiz types, no ads",
+  "All six quiz types, no ads",
   "Unlimited custom exams from your notes",
   "Full mock tests: SAT, ACT, GRE and 5 more (up to 2 a day)",
   "Up to 100 questions per quiz",
@@ -58,7 +58,7 @@ export default function Pricing() {
   const navigate = useNavigate();
   usePageMeta(
     "Revyy Pricing: Free Quiz Generator, or Pro at €4.99 a Month",
-    "Use Revyy free forever, or go Pro for €4.99 a month for exam mode, all four quiz types and no ads. Cancel anytime."
+    "Use Revyy free forever, or go Pro for €4.99 a month for exam mode, all six quiz types and no ads. Cancel anytime."
   );
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");

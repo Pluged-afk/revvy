@@ -126,6 +126,52 @@ export function normalizeQuestion(parsed, orig) {
   };
 }
 
+// ── Fill-in-the-blank grading ──────────────────────────────────────────
+// Normalize an answer for fair comparison: lowercase, strip accents, drop
+// punctuation, collapse whitespace, and remove a leading article.
+export function normFill(s) {
+  return String(s || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // strip accents
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")                // punctuation -> space
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(the|a|an)\s+/, "");
+}
+// Bounded Levenshtein edit distance (small strings).
+function editDistance(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+// Grade a fill-in-the-blank response fairly: a normalized exact match, any
+// AI-supplied acceptable alternative, a simple singular/plural variant, or a
+// close typo (edit distance scaled to the answer length, so a genuinely
+// different word never slips through). Cheap and offline, no AI call. This
+// replaces the old "first 5 chars appear anywhere" heuristic, which both passed
+// wrong answers and failed correct ones.
+export function gradeFill(userVal, answer, accept = []) {
+  const u = normFill(userVal);
+  if (!u) return false;
+  const candidates = [answer, ...(Array.isArray(accept) ? accept : [])].map(normFill).filter(Boolean);
+  for (const c of candidates) {
+    if (u === c) return true;
+    if (u + "s" === c || c + "s" === u || u + "es" === c || c + "es" === u) return true; // plural/singular
+    const tol = c.length <= 4 ? 0 : c.length <= 7 ? 1 : 2; // typo tolerance, never for very short answers
+    if (tol > 0 && editDistance(u, c) <= tol) return true;
+  }
+  return false;
+}
+
 // Keep a figure only if it is a clean, self-contained <svg> (rendered inside an
 // <img> data-URI, which can't run scripts; this strips anything scriptable too).
 // an SVG shown via <img> must carry the SVG namespace or the browser shows a
