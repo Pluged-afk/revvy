@@ -100,3 +100,33 @@ export function buildServe(q, rand = Math.random) {
 export function boardUnlocked(distinctPlayers) {
   return (Number(distinctPlayers) || 0) >= ARENA.GATE_PLAYERS;
 }
+
+// ── Content preferences: "no date / no name" questions ───────────────────────
+// A player can opt out of pure date recall (what year did X happen) or pure name
+// recall (who did X), which many find rote. The pool isn't tagged by type, so
+// these are best-effort text heuristics that catch the obvious cases. Filtering
+// shrinks the pool, which is why the UI warns it makes ranking up slower.
+const YEARISH = /^\s*(in\s+)?\d{3,4}\s*(bc|bce|ad|ce)?\s*$/i;
+export function isDateQuestion(q) {
+  const s = String(q?.question || "").toLowerCase();
+  if (/\b(what|which|in\s+what|in\s+which)\s+(year|century|decade)\b/.test(s)) return true;
+  if (/\bwhat\s+year\b|\bwhich\s+year\b|\bwhat\s+date\b|\bwhen\s+(did|was|were|is|do|does)\b/.test(s)) return true;
+  if (q?.correct != null && YEARISH.test(String(q.correct))) return true;
+  const opts = [q?.correct, ...((Array.isArray(q?.distractors) ? q.distractors : []).map((d) => d && d.text))].filter((x) => x != null && x !== "");
+  const yearOpts = opts.filter((o) => YEARISH.test(String(o))).length;
+  return opts.length >= 2 && yearOpts >= Math.ceil(opts.length * 0.75);
+}
+export function isNameQuestion(q) {
+  const s = String(q?.question || "").toLowerCase();
+  if (/\bwho\b|\bwhom\b|\bwhose\b/.test(s)) return true;
+  if (/\bwhich\s+(person|scientist|author|writer|poet|artist|painter|composer|musician|singer|leader|president|prime\s+minister|king|queen|emperor|philosopher|inventor|explorer|general|mathematician|physicist|chemist|biologist|actor|actress|director|athlete)\b/.test(s)) return true;
+  if (/\bnamed\s+after\b/.test(s)) return true;
+  return false;
+}
+// Drop the opted-out question types. dates/names default true (allowed), so the
+// full pool passes through untouched unless the player turned one off.
+export function filterArenaQuestions(qs, { dates = true, names = true } = {}) {
+  const list = Array.isArray(qs) ? qs : [];
+  if (dates && names) return list;
+  return list.filter((q) => (dates || !isDateQuestion(q)) && (names || !isNameQuestion(q)));
+}

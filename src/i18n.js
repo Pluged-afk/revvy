@@ -103,7 +103,7 @@ const T_EN = {
   // Badges + rank (trophy case)
   badgesTitle:"Badges & rank", yourRank:"Arena rank", yourRankHdr:"Your rank", rankToNext:"{n} pts to {r}",
   rankMax:"You've reached the top tier. Legendary.",
-  rankAllTitle:"Ranks", rankAllSub:"Climb by scoring higher in the Endless Arena.", rankCurrent:"You", rankYourXp:"Your best Arena run: {n} pts",
+  rankAllTitle:"Arena ranks", rankAllSub:"Climb by scoring higher in the Endless Arena.", rankCurrent:"You", rankYourXp:"Your best Arena run: {n} pts",
   badgesEarnedCount:"{n} of {m} badges", badgesPublicOn:"Shown publicly", badgesPublicOff:"Hidden",
   badgesEquipHint:"Tap an earned badge to pin it next to your name.", badgePinned:"Pinned",
   badgeEarned:"Earned", badgeEarnedX:"Earned ×{n}",
@@ -153,6 +153,7 @@ const T_EN = {
   arenaSeasonEnds:"{n}d left", arenaSeasonEndsToday:"Ends today", arenaToNextTier:"+{n} pts to {r}", arenaTopTier:"Top tier, you're at the summit this season.",
   arenaThisSeason:"This season", arenaAllTime:"All time", arenaSeasonEmpty:"No scores yet this season. Play a run to claim the top spot.",
   arenaRankLabel:"Arena rank", arenaBestLabel:"best run", arenaToNextRank:"+{n} pts to {r}", arenaTopRank:"Top rank. A Luminary of the Arena.",
+  arenaQTypes:"Question types", arenaAllowDates:"Date questions (what year something happened)", arenaAllowNames:"Name questions (who did what)", arenaFilterNote:"Turning these off narrows the question pool, so ranking up is slower.",
   unranked:"Unranked", arenaUnrankedHint:"Play the Endless Arena to get ranked.", rankSourceHint:"Your rank climbs with your Arena runs and your studying.", xpWord:"XP",
   streakWord:"Streak", streakDaysN:"{n}-day streak", streakNone:"No streak yet", streakInfoSub:"Study any day to keep your flame lit. Hit these milestones to promote it.", streakDaysReq:"{n} days", streakYouHere:"You're here", closeWord:"Close",
   unameTitle:"Pick a username", unameSub:"This is your public name on the leaderboard. You can change it later in settings.",

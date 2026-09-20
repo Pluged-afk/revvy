@@ -33,6 +33,7 @@ import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } 
 import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, studyRankXP, streakTier, STREAK_TIERS, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
 import ArenaGame from "./components/ArenaGame.jsx";
+import { filterArenaQuestions } from "./lib/arena.js";
 import Icon from "./components/Icon.jsx";
 
 // Clean line icons for the home "what you can upload" grid, matched to the
@@ -701,6 +702,8 @@ export default function StudyQuiz() {
     nickname:'',
     keyboardOn:true,
     shareArena:false,
+    arenaDates:true,   // include date/year questions in the Endless Arena
+    arenaNames:true,   // include who-did-what / person questions in the Arena
     keyBindings:DEFAULT_KEYBINDS,
   });
   const [examSections, setExamSections] = useState([
@@ -750,6 +753,8 @@ export default function StudyQuiz() {
   useEffect(()=>{ setSoundOn(settings.sound); },[settings.sound]);
   useEffect(()=>{ SoundEngine.setEnabled(soundOn); },[soundOn]);
   useEffect(()=>{ Haptics.on = settings.haptics; },[settings.haptics]);
+  // Toggle + persist one setting (used by the inline Arena question-type options).
+  const patchSetting = (patch) => setSettings(prev => { const next = { ...prev, ...patch }; window.storage.set("revyy_settings", JSON.stringify(next)).catch(()=>{}); return next; });
   // Universal "clicked a button" feedback: a very soft tap on any real control
   // (button/link/tab/checkbox), gated on the sound setting inside SoundEngine.
   // Sound only, no vibration, so it never machine-guns haptics on every tap.
@@ -2414,10 +2419,14 @@ export default function StudyQuiz() {
       const qs = await arenaDrawGlobal();
       setArenaBusy(false);
       if (qs.length < 5) { setArenaErr(t.arenaNoQs); setScreen("arena_intro"); return; }
+      // Honour the player's date/name opt-outs, but only if enough questions
+      // remain (the run wraps endlessly, so a smaller pool is fine; too small and
+      // we fall back to the full draw rather than break the run).
+      const filtered = filterArenaQuestions(qs, { dates: settings.arenaDates !== false, names: settings.arenaNames !== false });
       setArenaMode("gk"); setArenaSubject(null);
-      setArenaQs(qs); setScreen("arena_play");
+      setArenaQs(filtered.length >= 5 ? filtered : qs); setScreen("arena_play");
     });
-  }, [requireUsername, t]);
+  }, [requireUsername, t, settings.arenaDates, settings.arenaNames]);
   // Subject arena: the same fast, sudden-death game, but questions are generated
   // from a chosen subject (or your own material) instead of the pooled GK bank.
   // A personal challenge on your moat; it earns streak + power-ups + a personal
@@ -2443,15 +2452,16 @@ export default function StudyQuiz() {
         const qs = res.questions.map((q, i, arr) => toArenaQ(q, i, arr.length, set.subject || set.title)).filter(Boolean);
         setArenaBusy(false);
         if (qs.length < 5) { setArenaErr(t.arenaNoQs); setScreen("arena_intro"); return; }
+        const filtered = filterArenaQuestions(qs, { dates: settings.arenaDates !== false, names: settings.arenaNames !== false });
         setArenaMode("subject"); setArenaSubject({ key: set.id || set.subject || set.title, title: set.title || set.subject, subject: set.subject || "", set });
-        setArenaQs(qs); setScreen("arena_play");
+        setArenaQs(filtered.length >= 5 ? filtered : qs); setScreen("arena_play");
       } catch (err) {
         setArenaBusy(false);
         setArenaErr(err?.message?.includes("parse") ? (t.errAiFormat || "Generation error, try again.") : (err?.message || t.arenaNoQs));
         setScreen("arena_intro");
       }
     });
-  }, [requireUsername, consumeQuestions, isPro, lang, t]);
+  }, [requireUsername, consumeQuestions, isPro, lang, t, settings.arenaDates, settings.arenaNames]);
   const onArenaEnd = useCallback(async (result) => {
     if (arenaMode === "subject") {
       // Personal challenge on your own material: streak + power-ups + a personal
@@ -5105,6 +5115,19 @@ export default function StudyQuiz() {
           {arenaErr && <div style={{background:"var(--color-background-danger)",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"var(--color-text-danger)",marginBottom:14}}>{arenaErr}</div>}
           <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,fontSize:16}} onClick={startArena}><Icon name="bolt" size={17}/>{t.arenaPlay}</button>
           {SHOW_ARENA_LEADERBOARD && arenaBoardUnlocked && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
+          {/* Question-type preferences: opt out of pure date / name recall. */}
+          <div style={{marginTop:14,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px 14px"}}>
+            <div style={{fontSize:10.5,fontWeight:700,letterSpacing:.8,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:6}}>{t.arenaQTypes||"Question types"}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"5px 0"}}>
+              <span style={{fontSize:13,color:"var(--color-text-primary)"}}>{t.arenaAllowDates||"Date questions (what year something happened)"}</span>
+              <Toggle on={settings.arenaDates!==false} onChange={(v)=>patchSetting({arenaDates:v})}/>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"5px 0"}}>
+              <span style={{fontSize:13,color:"var(--color-text-primary)"}}>{t.arenaAllowNames||"Name questions (who did what)"}</span>
+              <Toggle on={settings.arenaNames!==false} onChange={(v)=>patchSetting({arenaNames:v})}/>
+            </div>
+            {(settings.arenaDates===false||settings.arenaNames===false) && <p style={{fontSize:11,color:"var(--color-text-tertiary)",margin:"7px 0 0",lineHeight:1.5}}>{t.arenaFilterNote||"Turning these off narrows the question pool, so ranking up is slower."}</p>}
+          </div>
           <div style={{marginTop:24}}>
             <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:10,textAlign:"center"}}>{t.arenaSubjectLabel||"Or race on your subject"}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
