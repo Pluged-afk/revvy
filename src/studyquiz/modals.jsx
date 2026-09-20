@@ -175,47 +175,55 @@ async function buildScoreCard(canvas, d, t) {
   const ctx = canvas.getContext("2d");
   try { if (document.fonts?.ready) await document.fonts.ready; } catch { /* ignore */ }
   const g = ctx.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, "#4338ca"); g.addColorStop(1, "#7c3aed");
+  g.addColorStop(0, "#4f46e5"); g.addColorStop(1, "#7c3aed");
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  const rg = ctx.createRadialGradient(cx, H * 0.16, 60, cx, H * 0.16, W * 0.75);
-  rg.addColorStop(0, "rgba(255,255,255,0.18)"); rg.addColorStop(1, "rgba(255,255,255,0)");
+  const rg = ctx.createRadialGradient(cx, H * 0.14, 60, cx, H * 0.14, W * 0.82);
+  rg.addColorStop(0, "rgba(255,255,255,0.20)"); rg.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
-  // Wordmark + URL
+  // Inset frame for a "card" feel
+  ctx.strokeStyle = "rgba(255,255,255,0.22)"; ctx.lineWidth = 3;
+  rr(ctx, 44, 44, W - 88, H - 88, 44); ctx.stroke();
+  // Header: wordmark + URL, with a hairline divider under it
   ctx.textBaseline = "alphabetic";
   ctx.textAlign = "left"; ctx.fillStyle = "#fff";
-  ctx.font = "700 62px Fraunces, Georgia, serif"; ctx.fillText("Revyy", 90, 150);
+  ctx.font = "700 66px Fraunces, Georgia, serif"; ctx.fillText("Revyy", 100, 176);
   ctx.textAlign = "right"; ctx.font = "500 34px system-ui, sans-serif";
-  ctx.fillStyle = "rgba(255,255,255,0.72)"; ctx.fillText("revyy.app", W - 90, 146);
+  ctx.fillStyle = "rgba(255,255,255,0.72)"; ctx.fillText("revyy.app", W - 100, 168);
+  ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(100, 218); ctx.lineTo(W - 100, 218); ctx.stroke();
   // Label
   ctx.textAlign = "center";
-  ctx.font = "700 32px system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.7)";
-  ctx.fillText((t.scoreCardLabel || "Quiz result").toUpperCase(), cx, 378);
+  ctx.font = "700 34px system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.72)";
+  ctx.fillText((t.scoreCardLabel || "Quiz result").toUpperCase(), cx, 372);
   // Hero score
-  ctx.fillStyle = "#fff"; ctx.font = "700 250px Fraunces, Georgia, serif";
-  ctx.fillText(`${d.score}/${d.total}`, cx, 628);
-  // Percent + subject
-  ctx.font = "600 56px system-ui, sans-serif"; ctx.fillStyle = "#fde68a";
-  let sub = `${d.pct}%`; if (d.subject) sub += "  ·  " + d.subject;
-  ctx.fillText(fitText(ctx, sub, W - 170), cx, 710);
+  ctx.fillStyle = "#fff"; ctx.font = "700 268px Fraunces, Georgia, serif";
+  ctx.fillText(`${d.score}/${d.total}`, cx, 648);
+  // Percent (prominent) + subject on its own line
+  ctx.font = "700 86px system-ui, sans-serif"; ctx.fillStyle = "#fde68a";
+  ctx.fillText(`${d.pct}%`, cx, 758);
+  if (d.subject) { ctx.font = "500 46px system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.9)"; ctx.fillText(fitText(ctx, d.subject, W - 220), cx, 826); }
   // Rank pill
   const rankText = `${d.rankEmoji || "🎓"}  ${d.rankName || ""}`.trim();
   ctx.font = "600 46px system-ui, sans-serif";
-  const rw = ctx.measureText(rankText).width, pw = rw + 90, ph = 96, py = 812;
-  ctx.fillStyle = "rgba(255,255,255,0.15)"; rr(ctx, cx - pw / 2, py, pw, ph, 48); ctx.fill();
+  const rw = ctx.measureText(rankText).width, pw = rw + 96, ph = 100, py = d.subject ? 890 : 858;
+  ctx.fillStyle = "rgba(255,255,255,0.16)"; rr(ctx, cx - pw / 2, py, pw, ph, 50); ctx.fill();
   ctx.fillStyle = "#fff"; ctx.textBaseline = "middle";
   ctx.fillText(rankText, cx, py + ph / 2 + 3); ctx.textBaseline = "alphabetic";
+  // Divider before the stat row
+  ctx.strokeStyle = "rgba(255,255,255,0.16)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx - 230, 1058); ctx.lineTo(cx + 230, 1058); ctx.stroke();
   // Stat row
   const stat = [];
   if (d.streak > 0) stat.push(`🔥 ${d.streak} ${t.dayStreakLabel || "day streak"}`);
   stat.push(`⚡ ${Number(d.xp || 0).toLocaleString()} XP`);
-  ctx.font = "600 44px system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.92)";
-  ctx.fillText(stat.join("      "), cx, 1030);
-  // CTA
+  ctx.font = "600 46px system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.textAlign = "center";
+  ctx.fillText(stat.join("        "), cx, 1132);
+  // CTA (solid white pill = looks like a button)
   const cta = t.scoreCardCta || "Beat my score at revyy.app";
-  ctx.font = "600 40px system-ui, sans-serif";
-  const cw = ctx.measureText(cta).width + 84, ch = 100, cyy = 1170;
-  ctx.fillStyle = "rgba(255,255,255,0.16)"; rr(ctx, cx - cw / 2, cyy, cw, ch, 26); ctx.fill();
-  ctx.fillStyle = "#fff"; ctx.textBaseline = "middle";
+  ctx.font = "700 42px system-ui, sans-serif";
+  const cw = ctx.measureText(cta).width + 92, ch = 108, cyy = 1198;
+  ctx.fillStyle = "#fff"; rr(ctx, cx - cw / 2, cyy, cw, ch, 28); ctx.fill();
+  ctx.fillStyle = "#4f46e5"; ctx.textBaseline = "middle";
   ctx.fillText(cta, cx, cyy + ch / 2 + 2); ctx.textBaseline = "alphabetic";
 }
 
@@ -263,11 +271,11 @@ export function ScoreCardModal({ data, t, onClose }) {
   const btn = { flex: 1, borderRadius: 12, padding: "12px", fontSize: 13.5, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "none" };
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 700, background: "rgba(0,0,0,0.62)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--color-background-primary)", borderRadius: 20, padding: 18, maxWidth: 340, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--color-background-primary)", borderRadius: 22, padding: 20, maxWidth: 430, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
         <canvas ref={canvasRef} style={{ display: "none" }} />
         {url
-          ? <img src={url} alt="" style={{ width: "100%", maxWidth: 258, borderRadius: 14, boxShadow: "0 12px 34px rgba(0,0,0,0.28)" }} />
-          : <div style={{ width: 258, height: 322, borderRadius: 14, background: "var(--color-background-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>…</div>}
+          ? <img src={url} alt="" style={{ width: "100%", maxWidth: 384, borderRadius: 18, boxShadow: "0 16px 44px rgba(0,0,0,0.32)" }} />
+          : <div style={{ width: 384, maxWidth: "100%", aspectRatio: "1080 / 1350", borderRadius: 18, background: "var(--color-background-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>…</div>}
         <button onClick={doShare} disabled={busy || !url} style={{ ...btn, width: "100%", background: "#4338ca", color: "#fff", opacity: (busy || !url) ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
           <Icon name="spark" size={16} />{t.shareResultBtn || "Share result"}
         </button>

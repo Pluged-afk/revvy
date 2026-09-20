@@ -1999,6 +1999,8 @@ export default function StudyQuiz() {
   const [arenaTab, setArenaTab] = useState("season"); // "season" (competitive ladder) | "all" (all-time)
   const [arenaBusy, setArenaBusy] = useState(false);
   const [arenaErr, setArenaErr] = useState("");
+  const [arenaBoardUnlocked, setArenaBoardUnlocked] = useState(false); // hide the Leaderboard button until enough players
+  const arenaCheckedRef = useRef(false);
   // Global "best of the best" leaderboard (top 100 by lifetime XP/rank).
   const [globalBoardData, setGlobalBoardData] = useState(null);
   const [globalBusy, setGlobalBusy] = useState(false);
@@ -2523,6 +2525,17 @@ export default function StudyQuiz() {
     (async () => {
       const b = await socialApi("globalBoard");
       if (b && !b.error && !b.locked) { setGlobalUnlocked(true); setGlobalBoardData(b); }
+    })();
+  }, [user]);
+  // Same reveal gate for the Endless Arena leaderboard: the button stays hidden
+  // until the server has ARENA_GATE (100) ranked players, so it's never a board
+  // of one. Cheap counts-only response while locked; caches the board if open.
+  useEffect(() => {
+    if (!user || arenaCheckedRef.current) return;
+    arenaCheckedRef.current = true;
+    (async () => {
+      const b = await arenaBoardGlobal();
+      if (b && !b.error && !b.locked) { setArenaBoardUnlocked(true); setArenaBoardData(b); }
     })();
   }, [user]);
   // Same gate for Weekly Leagues: only surface the entry once there are enough
@@ -3243,7 +3256,7 @@ export default function StudyQuiz() {
         <span style={Sb.brand}>{t.appName}</span>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           {isPro && <span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:8,padding:"2px 7px",fontWeight:700}}>PRO</span>}
-          <button onClick={()=>setSoundOn(s=>!s)} title={soundOn?t.soundOn:t.soundOff} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",display:"flex",alignItems:"center",color:"var(--color-text-secondary)",opacity:soundOn?1:0.4}}><Icon name="volume" size={17}/></button>
+          <button onClick={()=>setSoundOn(s=>!s)} title={soundOn?t.soundOn:t.soundOff} aria-label={soundOn?t.soundOn:t.soundOff} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",display:"flex",alignItems:"center",color:soundOn?"var(--color-text-secondary)":"var(--color-text-tertiary)"}}><Icon name={soundOn?"volume":"volume_off"} size={17}/></button>
           <button onClick={()=>openSettings()} title={t.set.title} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",display:"flex",alignItems:"center",color:"var(--color-text-secondary)"}}><Icon name="gear" size={17}/></button>
         </div>
       </div>
@@ -3526,10 +3539,9 @@ export default function StudyQuiz() {
       <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(35,31,26,0.16)"}}>{t.welcomePro}</div>}
-        <div style={Sb.topbar} className="rv-topbar"><button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button><span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{quiz.title}</span><span/></div>
+        <div style={Sb.topbar} className="rv-topbar"><button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button><span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{quiz.title}</span><button onClick={openSettings} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"inline-flex",alignItems:"center",color:"var(--color-text-secondary)"}}><Icon name="gear" size={17}/></button></div>
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}><MatchQuiz questions={quiz.questions} t={t} onDone={(s,total,detail)=>{setAnswers(detail||Array(total).fill(0).map((_,i)=>({isCorrect:i<s})));setScreen("results");}}/></div>
         <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);newMat();}}/>
-        <button onClick={openSettings} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{position:"fixed",left:12,bottom:58,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="gear" size={17}/></button>
         <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="chat" size={17}/></button>
         <button onClick={()=>printStudySheet(false)} title={t.printBlankBtn||"Print a blank copy"} aria-label={t.printBlankBtn||"Print a blank copy"} style={{position:"fixed",right:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="notes" size={17}/></button>
         {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
@@ -3543,7 +3555,10 @@ export default function StudyQuiz() {
         <div style={Sb.topbar} className="rv-topbar">
           <button style={Sb.backBtn} onClick={()=>setShowExitConfirm(true)}>{t.exit}</button>
           <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{quiz.title}</span>
-          <span style={{fontSize:12,color:"var(--color-text-secondary)",fontWeight:600}}>{qIdx+1}/{quiz.questions.length}</span>
+          <span style={{display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:12,color:"var(--color-text-secondary)",fontWeight:600}}>{qIdx+1}/{quiz.questions.length}</span>
+            <button onClick={openSettings} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"inline-flex",alignItems:"center",color:"var(--color-text-secondary)"}}><Icon name="gear" size={17}/></button>
+          </span>
         </div>
         <PBar v={qIdx} max={quiz.questions.length}/>
         <div className="rv-center-narrow" style={{padding:"20px 16px 32px"}}>
@@ -3594,7 +3609,6 @@ export default function StudyQuiz() {
           )}
         </div>
         <ExitModal show={showExitConfirm} onStay={()=>setShowExitConfirm(false)} onLeave={()=>{setShowExitConfirm(false);newMat();}}/>
-        <button onClick={openSettings} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{position:"fixed",left:12,bottom:58,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="gear" size={17}/></button>
         <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="chat" size={17}/></button>
         <button onClick={()=>printStudySheet(false)} title={t.printBlankBtn||"Print a blank copy"} aria-label={t.printBlankBtn||"Print a blank copy"} style={{position:"fixed",right:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="notes" size={17}/></button>
         {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
@@ -5090,7 +5104,7 @@ export default function StudyQuiz() {
           )}
           {arenaErr && <div style={{background:"var(--color-background-danger)",border:"0.5px solid #fecaca",borderRadius:10,padding:"10px 14px",fontSize:13,color:"var(--color-text-danger)",marginBottom:14}}>{arenaErr}</div>}
           <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,fontSize:16}} onClick={startArena}><Icon name="bolt" size={17}/>{t.arenaPlay}</button>
-          {SHOW_ARENA_LEADERBOARD && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
+          {SHOW_ARENA_LEADERBOARD && arenaBoardUnlocked && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
           <div style={{marginTop:24}}>
             <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:"var(--color-text-tertiary)",textTransform:"uppercase",marginBottom:10,textAlign:"center"}}>{t.arenaSubjectLabel||"Or race on your subject"}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -5162,7 +5176,7 @@ export default function StudyQuiz() {
             ))}
           </div>
           <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>{ if(r.subject?.set) startSubjectArena(r.subject.set); else startArena(); }}><Icon name="repeat" size={16}/>{t.arenaPlayAgain}</button>
-          {!r.subject && SHOW_ARENA_LEADERBOARD && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
+          {!r.subject && SHOW_ARENA_LEADERBOARD && arenaBoardUnlocked && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
           {r.subject && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={()=>setScreen("arena_intro")}><Icon name="bolt" size={16}/>{t.arenaOtherSubjects||"Pick another subject"}</button>}
           <button style={{width:"100%",background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit",padding:"14px 4px 0"}} onClick={()=>setScreen("upload")}>{t.arenaHome}</button>
         </div>

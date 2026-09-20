@@ -163,6 +163,13 @@ const PATHS = {
       <path d="M16.5 8.8a4 4 0 0 1 0 6.4M19 6.3a7.5 7.5 0 0 1 0 11.4" />
     </>
   ),
+  // Muted: the speaker with a slash through the whole icon (sound is cut).
+  volume_off: (
+    <>
+      <path d="M4 9v6h4l5 4V5L8 9H4z" />
+      <path d="M4 4l16 16" />
+    </>
+  ),
   cap: (
     <>
       <path d="M12 4L2.5 8.5 12 13l9.5-4.5L12 4z" />
