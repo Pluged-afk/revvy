@@ -417,6 +417,13 @@ export default function StudyQuiz() {
     const id = setInterval(() => setMockSecTimeLeft((t) => { if (t <= 1) { clearInterval(id); return 0; } return t - 1; }), 1000);
     return () => clearInterval(id);
   }, [screen, mockSecIdx, mockPaused]);
+  // Gentle audio warning as a mock section's clock runs low (60s / 10s beeps,
+  // then a faint tick each of the last 5 seconds).
+  useEffect(() => {
+    if (screen !== "mock_run" || mockPaused) return;
+    if (mockSecTimeLeft === 60 || mockSecTimeLeft === 10) SoundEngine.timeLow();
+    else if (mockSecTimeLeft > 0 && mockSecTimeLeft <= 5) SoundEngine.tick();
+  }, [mockSecTimeLeft]); // eslint-disable-line react-hooks/exhaustive-deps
   // Pause + blur a mock when the tab is hidden, so the question can't be read
   // off-screen (same anti-peek behaviour as exam mode).
   useEffect(() => {
@@ -685,7 +692,7 @@ export default function StudyQuiz() {
     sound:true,
     volume:70,
     notifSound:true,
-    haptics:false,
+    haptics:true,
     feedback:'immediate',
     autoAdvance:false,
     autoAdvanceSec:5,
@@ -743,6 +750,22 @@ export default function StudyQuiz() {
   useEffect(()=>{ setSoundOn(settings.sound); },[settings.sound]);
   useEffect(()=>{ SoundEngine.setEnabled(soundOn); },[soundOn]);
   useEffect(()=>{ Haptics.on = settings.haptics; },[settings.haptics]);
+  // Universal "clicked a button" feedback: a very soft tap on any real control
+  // (button/link/tab/checkbox), gated on the sound setting inside SoundEngine.
+  // Sound only, no vibration, so it never machine-guns haptics on every tap.
+  // Capture phase so it fires even when a handler stops propagation; a small
+  // debounce avoids double-fires. The click itself is the audio-unlock gesture.
+  useEffect(()=>{
+    let last=0;
+    const onDocClick=(e)=>{
+      const el=e.target&&e.target.closest&&e.target.closest('button,[role="button"],a[href],summary,select,input[type="checkbox"],input[type="radio"],input[type="range"]');
+      if(!el||el.disabled) return;
+      const now=Date.now(); if(now-last<45) return; last=now;
+      try{ SoundEngine.tap(); }catch{ /* ignore */ }
+    };
+    document.addEventListener("click", onDocClick, true);
+    return ()=>document.removeEventListener("click", onDocClick, true);
+  },[]);
   // Apply the saved "default difficulty / questions" to the quiz-setup controls
   // on load (and whenever the default changes) so they persist across reloads
   // and logout/login, not only when Apply is pressed.
@@ -1286,6 +1309,13 @@ export default function StudyQuiz() {
   useEffect(()=>{
     if(screen==="exam_run" && examTimerOn && examTimeLeft===0 && !examTimeUp) handleTimeUp();
   },[screen,examTimerOn,examTimeLeft,examTimeUp,handleTimeUp]);
+  // Gentle audio warning as the exam clock runs low: two soft beeps at 60s and
+  // 10s, then a faint tick each of the final 5 seconds (SoundEngine self-gates).
+  useEffect(()=>{
+    if(screen!=="exam_run" || !examTimerOn || examPaused || examTimeUp || examTimeLeft==null) return;
+    if(examTimeLeft===60 || examTimeLeft===10) SoundEngine.timeLow();
+    else if(examTimeLeft>0 && examTimeLeft<=5) SoundEngine.tick();
+  },[examTimeLeft]); // eslint-disable-line react-hooks/exhaustive-deps
   // Auto-pause + blur when the tab is hidden/switched, so the question can't be
   // seen off-screen. Applies even without a timer (it just hides the question).
   useEffect(()=>{
@@ -2267,10 +2297,21 @@ export default function StudyQuiz() {
     }
   }, [activeGroup, srs, t, refreshGroup]);
   // Group chat: load + send, polled while the chat tab is open.
+  const chatSeenRef = useRef(0); // message count last seen, to detect new incoming ones
   const loadChat = useCallback(async (groupId) => {
     const r = await socialApi("groupChat", { groupId });
-    if (!r.error) setChatMsgs(r.messages || []);
-  }, []);
+    if (!r.error) {
+      const msgs = r.messages || [];
+      // A genuinely NEW message from someone else (not the first load, not mine)
+      // gets a soft chime + light buzz, so you hear replies while the chat is open.
+      if (chatSeenRef.current > 0 && msgs.length > chatSeenRef.current) {
+        const newest = msgs[msgs.length - 1];
+        if (newest && !newest.mine && settings.notifSound !== false) { SoundEngine.ping(); Haptics.buzz(20); }
+      }
+      chatSeenRef.current = msgs.length;
+      setChatMsgs(msgs);
+    }
+  }, [settings.notifSound]);
   const sendChat = useCallback(async () => {
     const text = chatInput.trim(); if (!text || !activeGroup) return;
     setChatInput("");
@@ -2279,6 +2320,7 @@ export default function StudyQuiz() {
   }, [chatInput, activeGroup, loadChat]);
   useEffect(() => {
     if (screen !== "group" || groupTab !== "chat" || !activeGroup) return;
+    chatSeenRef.current = 0; // fresh open: the first load must not chime
     loadChat(activeGroup.id);
     const id = setInterval(() => loadChat(activeGroup.id), 4000);
     return () => clearInterval(id);

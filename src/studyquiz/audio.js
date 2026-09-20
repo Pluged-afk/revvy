@@ -37,7 +37,12 @@ export const SoundEngine = (() => {
   };
   return {
     click:     ()=>tone(780,'sine',0.05,0.12),
+    // Ultra-subtle tap for the universal "clicked a button" feedback: soft and
+    // short so it sits UNDER the richer event sounds (correct/wrong/etc.).
+    tap:       ()=>tone(600,'sine',0.028,0.075),
     tick:      ()=>tone(520,'sine',0.03,0.10),
+    // A gentle two-beep warning when a timer is running low (not alarming).
+    timeLow:   ()=>{ tone(784,'sine',0.10,0.15); tone(784,'sine',0.10,0.15,0.15); },
     correct:   ()=>{ tone(523,'sine',0.12,0.18); tone(659,'sine',0.12,0.18,0.08); tone(784,'sine',0.15,0.18,0.16); },
     wrong:     ()=>{ tone(220,'sawtooth',0.12,0.14); tone(196,'sawtooth',0.10,0.10,0.07); },
     submit:    ()=>{ tone(440,'sine',0.15,0.15); tone(370,'sine',0.15,0.12,0.12); },

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { buildServe, questionPoints, serveDifficulty, comboMult, timerFor } from "../lib/arena.js";
+import { SoundEngine, Haptics } from "../studyquiz/audio.js";
 
 // The endless run itself: one life, a visible per-question timer that ramps down,
 // and the three power-ups (freeze / hint / skip) the player already owns. A wrong
@@ -96,6 +97,7 @@ export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUseP
     const ok = i === cur.correctIndex;
     const pts = ok ? pot : 0;
     answersRef.current.push({ id: cur.id, ok, pts });
+    if (ok) { SoundEngine.correct(); Haptics.buzz(28); } else { SoundEngine.wrong(); Haptics.buzz(60); }
     if (ok) {
       setScore((s) => s + pts);
       setStreak(streak + 1);
@@ -109,7 +111,7 @@ export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUseP
   useEffect(() => {
     if (frozen || tabHidden || picked !== null || overRef.current) return;
     if (timeLeft <= 0) { // ran out of time counts as a miss
-      if (!overRef.current && picked === null) { answersRef.current.push({ id: cur.id, ok: false, pts: 0 }); setPicked(-1); setTimeout(() => finish(answersRef.current.length), 700); }
+      if (!overRef.current && picked === null) { SoundEngine.wrong(); Haptics.buzz(60); answersRef.current.push({ id: cur.id, ok: false, pts: 0 }); setPicked(-1); setTimeout(() => finish(answersRef.current.length), 700); }
       return;
     }
     const id = setInterval(() => setTimeLeft((tl) => Math.max(0, tl - 0.1)), 100);
