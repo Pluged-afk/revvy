@@ -55,7 +55,7 @@ async function getProfile(req, res) {
     return res.status(200).json({ ...p, is_pro: p.is_pro === true });
   } catch (e) {
     console.error("[profile:get]", e.message);
-    return res.status(500).json({ error: e.message, is_pro: false });
+    return res.status(500).json({ error: "Could not load your profile.", is_pro: false });
   }
 }
 
@@ -76,24 +76,86 @@ async function createProfile(req, res, body) {
     return res.status(200).json({ ok: true });
   } catch (e) {
     console.error("[profile:create]", e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "Could not create your profile." });
   }
 }
 
-// POST action=delete: removes the user's profile row from the database. The
-// Clerk user record itself is deleted client-side via clerkUser.delete() (a
-// secure, self-only call). The user id comes from the verified session token,
-// so a caller can only ever delete their own row, never someone else's.
+// POST action=delete: fully erases the user's data across EVERY table, not just
+// the profiles row (right-to-erasure). The Clerk user record itself is deleted
+// client-side via clerkUser.delete() (a secure, self-only call). The user id
+// comes from the verified session token, so a caller can only ever delete their
+// own data, never someone else's.
+//
+// Best-effort + re-runnable: satellite wipes are caught individually and the
+// profiles row is deleted LAST, so a hiccup on one table never leaves the account
+// half-alive or blocks the client's Clerk-user deletion. Shared, de-identified
+// pools (mock_bank / gk_pool / arena_contrib) carry no user id and are left as
+// crowd knowledge; contact_rate is keyed by IP, not user.
 async function deleteAccount(req, res) {
   const userId = await userIdFromToken(req);
   if (!userId) return res.status(401).json({ error: "Invalid session." });
+
+  // 1) Study groups: leave each one, mirroring groupLeave so we never orphan a
+  // group under a deleted owner. Empty groups (we were the last member) are torn
+  // down with their content; otherwise ownership passes to the oldest member.
+  try {
+    const mine = await sql`SELECT group_id FROM group_members WHERE clerk_user_id = ${userId}`;
+    for (const g of mine) {
+      const gid = g.group_id;
+      await sql`DELETE FROM group_members WHERE group_id = ${gid} AND clerk_user_id = ${userId}`;
+      const remaining = await sql`SELECT clerk_user_id FROM group_members WHERE group_id = ${gid} ORDER BY joined_at ASC`;
+      if (!remaining.length) {
+        await Promise.allSettled([
+          sql`DELETE FROM study_groups   WHERE id = ${gid}`,
+          sql`DELETE FROM group_library  WHERE group_id = ${gid}`,
+          sql`DELETE FROM group_activity WHERE group_id = ${gid}`,
+          sql`DELETE FROM group_messages WHERE group_id = ${gid}`,
+          sql`DELETE FROM group_reward   WHERE group_id = ${gid}`,
+          sql`DELETE FROM group_challenges WHERE group_id = ${gid}`,
+        ]);
+      } else {
+        await sql`UPDATE study_groups SET owner = ${remaining[0].clerk_user_id} WHERE id = ${gid} AND owner = ${userId}`;
+        await sql`UPDATE group_members SET role = 'owner' WHERE group_id = ${gid} AND clerk_user_id = ${remaining[0].clerk_user_id}`;
+      }
+    }
+  } catch (e) { console.error("[profile:delete] group handover failed:", e.message); }
+
+  // 2) Wipe every row that belongs to this user across all tables (best-effort,
+  // in parallel). Deleting friend_messages where recipient = me also removes the
+  // thread the other party held with this now-erased account.
+  const wipes = await Promise.allSettled([
+    sql`DELETE FROM study_data              WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM shared_quizzes          WHERE data->>'ownerId' = ${userId}`,
+    sql`DELETE FROM push_subs               WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM friendships             WHERE requester = ${userId} OR addressee = ${userId}`,
+    sql`DELETE FROM friend_messages         WHERE sender = ${userId} OR recipient = ${userId}`,
+    sql`DELETE FROM friend_challenge_scores WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM challenge_scores        WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM group_library           WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM group_activity          WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM group_messages          WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM group_reward            WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM group_challenges        WHERE created_by = ${userId}`,
+    sql`DELETE FROM arena_score             WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM arena_season            WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM arena_league            WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM mock_actor              WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM mock_flag               WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM arena_contrib_actor     WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM ai_rate                 WHERE clerk_user_id = ${userId}`,
+  ]);
+  const failed = wipes.filter((r) => r.status === "rejected").length;
+  if (failed) console.error(`[profile:delete] ${failed} satellite wipe(s) failed for ${userId} (re-runnable)`);
+
+  // 3) Finally the profile row itself. This is the one that must succeed; do it
+  // last so a satellite failure never blocks the client's Clerk-user deletion.
   try {
     await sql`DELETE FROM profiles WHERE clerk_user_id = ${userId} OR id = ${userId}`;
-    console.log("[profile:delete] removed profile row for", userId);
+    console.log(`[profile:delete] erased account ${userId} (${wipes.length - failed}/${wipes.length} satellite tables clean)`);
     return res.status(200).json({ success: true });
   } catch (e) {
     console.error("[profile:delete]", e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "Could not delete the account. Please try again." });
   }
 }
 
@@ -115,7 +177,7 @@ async function setUsername(req, res, body) {
   } catch (e) {
     if (/duplicate|unique/i.test(e.message)) return res.status(409).json({ error: "That name is taken, try another.", taken: true });
     console.error("[profile:setUsername]", e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "Could not save your username." });
   }
 }
 
@@ -133,7 +195,7 @@ async function setLanguage(req, res, body) {
     return res.status(200).json({ ok: true, language: lang });
   } catch (e) {
     console.error("[profile:setLanguage]", e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "Could not save your language." });
   }
 }
 

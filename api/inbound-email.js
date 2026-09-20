@@ -39,6 +39,14 @@ export default async function handler(req, res) {
     console.error("[inbound] signature verification failed");
     return res.status(401).json({ error: "Invalid signature." });
   }
+  // Replay window: the signature covers svix-timestamp (so it can't be forged),
+  // but a captured valid request could still be re-sent later. Reject anything
+  // more than 5 minutes off, so an old delivery can't be replayed.
+  const ts = parseInt(req.headers["svix-timestamp"], 10);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+    console.error("[inbound] timestamp outside the 5-minute window, rejecting");
+    return res.status(400).json({ error: "Stale webhook." });
+  }
 
   let payload;
   try { payload = raw ? JSON.parse(raw) : {}; }

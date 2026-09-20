@@ -8,6 +8,43 @@ export const config = { api: { bodyParser: false } };
 const ACTIVE = ["active", "trialing"];
 const INACTIVE = ["canceled", "cancelled", "past_due", "unpaid", "incomplete_expired"];
 
+// Idempotency: Stripe retries and can redeliver the same event. We record each
+// event id AFTER it is handled and skip anything already recorded, so a
+// duplicate is a no-op, critical for the one-time question-pack credit (it's
+// additive and would otherwise double). Recording AFTER success (not before)
+// means a delivery that fails mid-handling is never marked, so Stripe's retry
+// still gets to run, we never lose a real credit to a transient error.
+let eventsTableReady = false;
+async function ensureEventsTable() {
+  if (eventsTableReady) return;
+  await sql`CREATE TABLE IF NOT EXISTS stripe_events (
+    id  TEXT PRIMARY KEY,
+    at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`;
+  eventsTableReady = true;
+}
+// True if this event was already handled. Fail-OPEN (false) on any DB hiccup so
+// a blip never drops a real event; the worst case is a rare reprocess.
+async function alreadyProcessed(id) {
+  try {
+    await ensureEventsTable();
+    const rows = await sql`SELECT 1 FROM stripe_events WHERE id = ${id} LIMIT 1`;
+    return rows.length > 0;
+  } catch (e) {
+    console.error("[wh] idempotency read failed (processing anyway):", e.message);
+    return false;
+  }
+}
+// Mark an event handled. Best-effort, and only ever called after the handler
+// finished cleanly (never on the error path), so a failed delivery stays retryable.
+async function markProcessed(id) {
+  try {
+    await ensureEventsTable();
+    await sql`INSERT INTO stripe_events (id) VALUES (${id}) ON CONFLICT (id) DO NOTHING`;
+    if (Math.random() < 0.02) { try { await sql`DELETE FROM stripe_events WHERE at < NOW() - INTERVAL '30 days'`; } catch { /* ignore */ } }
+  } catch (e) { console.error("[wh] idempotency write failed:", e.message); }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -34,6 +71,12 @@ export default async function handler(req, res) {
   }
   console.log(`[wh] ✓ event: ${event.type} (${event.id})`);
   console.log("[webhook] received:", event.type);
+
+  // Skip anything we've already handled (Stripe redelivery / retry).
+  if (await alreadyProcessed(event.id)) {
+    console.log(`[wh] duplicate ${event.id}, already processed, skipping`);
+    return res.status(200).json({ received: true, duplicate: true });
+  }
 
   const emailFromCustomer = async (customerId) => {
     if (!customerId) return null;
@@ -172,9 +215,11 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error("[wh] handler threw:", err);
-    return res.status(500).json({ error: "Webhook handler failed." });
+    return res.status(500).json({ error: "Webhook handler failed." }); // NOT marked → Stripe retry re-runs it
   }
 
+  // Handled cleanly: record it so a later redelivery is a no-op.
+  await markProcessed(event.id);
   return res.status(200).json({ received: true });
 }
 

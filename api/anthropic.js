@@ -17,35 +17,80 @@ import sql from "./db.js";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
 // Abuse guards. This proxy spends the server's Anthropic key, so a signed-in
-// user must not be able to turn it into an unmetered, arbitrary-cost gateway.
+// user must not be able to (a) turn it into an unmetered, arbitrary-cost gateway
+// or (b) out-generate the tier they pay for by calling this route directly and
+// skipping the app's client-side metering. Entitlement is therefore enforced
+// HERE, on the endpoint that actually spends the key, using only server-trusted
+// signals: is_pro read from Neon (the same source the Stripe webhook syncs) and
+// output tokens observed from the stream, never a client-declared count.
 const ALLOWED_MODEL = /^claude-haiku-/i; // the cheap tier the app uses; reject pricier models
-const MAX_OUTPUT_TOKENS = 64000;         // hard ceiling on client-requested max_tokens
-const MAX_AI_CALLS_DAILY = 400;          // per-account proxy calls/day (generous for heavy Pro use)
 
-// Per-account daily call counter (own tiny table, self-provisioned + cached per
-// warm lambda). Fail-OPEN on any DB hiccup so a counter blip never breaks
-// generation, the model pin + token cap still bound per-call cost regardless.
+// Per-call output ceiling, by tier. A legitimate free generation never exceeds a
+// ~50-question quiz (AD_MAX_Q), which the client sizes at ~18k tokens, so 24k
+// leaves headroom while stopping a free caller from pulling a Pro-sized batch.
+const MAX_OUTPUT_TOKENS = { free: 24000, pro: 64000 };
+
+// Per-account DAILY budget. calls/day stays a blunt anti-hammer cap kept generous
+// (short-answer quizzes grade one call PER question, so a heavy-but-legit day is
+// call-heavy). The real economy gate is out_tokens/day: it tracks actual
+// generation volume and cost regardless of how calls are sliced or what the
+// client claims. Free sits well below Pro (so you must upgrade to generate more)
+// and both sit far above heavy legitimate use (a heavy free day is ~30k output
+// tokens, a heavy Pro day ~150k), so neither ever clips a real user.
+const MAX_AI_CALLS_DAILY = 400;                              // anti-hammer, both tiers
+const DAILY_OUTPUT_BUDGET = { free: 120000, pro: 800000 };   // the tier economy gate
+
+// The signed-in user's Pro status, from Neon. This is the trusted tier that
+// decides the budget. A DB hiccup fails OPEN to Pro so a transient blip never
+// throttles a paying customer (the per-call ceiling still bounds per-call cost).
+async function isProUser(userId) {
+  try {
+    const rows = await sql`SELECT is_pro FROM profiles WHERE clerk_user_id = ${userId} OR id = ${userId} LIMIT 1`;
+    return rows[0]?.is_pro === true;
+  } catch (e) {
+    console.error("[anthropic] is_pro lookup failed (treating as Pro):", e.message);
+    return true;
+  }
+}
+
+// Count this call and read today's running totals (own tiny table, self-
+// provisioned + cached per warm lambda). Fail-OPEN on any DB hiccup so a counter
+// blip never breaks generation; the per-call ceiling still bounds per-call cost.
 let aiRateReady = false;
-async function underRateLimit(userId) {
+async function dailyUsage(userId) {
   try {
     if (!aiRateReady) {
       await sql`CREATE TABLE IF NOT EXISTS ai_rate (
         clerk_user_id TEXT NOT NULL,
-        day           DATE NOT NULL DEFAULT CURRENT_DATE,
-        calls         INT  NOT NULL DEFAULT 0,
+        day           DATE   NOT NULL DEFAULT CURRENT_DATE,
+        calls         INT    NOT NULL DEFAULT 0,
+        out_tokens    BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY (clerk_user_id, day)
       )`;
+      // Older deployments created ai_rate before out_tokens existed.
+      await sql`ALTER TABLE ai_rate ADD COLUMN IF NOT EXISTS out_tokens BIGINT NOT NULL DEFAULT 0`;
       aiRateReady = true;
     }
     const rows = await sql`INSERT INTO ai_rate (clerk_user_id, day, calls) VALUES (${userId}, CURRENT_DATE, 1)
                            ON CONFLICT (clerk_user_id, day) DO UPDATE SET calls = ai_rate.calls + 1
-                           RETURNING calls`;
+                           RETURNING calls, out_tokens`;
     if (Math.random() < 0.02) { try { await sql`DELETE FROM ai_rate WHERE day < CURRENT_DATE - 2`; } catch { /* ignore */ } }
-    return (rows[0]?.calls || 1) <= MAX_AI_CALLS_DAILY;
+    return { ok: true, calls: rows[0]?.calls || 1, outTokens: Number(rows[0]?.out_tokens || 0) };
   } catch (e) {
-    console.error("[anthropic] rate-limit check failed (allowing):", e.message);
-    return true;
+    console.error("[anthropic] usage check failed (allowing):", e.message);
+    return { ok: false, calls: 0, outTokens: 0 };
   }
+}
+
+// Record what a finished generation actually produced, so the daily budget
+// reflects real volume. Best-effort: the response has already streamed, so a
+// failure here must never surface to the client.
+async function recordOutput(userId, tokens) {
+  if (!tokens || tokens <= 0) return;
+  try {
+    await sql`UPDATE ai_rate SET out_tokens = out_tokens + ${tokens}
+              WHERE clerk_user_id = ${userId} AND day = CURRENT_DATE`;
+  } catch (e) { console.error("[anthropic] output accounting failed:", e.message); }
 }
 
 export default async function handler(req, res) {
@@ -77,15 +122,26 @@ export default async function handler(req, res) {
   if (!model || !Array.isArray(messages)) {
     return res.status(400).json({ error: { message: "Missing model or messages." } });
   }
-  // Pin the model to the cheap tier the app uses, clamp the output budget, and
-  // rate-limit per account, so this authenticated proxy can't be driven as an
-  // arbitrary-cost Anthropic gateway.
+  // Pin the model to the cheap tier the app uses, then enforce the caller's
+  // ENTITLEMENT here (the endpoint that actually spends the key): clamp the
+  // per-call output budget and the per-account daily budget by Pro/free, so this
+  // route can neither be driven as an arbitrary-cost gateway nor used to
+  // out-generate the paid tier by calling it directly.
   if (!ALLOWED_MODEL.test(String(model))) {
     return res.status(400).json({ error: { message: "Unsupported model." } });
   }
-  const safeMaxTokens = Math.min(Math.max(parseInt(max_tokens, 10) || 4000, 1), MAX_OUTPUT_TOKENS);
-  if (!(await underRateLimit(userId))) {
+  const isPro = await isProUser(userId);
+  const tier = isPro ? "pro" : "free";
+  const safeMaxTokens = Math.min(Math.max(parseInt(max_tokens, 10) || 4000, 1), MAX_OUTPUT_TOKENS[tier]);
+
+  const usage = await dailyUsage(userId);
+  if (usage.ok && usage.calls > MAX_AI_CALLS_DAILY) {
     return res.status(429).json({ error: { message: "You have reached today's generation limit. Please try again tomorrow." } });
+  }
+  if (usage.ok && usage.outTokens >= DAILY_OUTPUT_BUDGET[tier]) {
+    return res.status(429).json({ error: { message: isPro
+      ? "You have reached today's generation limit. Please try again tomorrow."
+      : "You have reached today's free generation limit. Upgrade to Pro for much higher daily limits, or try again tomorrow." } });
   }
 
   try {
@@ -147,7 +203,9 @@ export default async function handler(req, res) {
     }
     // Usage + cost (Haiku 4.5: $1/1M in, $5/1M out). TRUNCATED = max_tokens hit.
     const cost = (inTok * 1 + outTok * 5) / 1e6;
-    console.log(`[anthropic] usage · in=${inTok} out=${outTok} stop=${stopReason} ~$${cost.toFixed(4)}${stopReason === "max_tokens" ? " ⚠️ TRUNCATED (raise max_tokens / fewer questions)" : ""}`);
+    console.log(`[anthropic] usage · tier=${tier} in=${inTok} out=${outTok} stop=${stopReason} ~$${cost.toFixed(4)}${stopReason === "max_tokens" ? " ⚠️ TRUNCATED (raise max_tokens / fewer questions)" : ""}`);
+    // Add this generation's real output to today's budget (best-effort).
+    await recordOutput(userId, outTok);
     return res.end();
   } catch (err) {
     console.error("[anthropic] proxy request threw:", err?.message || err);

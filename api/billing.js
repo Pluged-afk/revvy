@@ -17,6 +17,12 @@ const PACKS = {
   C: { questions: 3000, priceId: "price_1TiAcbGXyNWRBegioXFNLBKW" },
 };
 
+// Subscription checkout takes a priceId from the client, so allowlist it to the
+// two real plans (defense-in-depth: never let a caller start a subscription on
+// some other price). Fails open ONLY if the env isn't set server-side, so a
+// missing var can never break checkout.
+const ALLOWED_SUB_PRICES = [process.env.VITE_STRIPE_MONTHLY_PRICE, process.env.VITE_STRIPE_YEARLY_PRICE].filter(Boolean);
+
 // The signed-in user's id, taken from the verified Clerk session token, never
 // from the request body. Checkout and the billing portal act on a specific
 // account, so they must not trust a client-supplied id.
@@ -44,6 +50,9 @@ async function checkout(req, res, stripe, body) {
   if (!userId) return res.status(401).json({ error: "Please sign in first." });
   const { priceId, userEmail } = body;
   if (!priceId) return res.status(400).json({ error: "Missing priceId." });
+  if (ALLOWED_SUB_PRICES.length && !ALLOWED_SUB_PRICES.includes(priceId)) {
+    return res.status(400).json({ error: "Unknown plan." });
+  }
 
   // Reuse the saved Stripe customer if this user already has one.
   let existingCustomerId = null;

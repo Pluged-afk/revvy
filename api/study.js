@@ -1008,8 +1008,14 @@ async function setBadge(req, res, body, me) {
   rank = Number.isInteger(rank) ? Math.max(-1, Math.min(20, rank)) : null;
   // Lifetime XP powers the global leaderboard's fine ordering. A hidden user
   // (rank < 0) is stored with NULL xp so they drop off the public board.
+  // Clamp to a sane ceiling: ranks top out at 8,000 XP and even an extreme
+  // multi-year user stays well under 2M, so this never clips a real learner but
+  // stops an absurd hand-crafted value from topping the board. NOTE: XP is
+  // computed client-side from the study blob (which the client authors), so this
+  // cap is defense-in-depth, not full anti-cheat; a tamper-proof board needs
+  // server-side activity accounting (a separate, larger change).
   let xp = parseInt(body.xp, 10);
-  xp = (Number.isInteger(xp) && xp >= 0 && rank != null && rank >= 0) ? Math.min(xp, 100000000) : null;
+  xp = (Number.isInteger(xp) && xp >= 0 && rank != null && rank >= 0) ? Math.min(xp, 2000000) : null;
   await ensureUsernameCol();
   try {
     await sql`INSERT INTO profiles (id, clerk_user_id) VALUES (${me}, ${me}) ON CONFLICT (id) DO NOTHING`;
@@ -1042,6 +1048,10 @@ async function globalBoard(req, res, me) {
   });
 }
 
+// Cap on OUTSTANDING outgoing friend requests, so an account can't spray
+// requests at everyone. Accepted/declined requests free up room, so this never
+// limits a genuine user, only mass-spamming.
+const MAX_PENDING_REQUESTS = 60;
 async function friendAdd(req, res, body, me) {
   const name = clean(body.username, 30);
   if (!name) return res.status(400).json({ error: "Enter a username." });
@@ -1055,6 +1065,12 @@ async function friendAdd(req, res, body, me) {
     if (e.status === "accepted") return res.status(200).json({ ok: true, status: "accepted" });
     if (e.requester === them) { await sql`UPDATE friendships SET status='accepted' WHERE id=${e.id}`; return res.status(200).json({ ok: true, status: "accepted" }); }
     return res.status(200).json({ ok: true, status: "pending" });
+  }
+  // Only a brand-new request counts against the cap (accepting a reverse request
+  // above never does).
+  const pendingOut = Number((await sql`SELECT COUNT(*) AS n FROM friendships WHERE requester=${me} AND status='pending'`)[0]?.n || 0);
+  if (pendingOut >= MAX_PENDING_REQUESTS) {
+    return res.status(429).json({ error: "You have too many pending friend requests. Wait for some to be accepted first." });
   }
   await sql`INSERT INTO friendships (requester, addressee, status) VALUES (${me}, ${them}, 'pending') ON CONFLICT (requester, addressee) DO NOTHING`;
   return res.status(200).json({ ok: true, status: "pending" });
@@ -1532,11 +1548,30 @@ async function sendPush(sub, payload) {
     return false;
   }
 }
+// A push subscription's endpoint is a URL the server later POSTs to (on every
+// reminder), so it must be a real browser push service, not an arbitrary or
+// internal address. Allowlist the known services so this can't be used as an
+// SSRF probe. These cover every mainstream browser; add a host here if a new
+// push service appears.
+const PUSH_HOSTS = [
+  "fcm.googleapis.com",          // Chrome / Chromium / Edge / Brave / Opera
+  ".push.services.mozilla.com",  // Firefox
+  ".notify.windows.com",         // legacy WNS (older Edge)
+  "web.push.apple.com",          // Safari / iOS web push
+];
+function isPushEndpoint(u) {
+  try {
+    const url = new URL(u);
+    if (url.protocol !== "https:") return false;
+    const h = url.hostname.toLowerCase();
+    return PUSH_HOSTS.some((s) => (s[0] === "." ? h.endsWith(s) : h === s));
+  } catch { return false; }
+}
 async function pushSubscribe(req, res, body, me) {
   const endpoint = clean(body.endpoint, 1000);
   const p256dh = clean(body.p256dh, 300);
   const auth = clean(body.auth, 300);
-  if (!endpoint || !p256dh || !auth || !/^https:\/\//.test(endpoint)) return res.status(400).json({ error: "Bad subscription." });
+  if (!endpoint || !p256dh || !auth || !isPushEndpoint(endpoint)) return res.status(400).json({ error: "Bad subscription." });
   await sql`INSERT INTO push_subs (endpoint, clerk_user_id, p256dh, auth)
     VALUES (${endpoint}, ${me}, ${p256dh}, ${auth})
     ON CONFLICT (endpoint) DO UPDATE SET clerk_user_id=EXCLUDED.clerk_user_id, p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth`;
@@ -1667,6 +1702,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   } catch (e) {
     console.error("[study]", e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "Something went wrong. Please try again." });
   }
 }
