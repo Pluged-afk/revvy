@@ -19,7 +19,7 @@ import { makeLibraryDoc, buildLibraryMaterial, librarySize, libraryTopics } from
 import { previewInterval } from "./lib/fsrs.js";
 import { LETTERS, DEFAULT_KEYBINDS, LEAGUE_TIERS, AI_MODEL, DIFFICULTY, ADS_ENABLED, STARTER_EXAMS, STARTER_SUBJECTS, STRIPE_MONTHLY_PRICE, STRIPE_YEARLY_PRICE } from "./studyquiz/constants.js";
 import { Sb, CSS } from "./studyquiz/styles.js";
-import { stripEmoji, computeUnread, activityText, timeAgo, parseQuizlet, sectionPerQMarks, sectionMarksTotal, roundMarks, fmtMB, stripFences, shuffleMCQOptions } from "./studyquiz/helpers.js";
+import { stripEmoji, computeUnread, activityText, timeAgo, parseQuizlet, sectionPerQMarks, sectionMarksTotal, roundMarks, fmtMB, stripFences, shuffleMCQOptions, gradeFill } from "./studyquiz/helpers.js";
 import { AvatarInitial, Medallion, NotifBubble, GroupAvatar, StreakFlame, RankPill, Flair, Logo, PBar, Chip, Segmented, Toggle } from "./studyquiz/components.jsx";
 import { Haptics, SoundEngine } from "./studyquiz/audio.js";
 import { authHeader, registerToken, callClaude, readStream, deDash, explainAnswer, followupAnswer, regenerateQuestion, verifyFlaggedQuestion, gateContent, gateMessage } from "./studyquiz/ai.js";
@@ -552,6 +552,7 @@ export default function StudyQuiz() {
   const [examQs,      setExamQs]      = useState([]);
   const [examIdx,     setExamIdx]     = useState(0);
   const [examAns,     setExamAns]     = useState({});
+  const [examDiagramImg, setExamDiagramImg] = useState(null); // data URL of the first uploaded image, for diagram-section markers
   const [examEvals,   setExamEvals]   = useState(null);
   // When a quiz or exam finishes, add the missed questions to the review deck
   // (once per result set, keyed on the object identity).
@@ -1023,9 +1024,18 @@ export default function StudyQuiz() {
     // reliably returns only ~25-30 questions no matter the count asked), so a big
     // exam actually reaches its full number instead of stalling at ~25.
     const examPlan = examMode==="custom"
-      ? examSections.map((s,i)=>({ section:i+1, type:(["mcq","fill","written"].includes(s.type)?s.type:"mcq"), marks:sectionPerQMarks(s), count:Math.min(Math.max(parseInt(s.count)||5,1),100) }))
+      ? examSections.map((s,i)=>({ section:i+1, type:(["mcq","fill","written","essay","diagram"].includes(s.type)?s.type:"mcq"), marks:sectionPerQMarks(s), count:Math.min(Math.max(parseInt(s.count)||5,1),100) }))
       : [{ section:1, type:(examMode==="written"?"written":"mcq"), marks:1, count: totalQ }];
     const examMarksMap = {}; examPlan.forEach((s)=>{ examMarksMap[s.section]=s.marks; });
+
+    // A diagram section marks parts on the learner's own image, so it needs one.
+    const firstImg = examFiles.find(f=>f.type==="image");
+    const hasDiagramSec = examPlan.some(s=>s.type==="diagram");
+    if (hasDiagramSec && !firstImg) { setError(t.diagramNeedsImage || "Diagram sections need an image. Upload a diagram or photo, or change that section's type."); return; }
+    // Keep the first image as a data URL so its parts can be marked during the run.
+    let diagramImgUrl = null;
+    if (hasDiagramSec && firstImg?.raw) { try { diagramImgUrl = await readDataURL(firstImg.raw); } catch { /* markers just won't show */ } }
+    setExamDiagramImg(diagramImgUrl);
 
     setScreen("loading");
     try{
@@ -1057,9 +1067,13 @@ export default function StudyQuiz() {
         const typeDesc = type==="mcq"
           ? `EXACTLY ${n} multiple-choice questions, each with EXACTLY 4 options and "correct" set to the 0-based index of the one right option`
           : type==="fill"
-          ? `EXACTLY ${n} fill-in-the-blank questions; every "question" MUST contain a blank written as ___ and "answer" is the exact missing word or phrase; set options to []`
+          ? `EXACTLY ${n} fill-in-the-blank questions; every "question" MUST contain a blank written as ___ and "answer" is the exact missing word or phrase; also add "accept": an array of up to 5 OTHER responses that should also count as correct (synonyms, abbreviations, singular/plural, alternate spellings, likely genuine misspellings), NOT different look-alike words, use [] if none; set options to []`
+          : type==="essay"
+          ? `EXACTLY ${n} open-ended ESSAY questions, each a substantial prompt that asks for a structured, multi-paragraph argument or explanation; "answer" = a model answer or the key points a strong response must cover; set options to []`
+          : type==="diagram"
+          ? `EXACTLY ${n} multiple-choice questions about the uploaded diagram/image, based ALL on the FIRST image; for each pick ONE distinct part and give its center as "x" and "y" (numbers 0-100, percentage of the image width and height), EXACTLY 4 "options", "correct" (0-based index of the right one) and "answer" (the correct option text); if the image already prints labels on its parts do NOT ask "what is this part" (the label gives it away), ask about the part's function, role, what it connects to, or its step in the process instead; never ask something answerable by reading a printed label`
           : `EXACTLY ${n} open-ended written questions, each with a concise model answer in "answer"; set options to []`;
-        const prompt = `You are creating a real graded exam from the study material above.\nGenerate ${typeDesc}, not ${n-1}, not ${n+1}, EXACTLY ${n}. The "questions" array MUST contain exactly ${n} items; do not stop early, produce all ${n}, then count them before responding.\nSet "section":${section} and "type":"${type}" on EVERY question.\nDIFFICULTY: ${dg.name}. ${dg.guide} Calibrate every question to this ${dg.name} level.\nLANGUAGE: Write the ENTIRE exam in the SAME language as the study material; do NOT translate it into English.${LANGS[lang]?.name?` If the material is too short to tell its language, use ${LANGS[lang].name}.`:""}${learnerBrief?`\n${learnerBrief}`:""}${avoid}\nReturn ONLY raw JSON (no markdown): {"title":"Exam title","questions":[{"section":${section},"type":"${type}","question":"...","options":[${type==="mcq"?'"A","B","C","D"':""}],"correct":0,"answer":"...","explanation":"...","topic":"2-4 word sub-topic"}]${withSummary?`,"summary":"a compact digest of this material for the study library"`:""}}\nSet "topic" to the specific concept each question tests. The "questions" array length MUST equal ${n}.${withSummary?`\nALSO add a top-level "summary" (max 120 words) of the key concepts, in the same language as the material.`:""}`;
+        const prompt = `You are creating a real graded exam from the study material above.\nGenerate ${typeDesc}, not ${n-1}, not ${n+1}, EXACTLY ${n}. The "questions" array MUST contain exactly ${n} items; do not stop early, produce all ${n}, then count them before responding.\nSet "section":${section} and "type":"${type}" on EVERY question.\nDIFFICULTY: ${dg.name}. ${dg.guide} Calibrate every question to this ${dg.name} level.\nLANGUAGE: Write the ENTIRE exam in the SAME language as the study material; do NOT translate it into English.${LANGS[lang]?.name?` If the material is too short to tell its language, use ${LANGS[lang].name}.`:""}${learnerBrief?`\n${learnerBrief}`:""}${avoid}\nReturn ONLY raw JSON (no markdown): {"title":"Exam title","questions":[{"section":${section},"type":"${type}","question":"...","options":[${(type==="mcq"||type==="diagram")?'"A","B","C","D"':""}],"correct":0,"answer":"...","explanation":"...","topic":"2-4 word sub-topic"${type==="diagram"?`,"x":50,"y":50`:""}${type==="fill"?`,"accept":["alternative answer"]`:""}}]${withSummary?`,"summary":"a compact digest of this material for the study library"`:""}}\nSet "topic" to the specific concept each question tests. The "questions" array length MUST equal ${n}.${withSummary?`\nALSO add a top-level "summary" (max 120 words) of the key concepts, in the same language as the material.`:""}`;
         const cmax = Math.min(Math.max(n*280+2500, 4000), 24000);
         const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json", ...(await authHeader())},
           body:JSON.stringify({model:AI_MODEL,max_tokens:cmax,
@@ -1120,6 +1134,10 @@ export default function StudyQuiz() {
         ...q,
         question: deDash(q.question), answer: deDash(q.answer), explanation: deDash(q.explanation),
         topic: deDash(q.topic), options: Array.isArray(q.options) ? q.options.map(deDash) : q.options,
+        // diagram: keep the marker coords (0..100), clamped
+        ...(typeof q.x==="number"&&typeof q.y==="number" ? { x: Math.max(0,Math.min(100,q.x)), y: Math.max(0,Math.min(100,q.y)) } : {}),
+        // fill: keep the accepted-alternative answers (bounded, de-dashed)
+        ...(Array.isArray(q.accept) ? { accept: q.accept.filter(x=>typeof x==="string"&&x.trim()).slice(0,6).map(deDash) } : {}),
         marksPerQ: examMode==="custom" ? (marksMap[q.section]||1) : 1,
       }));
       setExamQs(annotated);setExamIdx(0);setExamAns({});setExamEvals(null);setShowConfetti(false);
@@ -1132,15 +1150,23 @@ export default function StudyQuiz() {
   },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks,studyModel,srs.bank,examCap]);
 
   const evaluateExam=useCallback(async(answers)=>{
-    const hasWritten=examQs.some(q=>q.type==="written");
-    if(!hasWritten){
-      return examQs.map((q,i)=>q.type==="mcq"?{score:answers[i]===q.correct?1:0,feedback:answers[i]===q.correct?t.correct:t.incorrect}:{score:0,feedback:""});
+    // Auto-graded types need no AI: MCQ and diagram by option index, fill by
+    // the strict typo-tolerant matcher. Free-text (written/essay) is AI-graded.
+    const autoScore=(q,i)=>{
+      if(q.type==="mcq"||q.type==="diagram"){const ok=answers[i]===q.correct;return{score:ok?1:0,feedback:ok?t.correct:t.incorrect};}
+      if(q.type==="fill"){const ok=gradeFill(answers[i]||"",q.answer,q.accept);return{score:ok?1:0,feedback:ok?t.correct:t.incorrect};}
+      return null;
+    };
+    const isFreeText=q=>q.type==="written"||q.type==="essay";
+    const hasFreeText=examQs.some(isFreeText);
+    if(!hasFreeText){
+      return examQs.map((q,i)=>autoScore(q,i)||{score:0,feedback:""});
     }
     setScreen("exam_eval");
-    // Number the written answers 1..N in their own sequence (NOT the full
+    // Number the written/essay answers 1..N in their own sequence (NOT the full
     // question index, which counts MCQs too). A dedicated 1-based "n" keeps the
     // model's mapping unambiguous so feedback can't land on the wrong question.
-    const writtenIdxs=examQs.map((q,i)=>q.type==="written"?i:null).filter(x=>x!==null);
+    const writtenIdxs=examQs.map((q,i)=>isFreeText(q)?i:null).filter(x=>x!==null);
     const writtenLines=writtenIdxs.map((qi,k)=>
       "Answer #"+(k+1)+"\nQuestion: "+examQs[qi].question+
       "\nModel answer: "+(examQs[qi].answer||"(none provided)")+
@@ -1164,13 +1190,14 @@ export default function StudyQuiz() {
       const evals=Array.isArray(parsed.evals)?parsed.evals:[];
       const clamp=s=>{const n=Number(s);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):0;};
       return examQs.map((q,i)=>{
-        if(q.type==="mcq") return{score:answers[i]===q.correct?1:0,feedback:answers[i]===q.correct?t.correct:t.incorrect};
-        const rank=writtenIdxs.indexOf(i); // 0-based position among written answers
+        const auto=autoScore(q,i);
+        if(auto) return auto;
+        const rank=writtenIdxs.indexOf(i); // 0-based position among free-text answers
         // Match on the answer's own 1-based number; fall back to positional order.
         const ev=evals.find(e=>Number(e.n)===rank+1) ?? evals[rank];
         return ev?{score:clamp(ev.score),feedback:deDash(ev.feedback||"")}:{score:0,feedback:t.notEvaluated};
       });
-    }catch{return examQs.map((q,i)=>({score:q.type==="mcq"?(answers[i]===q.correct?1:0):0,feedback:""}));}
+    }catch{return examQs.map((q,i)=>autoScore(q,i)||{score:0,feedback:""});}
   },[examQs]);
 
   const submitExam=useCallback(async(answersArg,opts={})=>{
@@ -3732,12 +3759,22 @@ export default function StudyQuiz() {
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:12,padding:"12px 14px"}}>
                       <div>
-                        <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>{t.questionTypeLbl}</div>
-                        <select value={sec.type} onChange={e=>updateSection(sec.id,"type",e.target.value)} style={{width:"100%",borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:13,padding:"7px 8px",fontFamily:"inherit",outline:"none"}}>
-                          <option value="mcq">{t.quizTypes.mcq}</option>
-                          <option value="written">{t.qtWrittenOpen}</option>
-                          <option value="fill">{t.quizTypes.fill}</option>
-                        </select>
+                        <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:6}}>{t.questionTypeLbl}</div>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
+                          {[
+                            {v:"mcq",label:t.quizTypes.mcq,icon:"list"},
+                            {v:"written",label:t.qtWrittenOpen,icon:"chat"},
+                            {v:"fill",label:t.quizTypes.fill,icon:"pencil"},
+                            {v:"essay",label:(t.qtEssay||"Essay"),icon:"notes"},
+                            ...(examFiles.some(f=>f.type==="image")?[{v:"diagram",label:t.quizTypes.diagram,icon:"target"}]:[]),
+                          ].map(o=>{
+                            const on=sec.type===o.v;
+                            return <button key={o.v} type="button" onClick={()=>updateSection(sec.id,"type",o.v)} style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:5,padding:"11px 4px",borderRadius:11,cursor:"pointer",fontFamily:"inherit",border:"1.5px solid "+(on?"#4338ca":"var(--color-border-tertiary)"),background:on?"var(--color-sel-tint)":"var(--color-background-tertiary)",color:on?"var(--color-accent)":"var(--color-text-secondary)",boxShadow:on?"0 2px 10px #4338ca22":"none",transition:"all 0.15s"}}>
+                              <Icon name={o.icon} size={17} stroke={1.8}/>
+                              <span style={{fontSize:10.5,fontWeight:on?700:600,textAlign:"center",lineHeight:1.2}}>{o.label}</span>
+                            </button>;
+                          })}
+                        </div>
                       </div>
                       <div>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -3762,7 +3799,7 @@ export default function StudyQuiz() {
                       </div>
                     </div>
                     <div style={{padding:"6px 14px 10px",fontSize:11,color:"var(--color-text-secondary)"}}>
-                      {(()=>{const cnt=parseInt(sec.count)||0, typeLbl=sec.type==="mcq"?t.typeMcqLower:sec.type==="fill"?t.typeFillLower:t.typeWrittenLower; return (sec.markMode||"perQ")==="total"
+                      {(()=>{const cnt=parseInt(sec.count)||0, typeLbl=sec.type==="mcq"?t.typeMcqLower:sec.type==="fill"?t.typeFillLower:sec.type==="essay"?(t.qtEssay||"essay").toLowerCase():sec.type==="diagram"?t.quizTypes.diagram.toLowerCase():t.typeWrittenLower; return (sec.markMode||"perQ")==="total"
                         ? <>{cnt} {typeLbl} {t.questionsLow} · <strong>{secMarks} {t.marksWord}</strong> ({roundMarks(sectionPerQMarks(sec))} {t.marksEach})</>
                         : <>{cnt} {typeLbl} {t.questionsLow} × {roundMarks(sectionPerQMarks(sec))} {t.marksWord} = <strong>{secMarks} {t.marksWord}</strong></>;})()}
                     </div>
@@ -3870,11 +3907,19 @@ export default function StudyQuiz() {
             </div>
           )}
           <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-            <span style={{background:q.type==="mcq"?"var(--color-sel-tint)":"#fef3c7",color:q.type==="mcq"?"#4338ca":"#92400e",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{q.type==="mcq"?t.quizTypes.mcq:q.type==="fill"?t.quizTypes.fill:t.writtenWord}</span>
-            {examAns[examIdx]!==undefined&&<span style={{background:"var(--color-background-success)",color:"#16a34a",borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:600}}>{t.answeredWord}</span>}
+            <span style={{background:q.type==="mcq"?"var(--color-sel-tint)":"#fef3c7",color:q.type==="mcq"?"#4338ca":"#92400e",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700}}>{({mcq:t.quizTypes.mcq,fill:t.quizTypes.fill,written:t.writtenWord,essay:(t.qtEssay||"Essay"),diagram:t.quizTypes.diagram})[q.type]||t.writtenWord}</span>
+            {examAns[examIdx]!==undefined&&examAns[examIdx]!==""&&<span style={{background:"var(--color-background-success)",color:"#16a34a",borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:600}}>{t.answeredWord}</span>}
           </div>
+          {q.type==="diagram"&&examDiagramImg&&(
+            <div style={{display:"flex",justifyContent:"center",margin:"0 0 16px"}}>
+              <div style={{position:"relative",display:"inline-block",maxWidth:"100%"}}>
+                <img alt="Diagram" src={examDiagramImg} style={{display:"block",maxWidth:"100%",maxHeight:340,borderRadius:10,border:"0.5px solid var(--color-border-tertiary)"}}/>
+                {typeof q.x==="number"&&typeof q.y==="number"&&<span style={{position:"absolute",left:q.x+"%",top:q.y+"%",width:28,height:28,marginLeft:-14,marginTop:-14,borderRadius:"50%",border:"3px solid #ff3b30",boxShadow:"0 0 0 2px #fff, 0 0 10px rgba(0,0,0,0.5)",pointerEvents:"none"}}/>}
+              </div>
+            </div>
+          )}
           <h3 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:19,fontWeight:700,color:"var(--color-text-primary)",lineHeight:1.4,margin:"0 0 20px"}}>{q.question}</h3>
-          {q.type==="mcq"&&(
+          {(q.type==="mcq"||q.type==="diagram")&&(
             <div style={{display:"flex",flexDirection:"column",gap:9}}>
               {q.options.map((opt,i)=>{
                 const isSel=examAns[examIdx]===i;
@@ -3886,14 +3931,13 @@ export default function StudyQuiz() {
             </div>
           )}
           {q.type==="written"&&<textarea value={examAns[examIdx]||""} onChange={e=>setExamAns(prev=>({...prev,[examIdx]:e.target.value}))} placeholder={t.typeAnswer} style={{...Sb.textarea,height:150,marginBottom:0}}/>}
-          {q.type==="fill"&&<FillBlank key={examIdx} q={q} isLast={isLast} t={t} onNext={ok=>{setExamAns(prev=>({...prev,[examIdx]:ok?q.answer:"__wrong__"}));if(isLast)submitExam();else setExamIdx(i=>i+1);}}/>}
-          {q.type!=="fill"&&(
-            <div style={{display:"flex",gap:10,marginTop:20}}>
-              {examIdx>0&&<button onClick={prevExam} style={{...Sb.btnOutline,padding:"13px 20px",fontSize:13}}>← {t.prev}</button>}
-              <button onClick={nextExam} style={{...Sb.btnPrimary,flex:1,margin:0,background:isLast?"#16a34a":"#4338ca",fontSize:14}}>{isLast?t.submitExam:t.next}</button>
-            </div>
-          )}
-          {isLast&&q.type!=="fill"&&<p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>{t.reviewBeforeSubmit}</p>}
+          {q.type==="essay"&&<textarea value={examAns[examIdx]||""} onChange={e=>setExamAns(prev=>({...prev,[examIdx]:e.target.value}))} placeholder={t.typeAnswer} style={{...Sb.textarea,height:260,marginBottom:0}}/>}
+          {q.type==="fill"&&<input value={examAns[examIdx]||""} onChange={e=>setExamAns(prev=>({...prev,[examIdx]:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter"){if(isLast)nextExam();else setExamIdx(i=>i+1);}}} placeholder={t.typeIn} style={{width:"100%",borderRadius:12,border:"1.5px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:16,padding:"13px 15px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>}
+          <div style={{display:"flex",gap:10,marginTop:20}}>
+            {examIdx>0&&<button onClick={prevExam} style={{...Sb.btnOutline,padding:"13px 20px",fontSize:13}}>← {t.prev}</button>}
+            <button onClick={nextExam} style={{...Sb.btnPrimary,flex:1,margin:0,background:isLast?"#16a34a":"#4338ca",fontSize:14}}>{isLast?t.submitExam:t.next}</button>
+          </div>
+          {isLast&&<p style={{fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",marginTop:8}}>{t.reviewBeforeSubmit}</p>}
         </div>
         <ExitModal show={showExitConfirm}
           title={t.examExitTitle}
@@ -4038,16 +4082,16 @@ export default function StudyQuiz() {
             return (
               <div key={i} style={{background:"var(--color-background-primary)",borderRadius:10,padding:"13px 13px 13px 10px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)",borderLeft:"3px solid "+col}} className="fade-in">
                 <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}>
-                  <span style={{fontSize:9,fontWeight:700,background:q.type==="mcq"?"var(--color-sel-tint)":"#fef3c7",color:q.type==="mcq"?"#4338ca":"#92400e",borderRadius:8,padding:"2px 6px",flexShrink:0,marginTop:2}}>{q.type==="mcq"?t.badgeMcq:q.type==="fill"?t.badgeFill:t.badgeWritten}</span>
+                  <span style={{fontSize:9,fontWeight:700,background:q.type==="mcq"?"var(--color-sel-tint)":"#fef3c7",color:q.type==="mcq"?"#4338ca":"#92400e",borderRadius:8,padding:"2px 6px",flexShrink:0,marginTop:2}}>{({mcq:t.badgeMcq,fill:t.badgeFill,written:t.badgeWritten,essay:(t.qtEssay||"Essay"),diagram:t.quizTypes.diagram})[q.type]||t.badgeWritten}</span>
                   <span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",lineHeight:1.4,flex:1}}>{q.question}</span>
                 </div>
-                {q.type==="mcq"&&examAns[i]!==undefined&&(
+                {(q.type==="mcq"||q.type==="diagram")&&examAns[i]!==undefined&&(
                   <div style={{paddingLeft:8,marginBottom:4}}>
                     {examAns[i]!==q.correct&&<div style={{fontSize:12,color:"#dc2626",marginBottom:2}}>{t.yourAns} {q.options[examAns[i]]}</div>}
                     <div style={{fontSize:12,color:"#16a34a",fontWeight:500}}>{t.correctAns} {q.options[q.correct]}</div>
                   </div>
                 )}
-                {q.type!=="mcq"&&(
+                {q.type!=="mcq"&&q.type!=="diagram"&&(
                   <div style={{paddingLeft:8,marginBottom:4}}>
                     <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:3,fontStyle:"italic"}}>{t.yourAns} "{examAns[i]||t.noAnswerLbl}"</div>
                     <div style={{fontSize:12,color:"#16a34a",fontWeight:500}}>{t.modelLabel} {q.answer}</div>
@@ -4055,7 +4099,7 @@ export default function StudyQuiz() {
                 )}
                 {ev?.feedback&&<div style={{background:bg,border:"0.5px solid "+bdr,borderRadius:8,padding:"7px 10px",fontSize:12,color:col,marginTop:6,lineHeight:1.5}}>{ev.feedback}</div>}
                 {q.explanation&&<div style={{fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5,paddingTop:6,borderTop:"0.5px solid var(--color-border-tertiary)",marginTop:6}}>{q.explanation}</div>}
-                {sc<1&&<div style={{marginLeft:-8}}><ExplainBox t={t} ctx={{question:q.question,correct:q.type==="mcq"?(q.options?.[q.correct]??""):(q.answer||""),picked:q.type==="mcq"?(q.options?.[examAns[i]]??""):(examAns[i]||""),subject:""}}/></div>}
+                {sc<1&&<div style={{marginLeft:-8}}><ExplainBox t={t} ctx={{question:q.question,correct:(q.type==="mcq"||q.type==="diagram")?(q.options?.[q.correct]??""):(q.answer||""),picked:(q.type==="mcq"||q.type==="diagram")?(q.options?.[examAns[i]]??""):(examAns[i]||""),subject:""}}/></div>}
               </div>
             );
           })}

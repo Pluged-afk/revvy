@@ -414,7 +414,7 @@ const T_EN = {
   examType:"EXAM TYPE", questionsLow:"questions", freeDailyExam:"Free daily exam", examFreeQCount:"20 questions",
   upgradeExamNote:"Upgrade to Pro for up to 100 questions, custom sections and unlimited exams.",
   examSectionsLbl:"EXAM SECTIONS", addSectionBtn:"+ Add Section", sectionNum:"Section {n}", marksWord:"marks",
-  questionTypeLbl:"QUESTION TYPE", qtWrittenOpen:"Written (Open)", marksPerQLbl:"MARKS/Q", markingLbl:"MARKING", markPerQ:"Per question", markSection:"Section total", marksEach:"each", questionsUpperLbl:"QUESTIONS",
+  questionTypeLbl:"QUESTION TYPE", qtWrittenOpen:"Written (Open)", qtEssay:"Essay", marksPerQLbl:"MARKS/Q", markingLbl:"MARKING", markPerQ:"Per question", markSection:"Section total", marksEach:"each", questionsUpperLbl:"QUESTIONS",
   typeMcqLower:"multiple choice", typeFillLower:"fill-in-blank", typeWrittenLower:"written",
   totalExamLbl:"Total exam", timerLbl:"TIMER", enableTimer:"Enable Timer", timerDesc:"Add a countdown to the whole exam",
   totalExamTime:"Total exam time (minutes):",
