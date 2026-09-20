@@ -9,6 +9,7 @@ async function ensureUsernameCol() {
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username TEXT`;
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower ON profiles (lower(username)) WHERE username IS NOT NULL`;
     await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS language TEXT`;
+    await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT`;
     unameReady = true;
   } catch (e) { console.error("[profile] username col:", e.message); }
 }
@@ -47,12 +48,12 @@ async function getProfile(req, res) {
   try {
     await ensureUsernameCol();
     const rows = await sql`
-      SELECT id, email, username, language, is_pro, stripe_customer_id, subscription_id,
+      SELECT id, email, username, language, avatar_url, is_pro, stripe_customer_id, subscription_id,
              subscription_status, subscription_plan, current_period_end, cancel_at_period_end
       FROM profiles WHERE clerk_user_id = ${userId} OR id = ${userId} LIMIT 1`;
     const p = rows[0];
     if (!p) return res.status(200).json({ is_pro: false });
-    return res.status(200).json({ ...p, is_pro: p.is_pro === true });
+    return res.status(200).json({ ...p, avatar: p.avatar_url || null, is_pro: p.is_pro === true });
   } catch (e) {
     console.error("[profile:get]", e.message);
     return res.status(500).json({ error: "Could not load your profile.", is_pro: false });
@@ -62,21 +63,54 @@ async function getProfile(req, res) {
 // POST action=create: ensure a profile row exists for the signed-in Clerk user.
 // Idempotent. The user id comes from the verified session token (never the
 // body), so a caller can only ever create or touch their own row.
+// A safe avatar value: a preset avatar id (a short slug the client maps to a
+// built-in icon), or an https image URL (kept for forward-compatibility). Anything
+// else becomes null (falls back to the generated letter avatar). Never rendered
+// as HTML, so a slug is inert.
+function cleanAvatar(v) {
+  if (typeof v !== "string") return null;
+  if (/^https:\/\//i.test(v)) return v.slice(0, 500);
+  if (/^[a-z0-9_-]{1,32}$/i.test(v)) return v.toLowerCase();
+  return null;
+}
 async function createProfile(req, res, body) {
   const userId = await userIdFromToken(req);
   if (!userId) return res.status(401).json({ error: "Invalid session." });
   const { email } = body;
+  const avatar = cleanAvatar(body.avatar);
   try {
+    await ensureUsernameCol();
+    // COALESCE keeps the user's chosen avatar: create runs on every sign-in and
+    // carries no avatar, so it must never clear one. The avatar is set/cleared
+    // only via action=setAvatar.
     await sql`
-      INSERT INTO profiles (id, clerk_user_id, email)
-      VALUES (${userId}, ${userId}, ${email || null})
+      INSERT INTO profiles (id, clerk_user_id, email, avatar_url)
+      VALUES (${userId}, ${userId}, ${email || null}, ${avatar})
       ON CONFLICT (id) DO UPDATE
         SET email = COALESCE(EXCLUDED.email, profiles.email),
-            clerk_user_id = COALESCE(profiles.clerk_user_id, EXCLUDED.clerk_user_id)`;
+            clerk_user_id = COALESCE(profiles.clerk_user_id, EXCLUDED.clerk_user_id),
+            avatar_url = COALESCE(EXCLUDED.avatar_url, profiles.avatar_url)`;
     return res.status(200).json({ ok: true });
   } catch (e) {
     console.error("[profile:create]", e.message);
     return res.status(500).json({ error: "Could not create your profile." });
+  }
+}
+
+// POST action=setAvatar: save the public URL of the photo the user just uploaded
+// to Clerk, so friends and leaderboards can show it. Token-verified.
+async function setAvatar(req, res, body) {
+  const userId = await userIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: "Invalid session." });
+  const avatar = cleanAvatar(body.avatar);
+  await ensureUsernameCol();
+  try {
+    await sql`INSERT INTO profiles (id, clerk_user_id, avatar_url) VALUES (${userId}, ${userId}, ${avatar})
+              ON CONFLICT (id) DO UPDATE SET avatar_url = EXCLUDED.avatar_url`;
+    return res.status(200).json({ ok: true, avatar });
+  } catch (e) {
+    console.error("[profile:setAvatar]", e.message);
+    return res.status(500).json({ error: "Could not save your photo." });
   }
 }
 
@@ -207,6 +241,7 @@ export default async function handler(req, res) {
     if (body.action === "delete") return deleteAccount(req, res);
     if (body.action === "setUsername") return setUsername(req, res, body);
     if (body.action === "setLanguage") return setLanguage(req, res, body);
+    if (body.action === "setAvatar") return setAvatar(req, res, body);
     return res.status(400).json({ error: "Unknown action." });
   }
   res.setHeader("Allow", "GET, POST");

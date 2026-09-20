@@ -986,6 +986,19 @@ async function usernamesFor(ids) {
   for (const r of rows) if (r.uid) out[r.uid] = r.username || null;
   return out;
 }
+// Map clerk ids -> their uploaded avatar URL (public profile photo), for lists.
+// Fail-soft: the avatar_url column is provisioned by the profile endpoint, so a
+// cold DB that hasn't seen it yet just yields no avatars (letter fallback).
+async function avatarsFor(ids) {
+  if (!ids.length) return {};
+  try {
+    const rows = await sql`SELECT COALESCE(clerk_user_id, id) AS uid, avatar_url FROM profiles
+                           WHERE (clerk_user_id = ANY(${ids}::text[]) OR id = ANY(${ids}::text[])) AND avatar_url IS NOT NULL`;
+    const out = {};
+    for (const r of rows) if (r.uid) out[r.uid] = r.avatar_url;
+    return out;
+  } catch { return {}; }
+}
 // Public flair helpers: a rank of null or < 0 means the user hid their status,
 // so both rank and badge are suppressed. rank 0 (Novice) is a real, shown tier.
 function publicRank(r) { const n = r && r.rank; return (n == null || Number(n) < 0) ? null : Number(n); }
@@ -1046,6 +1059,42 @@ async function globalBoard(req, res, me) {
     locked: false, players, you,
     top: top.map((r) => ({ name: r.username || "player", xp: Number(r.xp), tier: publicRank(r), badge: publicBadge(r), you: r.uid === me })),
   });
+}
+
+// Type-ahead search for the add-a-friend picker: match public usernames by
+// prefix first, then substring, so a partial or slightly-off name still finds
+// the right person. Usernames are already public (leaderboards), so this exposes
+// nothing new; min length + LIMIT keep it from dumping the table. Returns each
+// match's flair + whether you're already friends/pending, so the picker can show
+// which one is yours.
+async function userSearch(req, res, body, me) {
+  const q = clean(body.q, 30).toLowerCase();
+  if (q.length < 2) return res.status(200).json({ results: [] });
+  const esc = q.replace(/[%_\\]/g, "\\$&"); // neutralise LIKE wildcards
+  let rows;
+  try {
+    rows = await sql`
+      SELECT COALESCE(clerk_user_id, id) AS uid, username FROM profiles
+      WHERE username IS NOT NULL AND COALESCE(clerk_user_id, id) <> ${me}
+        AND lower(username) LIKE ${"%" + esc + "%"}
+      ORDER BY (lower(username) LIKE ${esc + "%"}) DESC, length(username) ASC, lower(username) ASC
+      LIMIT 8`;
+  } catch (e) { console.error("[study] userSearch:", e.message); return res.status(200).json({ results: [] }); }
+  const ids = rows.map((r) => r.uid);
+  if (!ids.length) return res.status(200).json({ results: [] });
+  const [flair, avatars, statusRows] = await Promise.all([
+    flairFor(ids),
+    avatarsFor(ids),
+    sql`SELECT requester, addressee, status FROM friendships
+        WHERE (requester=${me} AND addressee = ANY(${ids}::text[])) OR (addressee=${me} AND requester = ANY(${ids}::text[]))`,
+  ]);
+  const statusMap = {};
+  for (const f of statusRows) { const other = f.requester === me ? f.addressee : f.requester; statusMap[other] = f.status === "accepted" ? "friends" : "pending"; }
+  return res.status(200).json({ results: rows.map((r) => ({
+    userId: r.uid, username: r.username, avatar: avatars[r.uid] || null,
+    rank: flair[r.uid]?.rank ?? null, badge: flair[r.uid]?.badge || null,
+    status: statusMap[r.uid] || null,
+  })) });
 }
 
 // Cap on OUTSTANDING outgoing friend requests, so an account can't spray
@@ -1111,9 +1160,9 @@ async function socialOverview(req, res, me) {
     else outgoing.push({ id: Number(r.id), userId: r.addressee, username: nameOf(r.addressee) });
   }
   friends.sort((a, b) => a.username.localeCompare(b.username));
-  // Attach each friend's public rank tier + XP + equipped badge for the list.
-  const fflair = await flairFor(friends.map((f) => f.userId));
-  friends.forEach((f) => { const x = fflair[f.userId] || {}; f.rank = x.rank ?? null; f.badge = x.badge || null; f.xp = x.xp ?? null; });
+  // Attach each friend's public rank tier + XP + equipped badge + avatar for the list.
+  const [fflair, favatars] = await Promise.all([flairFor(friends.map((f) => f.userId)), avatarsFor(friends.map((f) => f.userId))]);
+  friends.forEach((f) => { const x = fflair[f.userId] || {}; f.rank = x.rank ?? null; f.badge = x.badge || null; f.xp = x.xp ?? null; f.avatar = favatars[f.userId] || null; });
   const groups = grpRows.map((g) => ({ id: Number(g.id), name: g.name, members: Number(g.members), isOwner: g.owner === me }));
   return res.status(200).json({ friends, incoming, outgoing, groups });
 }
@@ -1658,6 +1707,7 @@ export default async function handler(req, res) {
       if (body?.action === "dmSend") return dmSend(req, res, body, userId);
       if (body?.action === "dmThread") return dmThread(req, res, body, userId);
       if (body?.action === "dmChallengeSubmit") return dmChallengeSubmit(req, res, body, userId);
+      if (body?.action === "userSearch") return userSearch(req, res, body, userId);
       if (body?.action === "friendAdd") return friendAdd(req, res, body, userId);
       if (body?.action === "friendRespond") return friendRespond(req, res, body, userId);
       if (body?.action === "friendRemove") return friendRemove(req, res, body, userId);
