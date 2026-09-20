@@ -220,6 +220,25 @@ const PATHS = {
   x: <path d="M6 6l12 12M18 6L6 18" />,
   pause: <path d="M9 5v14M15 5v14" />,
   play: <path d="M8 5.5v13l11-6.5z" />,
+  // Power-ups: freeze (snowflake), hint (lightbulb), skip (skip-forward).
+  snowflake: (
+    <>
+      <path d="M12 2v20M4.2 7l15.6 10M19.8 7L4.2 17" />
+      <path d="M12 5.5l2-2M12 5.5l-2-2M12 18.5l2 2M12 18.5l-2 2M6 9l-2.8-.4M6 9l.4-2.8M18 15l2.8.4M18 15l-.4 2.8M18 9l2.8-.4M18 9l-.4-2.8M6 15l-2.8.4M6 15l.4 2.8" />
+    </>
+  ),
+  bulb: (
+    <>
+      <path d="M9 18h6M10 21h4" />
+      <path d="M12 3a6 6 0 0 0-3.8 10.6c.6.5.8 1 .8 1.9v.5h6v-.5c0-.9.2-1.4.8-1.9A6 6 0 0 0 12 3z" />
+    </>
+  ),
+  skip_next: (
+    <>
+      <path d="M6 5l9 7-9 7z" />
+      <path d="M18 5v14" />
+    </>
+  ),
   trophy: (
     <>
       <path d="M8 4h8v5a4 4 0 0 1-8 0V4z" />

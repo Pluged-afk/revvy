@@ -3,7 +3,8 @@
 // in via props; app state via the shared context + lib hooks.
 import { useState, useEffect } from "react";
 import Icon from "../components/Icon.jsx";
-import { Toggle, StreakFlame } from "./components.jsx";
+import { Toggle, StreakFlame, AvatarInitial } from "./components.jsx";
+import { PRESET_AVATARS } from "../lib/avatars.js";
 import { ProModal, PacksModal, ContactModal } from "./modals.jsx";
 import { socialApi } from "./api.js";
 import { enablePush, disablePush, pushState, pushSupported } from "../lib/push.js";
@@ -148,7 +149,9 @@ function KeyBindings({ bindings, onChange, t }) {
 
 export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, onOpenBadges = () => {}, onOpenStreak = null, onOpenAccuracy = null, onOpenReview = null, t }) {
   const s = t.set || {};
-  const { user, username, saveUsername, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
+  const { user, username, saveUsername, avatar, setAvatarPreset, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
+  // Settings split into Account (avatar / name / plan / danger) and Preferences.
+  const [acctTab, setAcctTab] = useState("account");
   // Public display name editor (the account name shown everywhere).
   const [nameInput, setNameInput] = useState(username || "");
   const [nameBusy, setNameBusy] = useState(false);
@@ -257,10 +260,9 @@ export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onD
           padding:"16px 18px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)",flexShrink:0}}>
           {signedIn && user ? (
             <div style={{display:"flex",alignItems:"center",gap:11,minWidth:0}}>
-              <div style={{position:"relative",width:40,height:40,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#4338ca,#6366f1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,flexShrink:0,...(isPro?{boxShadow:"0 0 0 2px #fbbf24, 0 0 0 4px rgba(251,191,36,0.35)"}:{})}}>
-                {((username||user.email||"?").charAt(0)).toUpperCase()}
-                {user.image && <img src={user.image} alt="" onError={e=>e.currentTarget.remove()} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>}
-              </div>
+              <span style={{borderRadius:"50%",flexShrink:0,display:"inline-flex",...(isPro?{boxShadow:"0 0 0 2px #fbbf24, 0 0 0 4px rgba(251,191,36,0.35)"}:{})}}>
+                <AvatarInitial name={username||user.email} avatar={avatar} size={40}/>
+              </span>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{username||user.email||"Your account"}</div>
                 <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,padding:"2px 8px",borderRadius:999,color:isPro?"#422006":"var(--color-text-secondary)",background:isPro?"linear-gradient(135deg,#fde68a,#f59e0b)":"var(--color-background-tertiary)",border:isPro?"none":"0.5px solid var(--color-border-secondary)",display:"inline-block",marginTop:3}}>{isPro?"✦ PRO":t.freePlanBadge}</span>
@@ -294,9 +296,34 @@ export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onD
             {acctSrs.dueCount > 0 && <div style={{fontSize:11.5,color:"var(--color-accent)",fontWeight:600,marginTop:9,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><Icon name="repeat" size={13}/>{acctSrs.dueCount} card{acctSrs.dueCount>1?"s":""} due for review today</div>}
           </div>
 
-          {signedIn && user && (<>
+          {/* Account | Preferences tabs (signed-in only; signed-out sees one list). */}
+          {signedIn && user && (
+            <div style={{padding:"8px 18px 2px",display:"flex",gap:8}}>
+              {[["account",t.setTabAccount||"Account"],["prefs",t.setTabPrefs||"Preferences"]].map(([k,label])=>(
+                <button key={k} type="button" onClick={()=>setAcctTab(k)}
+                  style={{flex:1,padding:"9px 8px",borderRadius:10,border:"1px solid "+(acctTab===k?"var(--color-accent)":"var(--color-border-secondary)"),background:acctTab===k?"var(--color-sel-tint)":"transparent",color:acctTab===k?"var(--color-accent)":"var(--color-text-secondary)",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{label}</button>
+              ))}
+            </div>
+          )}
+
+          {signedIn && user && acctTab==="account" && (<>
             <SectionLabel label={s.secAccount||"ACCOUNT"}/>
             <div style={{padding:"4px 18px 8px"}}>
+              {/* Avatar picker: choose one of the built-in avatars (no uploads). */}
+              <div style={{fontSize:13,fontWeight:600,color:"var(--color-text-primary)",marginBottom:8}}>{t.pfpTitle||"Avatar"}</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(6, 1fr)",gap:8,marginBottom:16}}>
+                {/* Letter avatar (the default) */}
+                <button type="button" onClick={()=>setAvatarPreset?.(null)} title={t.pfpLetter||"Letter"} aria-label={t.pfpLetter||"Letter"}
+                  style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:3,borderRadius:"50%",border:"2px solid "+(!avatar?"var(--color-accent)":"transparent"),background:"none",cursor:"pointer"}}>
+                  <AvatarInitial name={username||user.email} size={38}/>
+                </button>
+                {PRESET_AVATARS.map(a=>(
+                  <button key={a.id} type="button" onClick={()=>setAvatarPreset?.(a.id)} title={a.id} aria-label={a.id}
+                    style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:3,borderRadius:"50%",border:"2px solid "+(avatar===a.id?"var(--color-accent)":"transparent"),background:"none",cursor:"pointer"}}>
+                    <AvatarInitial name="" avatar={a.id} size={38}/>
+                  </button>
+                ))}
+              </div>
               {/* Display name (the public account name shown everywhere) */}
               <div style={{fontSize:13,fontWeight:600,color:"var(--color-text-primary)",marginBottom:6}}>{t.displayNameLabel||"Display name"}</div>
               <div style={{display:"flex",gap:8}}>
@@ -407,6 +434,7 @@ export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onD
             </div>
           </>)}
 
+          {(acctTab==="prefs" || !signedIn) && (<>
           <SectionLabel label={s.secAppearance}/>
           <SettingRow label={s.theme} desc={draft.theme==="light"?s.themeLight:draft.theme==="dark"?s.themeDark:s.themeFollows}>
             <Seg options={[["system",s.segAuto],["light",<Icon name="sun" size={15}/>],["dark",<Icon name="moon" size={15}/>]]} value={draft.theme} onChange={v=>update("theme",v)}/>
@@ -514,8 +542,9 @@ export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onD
               fontSize:13.5,fontWeight:600,color:"var(--color-text-primary)",cursor:"pointer",fontFamily:"inherit"}}>
             <span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="chat" size={16}/>{s.reportBug}</span><span style={{color:"var(--color-text-tertiary)",fontSize:18}}>›</span>
           </button>
+          </>)}
 
-          {signedIn ? (<>
+          {signedIn ? (acctTab==="account" && (<>
           {/* Danger Zone */}
           <div style={{margin:"14px 18px 22px",padding:"16px",borderRadius:12,
             border:"1.5px solid #ef4444",background:"rgba(239,68,68,0.07)"}}>
@@ -529,7 +558,7 @@ export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onD
               {s.deleteAccount}
             </button>
           </div>
-          </>) : (
+          </>)) : (
           <div style={{padding:"18px"}}>
             <div style={{padding:"16px",borderRadius:12,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-secondary)",textAlign:"center"}}>
               <div style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.6,marginBottom:12}}>{t.loginPrompt}</div>

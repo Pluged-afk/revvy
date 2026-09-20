@@ -30,7 +30,7 @@ import { ExitModal, PauseOverlay, TimeUpModal, ResumeModal, Confetti, RankPromot
 import { Seg, SettingsPanel } from "./studyquiz/settings.jsx";
 import { Onboarding } from "./studyquiz/onboarding.jsx";
 import { MOCK_EXAMS, getMock, mockTotalMinutes, mockTotalQuestions, scoreMock } from "./lib/mockExams.js";
-import { BADGES, BADGE_BY_ID, evaluateBadges, rankOf, rankFor, studyRankXP, streakTier, STREAK_TIERS, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
+import { BADGES, BADGE_BY_ID, evaluateBadges, rankFor, streakTier, STREAK_TIERS, RANKS, diffXPFor, classifyDomain } from "./lib/badges.js";
 import { enableNotifications, notify, notifyOncePerDay, ensureSW } from "./lib/notify.js";
 import ArenaGame from "./components/ArenaGame.jsx";
 import { filterArenaQuestions } from "./lib/arena.js";
@@ -233,7 +233,7 @@ export default function StudyQuiz() {
   const [screen,       setScreen]       = useState("home");
   const { t, lang, setLang } = useLang(); // language control now lives inside the account panel
   const dev = useDev();
-  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack, consumeMock, username, saveUsername, saveLanguage, loading: authLoading } = useAuth();
+  const { isPro, signOut, deleteAccount, reauthenticate, user, startCheckout, openPortal, refreshProfile, getToken, usage, refreshUsage, consumeQuestions, watchAd: watchAdQuestions, buyPack, consumeMock, username, saveUsername, saveLanguage, avatar, loading: authLoading } = useAuth();
   // Expose Clerk's getToken to the module-level AI-proxy / upload helpers so
   // every request to /api/anthropic and /api/upload-file carries a bearer token.
   useEffect(() => { registerToken(getToken); return () => { registerToken(null); }; }, [getToken]);
@@ -2033,6 +2033,8 @@ export default function StudyQuiz() {
   const [socialErr, setSocialErr] = useState("");
   const [friendInput, setFriendInput] = useState("");
   const [friendMsg, setFriendMsg] = useState("");
+  const [friendResults, setFriendResults] = useState([]);   // type-ahead username matches
+  const [friendSearching, setFriendSearching] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [activeGroup, setActiveGroup] = useState(null); // loaded group detail
@@ -2085,6 +2087,34 @@ export default function StudyQuiz() {
   }, [friendInput, socialBusy, loadSocial, t]);
   const doRespondFriend = useCallback(async (id, accept) => { await socialApi("friendRespond", { id, accept }); loadSocial(); }, [loadSocial]);
   const doRemoveFriend = useCallback(async (userId) => { await socialApi("friendRemove", { userId }); loadSocial(); }, [loadSocial]);
+  // Send a request straight from a search result (a slightly-off name still finds
+  // the right person; you pick them from the list).
+  const doAddFriendByName = useCallback(async (username) => {
+    if (socialBusy) return;
+    setSocialBusy(true); setFriendMsg(""); setSocialErr("");
+    const r = await socialApi("friendAdd", { username });
+    setSocialBusy(false);
+    if (r.error) { setSocialErr(r.error); return; }
+    setFriendInput(""); setFriendResults([]);
+    setFriendMsg(r.status === "accepted" ? t.friendAdded || "You're now friends!" : t.friendRequested || "Request sent.");
+    loadSocial();
+  }, [socialBusy, loadSocial, t]);
+  // Type-ahead friend search (debounced): show close username matches as you type.
+  // All state updates run inside the timer callback (never synchronously in the
+  // effect body) so a keystroke doesn't cascade renders.
+  useEffect(() => {
+    const q = friendInput.trim();
+    let cancelled = false;
+    const id = setTimeout(async () => {
+      if (q.length < 2) { setFriendResults([]); setFriendSearching(false); return; }
+      setFriendSearching(true);
+      const r = await socialApi("userSearch", { q });
+      if (cancelled) return;
+      setFriendResults(Array.isArray(r?.results) ? r.results : []);
+      setFriendSearching(false);
+    }, q.length < 2 ? 0 : 250);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [friendInput]);
   const doCreateGroup = useCallback(async () => {
     const name = groupNameInput.trim(); if (!name || socialBusy) return;
     setSocialBusy(true); setSocialErr("");
@@ -2181,9 +2211,11 @@ export default function StudyQuiz() {
     const txt = dmInput.trim(); if (!txt) return;
     setDmInput(""); sendDM({ kind: "text", body: txt });
   }, [dmInput, sendDM]);
-  // Send a snapshot of my rank / streak / accuracy. (myRankInfo is declared
-  // here, above the DM handlers, so this callback's deps don't hit its TDZ.)
-  const myRankInfo = useMemo(() => rankOf({ stats: srs.stats }), [srs.stats]);
+  // Your rank IS your best single Arena run (score in one go), not lifetime
+  // accumulation, so climbing a tier means beating your record, not grinding.
+  // (myRankInfo is declared here, above the DM handlers, so this callback's deps
+  // don't hit its TDZ.)
+  const myRankInfo = useMemo(() => rankFor(Math.max(0, Math.round(Number(srs.stats?.arenaBest) || 0))), [srs.stats]);
   const shareScoreToDM = useCallback(() => {
     sendDM({ kind: "score", body: "", data: { rank: myRankInfo.index, xp: myRankInfo.xp, streak: stats.streak || 0, accuracy: stats.accuracy ?? null } });
   }, [sendDM, myRankInfo, stats]);
@@ -2492,10 +2524,9 @@ export default function StudyQuiz() {
     // Fire the one-time celebration here (only when a game is DONE) and mark the
     // tier celebrated so the reactive rank-up effect below never double-fires.
     const newBest = Math.max(prevBest, Math.round(Number((r && r.best) ?? finalScore) || 0));
-    // Rank now combines arena + study XP, so compare on the SAME combined scale
-    // (study part held constant across this run) to detect a genuine promotion.
-    const studyBase = studyRankXP(srs.stats);
-    const fromIdx = rankFor(prevBest + studyBase).index, toIdx = rankFor(newBest + studyBase).index;
+    // Rank is your best single run, so a promotion is simply this run beating your
+    // record into a higher tier.
+    const fromIdx = rankFor(prevBest).index, toIdx = rankFor(newBest).index;
     if (toIdx > fromIdx) {
       _celebratedRankIdx = toIdx; prevRankRef.current = toIdx;
       SoundEngine.rankUp(); fireBurst();
@@ -2917,9 +2948,8 @@ export default function StudyQuiz() {
                 <>
                 <button onClick={()=>openSettings()} title={t.accountLbl} aria-label={t.accountLbl}
                   style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
-                  <span style={{position:"relative",width:30,height:30,borderRadius:"50%",overflow:"hidden",flexShrink:0,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",...(isPro?{boxShadow:"0 0 0 2px #fbbf24, 0 0 0 4px rgba(251,191,36,0.35)"}:{})}}>
-                    {(username||user.email||"?").charAt(0).toUpperCase()}
-                    {user.image && <img src={user.image} alt="" onError={(e)=>e.currentTarget.remove()} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>}
+                  <span style={{borderRadius:"50%",flexShrink:0,display:"inline-flex",...(isPro?{boxShadow:"0 0 0 2px #fbbf24, 0 0 0 4px rgba(251,191,36,0.35)"}:{})}}>
+                    <AvatarInitial name={username||user.email} avatar={avatar} size={30}/>
                   </span>
                   <span style={{fontSize:14,fontWeight:600,color:"#fff",maxWidth:104,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{username||user.email?.split("@")[0]||t.accountLbl}</span>
                 </button>
@@ -4471,6 +4501,26 @@ export default function StudyQuiz() {
               style={{flex:1,minWidth:0,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
             <button onClick={doAddFriend} disabled={socialBusy||!friendInput.trim()} style={{...Sb.btnPrimary,padding:"0 16px",fontSize:13,opacity:(socialBusy||!friendInput.trim())?0.45:1}}>{t.addWord||"Add"}</button>
           </div>
+          {/* Type-ahead matches: pick the right person even if the name isn't exact. */}
+          {friendResults.length>0 && (
+            <div style={{marginTop:8,border:"1px solid var(--color-border-secondary)",borderRadius:10,overflow:"hidden",background:"var(--color-background-primary)"}}>
+              {friendResults.map((u,i)=>(
+                <div key={u.userId} onClick={()=>{ if(u.status!=="friends"&&u.status!=="pending") doAddFriendByName(u.username); }}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"9px 11px",borderBottom:i<friendResults.length-1?"0.5px solid var(--color-border-tertiary)":"none",cursor:(u.status==="friends"||u.status==="pending")?"default":"pointer"}}>
+                  <AvatarInitial name={u.username} avatar={u.avatar} size={30}/>
+                  <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.username}</span>
+                    <Flair rank={u.rank} badge={u.badge} t={t} small/>
+                  </div>
+                  {u.status==="friends" ? <span style={{fontSize:11.5,color:"var(--color-text-tertiary)",fontWeight:600,flexShrink:0}}>{t.friendAlready||"Friends"}</span>
+                    : u.status==="pending" ? <span style={{fontSize:11.5,color:"var(--color-text-tertiary)",fontWeight:600,flexShrink:0}}>{t.friendPendingWord||"Pending"}</span>
+                    : <span style={{fontSize:12,fontWeight:700,color:"var(--color-accent)",flexShrink:0}}>+ {t.addWord||"Add"}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {friendSearching && friendResults.length===0 && friendInput.trim().length>=2 && <div style={{fontSize:11.5,color:"var(--color-text-tertiary)",marginTop:6}}>{t.friendSearching||"Searching..."}</div>}
+          {!friendSearching && friendResults.length===0 && friendInput.trim().length>=2 && !friendMsg && !socialErr && <div style={{fontSize:11.5,color:"var(--color-text-tertiary)",marginTop:6}}>{t.friendNoMatch||"No one found by that name."}</div>}
           {friendMsg && <div style={{fontSize:11.5,color:"var(--color-text-success)",marginTop:6}}>{friendMsg}</div>}
         </div>
         {/* Incoming requests */}
@@ -4491,7 +4541,7 @@ export default function StudyQuiz() {
         <p style={Sb.secLabel}>{(t.friendsWord||"Friends")}{social?.friends?.length?` (${social.friends.length})`:""}</p>
         {social?.friends?.length ? social.friends.map(f=>(
           <div key={f.userId} onClick={()=>openDM(f)} style={{display:"flex",alignItems:"center",gap:11,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}>
-            <AvatarInitial name={f.username} size={34}/>
+            <AvatarInitial name={f.username} avatar={f.avatar} size={34}/>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
                 <span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.username}</span>
@@ -4896,35 +4946,30 @@ export default function StudyQuiz() {
         <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.badgesTitle||"Badges & rank"}</span><span/>
       </div>
       <div className="rv-center-narrow" style={{padding:"18px 16px 44px"}}>
-        {/* Rank header: your overall rank (Arena + study), with your Arena-only
-            standing folded in below as a sub-line (Unranked until you play), so
-            there is only ONE rank card, never two competing ones. */}
+        {/* Your Arena rank = your best SINGLE Arena run (score in one go), not
+            lifetime totals. Click to open the full ladder. */}
         {(()=>{ const r=RANKS[myRankInfo.index]; const nm=(t["rank_"+r.key])||r.name;
           const nextNm=myRankInfo.next?((t["rank_"+myRankInfo.next.key])||myRankInfo.next.name):null;
-          const ab=srs.stats?.arenaBest||0; const ar=ab>0?rankFor(ab):null; const arNm=ar?((t["rank_"+ar.key])||ar.name):(t.unranked||"Unranked");
+          const played=myRankInfo.xp>0;
           return (
             <div onClick={()=>setShowRanks(true)} style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:16,padding:"16px 16px 18px",marginBottom:16,cursor:"pointer"}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
                 <div style={{width:52,height:52,borderRadius:"50%",background:r.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} aria-hidden="true"><Icon name={r.icon} size={26} stroke={1.8} style={{color:r.color}}/></div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.yourRankHdr||"Your rank"}</div>
+                  <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:"uppercase",color:"var(--color-text-tertiary)"}}>{t.arenaRankLabel||"Arena rank"}</div>
                   <div style={{fontSize:20,fontWeight:800,color:r.color,fontFamily:"'Fraunces',Georgia,serif"}}>{nm}</div>
                 </div>
                 <div style={{textAlign:"right"}}>
                   <div style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:"var(--color-text-primary)"}}>{myRankInfo.xp.toLocaleString()}</div>
-                  <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>{t.xpWord||"XP"}</div>
+                  <div style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>{t.arenaBestLabel||"best run"}</div>
                 </div>
                 <Icon name="chevron" size={16} stroke={2} style={{color:"var(--color-text-tertiary)",flexShrink:0}}/>
               </div>
               {nextNm ? (<>
                 <div style={{height:7,background:"var(--color-border-tertiary)",borderRadius:4,marginTop:14,overflow:"hidden"}}><div style={{width:`${Math.round((myRankInfo.toNext||0)*100)}%`,height:"100%",background:r.color}}/></div>
-                <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:6}}>{(t.rankToNext||"{n} XP to {r}").replace("{n}",Math.max(0,myRankInfo.next.min-myRankInfo.xp).toLocaleString()).replace("{r}",nextNm)}</div>
+                <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:6}}>{(t.rankToNext||"{n} pts to {r}").replace("{n}",Math.max(0,myRankInfo.next.min-myRankInfo.xp).toLocaleString()).replace("{r}",nextNm)}</div>
               </>) : <div style={{fontSize:11.5,color:"var(--color-text-secondary)",marginTop:12}}>{t.rankMax||"You've reached the top tier. Legendary."}</div>}
-              <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",marginTop:8,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="bolt" size={12} style={{flexShrink:0}}/>{t.rankSourceHint||"Your rank climbs with your Arena runs and your studying."}</div>
-              <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:9,paddingTop:9,borderTop:"0.5px solid var(--color-border-tertiary)",display:"flex",alignItems:"center",gap:7}}>
-                <Icon name={ar?ar.icon:"rank_unranked"} size={14} stroke={2} style={{color:ar?ar.color:"#9ca3af",flexShrink:0}}/>
-                <span style={{minWidth:0}}>{t.arenaRankLabel||"Arena rank"}: <b style={{color:ar?ar.color:"var(--color-text-secondary)",fontWeight:800}}>{arNm}</b>{ab>0?` · ${ab.toLocaleString()} ${t.arenaBestLabel||"best run"}`:` · ${t.arenaUnrankedHint||"Play the Endless Arena to get ranked."}`}</span>
-              </div>
+              <div style={{fontSize:10.5,color:"var(--color-text-tertiary)",marginTop:8,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="bolt" size={12} style={{flexShrink:0}}/>{played?(t.rankSourceHint||"Your rank is your best single Arena run. Beat your record in one run to climb."):(t.arenaUnrankedHint||"Play the Endless Arena to get ranked.")}</div>
             </div>
           ); })()}
         {showRanks && <RanksModal currentIndex={myRankInfo.index} xp={myRankInfo.xp} t={t} onClose={()=>setShowRanks(false)}/>}

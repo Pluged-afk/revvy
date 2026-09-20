@@ -2,11 +2,30 @@
 // rank pill, streak flame). Pure, no hooks; imported back verbatim.
 import Icon from "../components/Icon.jsx";
 import { RANKS, BADGE_BY_ID, streakTier } from "../lib/badges.js";
+import { presetAvatar } from "../lib/avatars.js";
 
-// Round initial-letter avatar used across friends + groups (no external image).
-export function AvatarInitial({ name, size = 34 }) {
+// A varied but STABLE colour per name (hashed), so each person's avatar has its
+// own hue like most apps, instead of everyone sharing one accent colour.
+const AVATAR_COLORS = ["#4338ca", "#0d9488", "#b45309", "#7c3aed", "#2563eb", "#0f9d5a", "#d4537e", "#d97706", "#0891b2", "#db2777", "#65a30d", "#e11d48", "#0284c7", "#9333ea"];
+function avatarColor(name) {
+  const s = String(name || "?"); let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+// Round avatar. `avatar` is the stored choice: a preset id (a picked icon-on-
+// colour avatar), or an image URL, or empty. Empty falls back to the first
+// letter of the name on a colour picked from the name (varied per person).
+export function AvatarInitial({ name, avatar, size = 34 }) {
+  const preset = presetAvatar(avatar);
+  if (preset) return (
+    <span style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: preset.color + "26", color: preset.color, border: `1px solid ${preset.color}45` }}>
+      <Icon name={preset.icon} size={Math.round(size * 0.52)} stroke={1.9} />
+    </span>
+  );
+  if (avatar && /^https?:\/\//i.test(avatar)) return <img src={avatar} alt="" width={size} height={size} referrerPolicy="no-referrer" style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, objectFit: "cover", display: "block" }} />;
+  const c = avatarColor(name);
   return (
-    <span style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-sel-tint)", color: "var(--color-accent)", fontSize: Math.round(size * 0.42), fontWeight: 700 }}>
+    <span style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: c + "26", color: c, border: `1px solid ${c}3d`, fontSize: Math.round(size * 0.42), fontWeight: 700 }}>
       {String(name || "?").charAt(0).toUpperCase()}
     </span>
   );
@@ -84,7 +103,7 @@ export function RankPill({ index, t, small = false }) {
   if (index == null || index < 0 || !RANKS[index]) return null;
   const r = RANKS[index];
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: r.color + "22", color: r.color, fontSize: small ? 10 : 11, fontWeight: 800, padding: small ? "1px 7px" : "2px 9px", borderRadius: 20, whiteSpace: "nowrap", lineHeight: 1.4 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: r.color + "2e", color: r.color, border: `1px solid ${r.color}66`, fontSize: small ? 10 : 11, fontWeight: 800, padding: small ? "1px 7px" : "2px 9px", borderRadius: 20, whiteSpace: "nowrap", lineHeight: 1.4 }}>
       <Icon name={r.icon} size={small ? 12 : 13} stroke={2.1} />{(t && t["rank_" + r.key]) || r.name}
     </span>
   );

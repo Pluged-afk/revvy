@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import RevyyMark from "./Logo.jsx";
+import Icon from "./Icon.jsx";
 import { DevBadge } from "../context/DevContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import { presetAvatar } from "../lib/avatars.js";
 
 const LINKS = [
   { to: "/", label: "Home", end: true },
@@ -16,8 +18,9 @@ const LINKS = [
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
-  const { user, isPro, username } = useAuth();
+  const { user, isPro, username, avatar } = useAuth();
   const accountName = username || user?.email?.split("@")[0] || "Account";
+  const pa = presetAvatar(avatar);
   return (
     <nav className="nav">
       <div className="container nav-inner">
@@ -49,9 +52,11 @@ export default function Navbar() {
         <div className="nav-right">
           {user ? (
             <Link to="/app" className="nav-account" title={accountName}>
-              <span className="nav-avatar">
-                {accountName.charAt(0).toUpperCase()}
-                {user.image && <img src={user.image} alt="" onError={(e) => e.currentTarget.remove()} />}
+              <span className="nav-avatar" style={pa ? { background: pa.color + "26", color: pa.color } : undefined}>
+                {pa ? <Icon name={pa.icon} size={16} stroke={1.9} /> : (<>
+                  {accountName.charAt(0).toUpperCase()}
+                  {avatar && /^https?:\/\//.test(avatar) && <img src={avatar} alt="" onError={(e) => e.currentTarget.remove()} />}
+                </>)}
               </span>
               <span className="nav-account-name">{accountName}</span>
             </Link>

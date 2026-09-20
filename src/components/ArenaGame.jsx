@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { buildServe, questionPoints, serveDifficulty, comboMult, timerFor } from "../lib/arena.js";
 import { SoundEngine, Haptics } from "../studyquiz/audio.js";
+import Icon from "./Icon.jsx";
+
+const PUP_ICON = { freeze: "snowflake", hint: "bulb", skip: "skip_next" };
 
 // The endless run itself: one life, a visible per-question timer that ramps down,
 // and the three power-ups (freeze / hint / skip) the player already owns. A wrong
@@ -201,6 +204,7 @@ export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUseP
                 border: `1px solid ${n > 0 && !disabled ? "var(--color-accent)" : "var(--color-border-tertiary)"}`,
                 borderRadius: 11, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, fontFamily: "inherit",
               }}>
+              <Icon name={PUP_ICON[key]} size={18} stroke={1.9} style={{ color: n > 0 && !disabled ? "var(--color-accent)" : "var(--color-text-tertiary)" }} />
               <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)" }}>{pupLabel[key]}</span>
               <span style={{ fontSize: 10, fontWeight: 700, color: n > 0 ? "var(--color-accent)" : "var(--color-text-tertiary)", fontFamily: "monospace" }}>&times;{n}</span>
             </button>

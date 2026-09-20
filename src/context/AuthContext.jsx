@@ -32,6 +32,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [usage, setUsage] = useState(null); // question-limit state from /api/usage
   const [username, setUsername] = useState(null); // public display name (leaderboards)
+  const [avatar, setAvatar] = useState(null);     // chosen preset avatar id (null = letter avatar)
 
   // Normalized user object the rest of the app expects ({ id, email }).
   const user = useMemo(() => {
@@ -68,6 +69,7 @@ export function AuthProvider({ children }) {
       setPeriodEnd(p.current_period_end || null);
       setCancelAtPeriodEnd(!!p.cancel_at_period_end);
       setUsername(p.username || null);
+      setAvatar(p.avatar || null);
       // Language is remembered on the account: apply it so it follows the user
       // across devices (overrides the per-device default). No-op if unchanged.
       if (p.language) setLang(p.language);
@@ -271,6 +273,23 @@ export function AuthProvider({ children }) {
     } catch { return { error: "Could not save name." }; }
   }, [getToken]);
 
+  // Pick one of the preset avatars (or null for the letter avatar). Saved to the
+  // profile so friends and leaderboards show it. Optimistic: updates local state
+  // immediately. No user-uploaded images, so nothing to moderate.
+  const setAvatarPreset = useCallback(async (id) => {
+    const val = id || null;
+    setAvatar(val);
+    try {
+      const token = await getToken();
+      await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ action: "setAvatar", avatar: val }),
+      });
+      return { ok: true };
+    } catch (e) { return { error: e.message || "Could not save your avatar." }; }
+  }, [getToken]);
+
   // Remember the chosen language on the account (best-effort) so it follows the
   // user to any device. Called alongside the local setLang when signed in.
   const saveLanguage = useCallback(async (l) => {
@@ -291,6 +310,7 @@ export function AuthProvider({ children }) {
     signOut, deleteAccount, reauthenticate, setProStatus, refreshProfile, startCheckout, openPortal,
     usage, refreshUsage, consumeQuestions, watchAd, buyPack, consumeMock,
     username, saveUsername, saveLanguage,
+    avatar, setAvatarPreset,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
