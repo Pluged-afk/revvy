@@ -246,7 +246,7 @@ const T_EN = {
   printChoiceTitle:"Print / PDF", printChoiceSub:"Choose what to print.",
   printBlankTitle:"Blank (quiz yourself)", printBlankDesc:"Questions only, with an answer key at the end",
   printAnsweredTitle:"With answers", printAnsweredDesc:"Correct answers marked, with explanations",
-  printAnswerLabel:"Answer:", printAnswerKey:"Answer key", printSheetMeta:"Revyy study sheet", printBlankMeta:"Revyy practice sheet",
+  printAnswerLabel:"Answer:", printAnswerKey:"Answer key", printSheetMeta:"Revyy study sheet", printBlankMeta:"Revyy practice sheet", printBlankBtn:"Print a blank copy",
   kbOpt:"Answer {n}", kbNext:"Next / submit", kbPress:"press a key…", kbReset:"Reset to defaults",
   explainErr:"Couldn't load an explanation, try again.",
   // Feature A: source grounding. Feature B: flag a question and get a better one.
