@@ -995,7 +995,10 @@ async function avatarsFor(ids) {
     const rows = await sql`SELECT COALESCE(clerk_user_id, id) AS uid, avatar_url FROM profiles
                            WHERE (clerk_user_id = ANY(${ids}::text[]) OR id = ANY(${ids}::text[])) AND avatar_url IS NOT NULL`;
     const out = {};
-    for (const r of rows) if (r.uid) out[r.uid] = r.avatar_url;
+    // Only ever serve a preset avatar id to other users, never a URL, so no
+    // external image is loaded in a viewer's browser (defence-in-depth vs any
+    // legacy/stored URL).
+    for (const r of rows) if (r.uid && /^[a-z0-9_-]{1,32}$/.test(String(r.avatar_url))) out[r.uid] = r.avatar_url;
     return out;
   } catch { return {}; }
 }
@@ -1061,15 +1064,40 @@ async function globalBoard(req, res, me) {
   });
 }
 
+// Per-account daily cap on searches, so the endpoint can't be scripted to walk
+// the whole user base (usernames are public, but bound the volume + the scans).
+// Own tiny self-provisioned table, fail-OPEN so a counter blip never breaks the
+// picker. Generous: real friend-adding is a handful of searches.
+const MAX_SEARCHES_DAILY = 200;
+let searchRateReady = false;
+async function underSearchLimit(me) {
+  try {
+    if (!searchRateReady) {
+      await sql`CREATE TABLE IF NOT EXISTS search_rate (
+        clerk_user_id TEXT NOT NULL,
+        day           DATE NOT NULL DEFAULT CURRENT_DATE,
+        n             INT  NOT NULL DEFAULT 0,
+        PRIMARY KEY (clerk_user_id, day)
+      )`;
+      searchRateReady = true;
+    }
+    const rows = await sql`INSERT INTO search_rate (clerk_user_id, day, n) VALUES (${me}, CURRENT_DATE, 1)
+                           ON CONFLICT (clerk_user_id, day) DO UPDATE SET n = search_rate.n + 1 RETURNING n`;
+    if (Math.random() < 0.02) { try { await sql`DELETE FROM search_rate WHERE day < CURRENT_DATE - 2`; } catch { /* ignore */ } }
+    return (rows[0]?.n || 1) <= MAX_SEARCHES_DAILY;
+  } catch { return true; }
+}
+
 // Type-ahead search for the add-a-friend picker: match public usernames by
 // prefix first, then substring, so a partial or slightly-off name still finds
 // the right person. Usernames are already public (leaderboards), so this exposes
-// nothing new; min length + LIMIT keep it from dumping the table. Returns each
-// match's flair + whether you're already friends/pending, so the picker can show
-// which one is yours.
+// nothing new; min length + LIMIT + a daily cap keep it from dumping the table.
+// Returns each match's flair + whether you're already friends/pending, so the
+// picker can show which one is yours.
 async function userSearch(req, res, body, me) {
   const q = clean(body.q, 30).toLowerCase();
   if (q.length < 2) return res.status(200).json({ results: [] });
+  if (!(await underSearchLimit(me))) return res.status(200).json({ results: [] });
   const esc = q.replace(/[%_\\]/g, "\\$&"); // neutralise LIKE wildcards
   let rows;
   try {

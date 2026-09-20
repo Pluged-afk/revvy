@@ -63,15 +63,14 @@ async function getProfile(req, res) {
 // POST action=create: ensure a profile row exists for the signed-in Clerk user.
 // Idempotent. The user id comes from the verified session token (never the
 // body), so a caller can only ever create or touch their own row.
-// A safe avatar value: a preset avatar id (a short slug the client maps to a
-// built-in icon), or an https image URL (kept for forward-compatibility). Anything
-// else becomes null (falls back to the generated letter avatar). Never rendered
-// as HTML, so a slug is inert.
+// Only a preset avatar id (a short slug the client maps to a built-in icon). We
+// deliberately DON'T accept image URLs: with no user-supplied images there is
+// nothing to moderate, and no external image is ever loaded in another user's
+// browser (which would leak their IP / act as a tracking pixel). A URL or
+// anything else -> null (the letter avatar). Rendered only as an icon-name
+// lookup, never as HTML, so a slug is inert.
 function cleanAvatar(v) {
-  if (typeof v !== "string") return null;
-  if (/^https:\/\//i.test(v)) return v.slice(0, 500);
-  if (/^[a-z0-9_-]{1,32}$/i.test(v)) return v.toLowerCase();
-  return null;
+  return (typeof v === "string" && /^[a-z0-9_-]{1,32}$/i.test(v)) ? v.toLowerCase() : null;
 }
 async function createProfile(req, res, body) {
   const userId = await userIdFromToken(req);
@@ -177,6 +176,7 @@ async function deleteAccount(req, res) {
     sql`DELETE FROM mock_flag               WHERE clerk_user_id = ${userId}`,
     sql`DELETE FROM arena_contrib_actor     WHERE clerk_user_id = ${userId}`,
     sql`DELETE FROM ai_rate                 WHERE clerk_user_id = ${userId}`,
+    sql`DELETE FROM search_rate             WHERE clerk_user_id = ${userId}`,
   ]);
   const failed = wipes.filter((r) => r.status === "rejected").length;
   if (failed) console.error(`[profile:delete] ${failed} satellite wipe(s) failed for ${userId} (re-runnable)`);
