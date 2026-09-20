@@ -130,7 +130,7 @@ export function PairBadge({ n, color }) {
   return <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:color,color:"#fff",fontSize:10,fontWeight:700,flexShrink:0,marginTop:1}}>{n}</span>;
 }
 
-export function MatchQuiz({ questions, onDone, t }) {
+export function MatchQuiz({ questions, onDone, t, reveal=true, submitLabel }) {
   const terms = questions.map(q=>q.question);
   // shuffle once at mount (useRef's arg re-runs every render; useState lazy-inits once)
   const [defs] = useState(() => questions.map(q=>q.answer||"").sort(()=>Math.random()-0.5));
@@ -181,6 +181,8 @@ export function MatchQuiz({ questions, onDone, t }) {
       const ok=chosen===questions[i].answer;
       r[i]=ok; detail[i]={isCorrect:ok,chosen};
     });
+    // Exam mode (reveal=false): record and move on, no right/wrong reveal.
+    if (!reveal) { onDone(Object.values(r).filter(Boolean).length,terms.length,detail); return; }
     setResults(r); setChecked(true);
     setTimeout(()=>onDone(Object.values(r).filter(Boolean).length,terms.length,detail),1800);
   };
@@ -213,7 +215,7 @@ export function MatchQuiz({ questions, onDone, t }) {
           })}
         </div>
       </div>
-      {!checked && <button disabled={!allMatched} onClick={check} style={{...Sb.btnPrimary,width:"100%",opacity:allMatched?1:0.35}}>{t.checkAll}</button>}
+      {!checked && <button disabled={!allMatched} onClick={check} style={{...Sb.btnPrimary,width:"100%",opacity:allMatched?1:0.35}}>{reveal?t.checkAll:(submitLabel||t.checkAll)}</button>}
       {checked && <div style={{textAlign:"center",fontSize:14,color:"var(--color-text-secondary)",marginTop:8}}>{t.matchDone}{Object.values(results).filter(Boolean).length}/{terms.length}</div>}
     </div>
   );
