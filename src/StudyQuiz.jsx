@@ -4050,7 +4050,7 @@ export default function StudyQuiz() {
                   <div key={si} style={{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:si<examSections.length-1?"0.5px solid var(--color-border-tertiary)":undefined,gap:12}}>
                     <span style={{width:22,height:22,borderRadius:"50%",background:si%2===0?"var(--color-sel-tint)":"#fef3c7",color:si%2===0?"#4338ca":"#92400e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{si+1}</span>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)"}}>{t.sectionNum.replace("{n}",si+1)}: {sec.type==="mcq"?t.quizTypes.mcq:sec.type==="fill"?t.quizTypes.fill:t.writtenWord}</div>
+                      <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)"}}>{t.sectionNum.replace("{n}",si+1)}: {({mcq:t.quizTypes.mcq,fill:t.quizTypes.fill,essay:(t.qtEssay||"Essay"),diagram:t.quizTypes.diagram})[sec.type]||t.writtenWord}</div>
                       <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{t.qsTimesMarks.replace("{n}",secQs.length).replace("{m}",roundMarks(sectionPerQMarks(sec)))}</div>
                     </div>
                     <div style={{textAlign:"right"}}>
