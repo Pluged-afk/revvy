@@ -147,11 +147,13 @@ function KeyBindings({ bindings, onChange, t }) {
   );
 }
 
-export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, onOpenBadges = () => {}, onOpenStreak = null, onOpenAccuracy = null, onOpenReview = null, t }) {
+export function SettingsPanel({ draft, update, onApply, onCancel, onSignOut, onDeleteAccount, requiresPassword, onReauthenticate, isPro, onManageSubscription, signedIn = true, onOpenBadges = () => {}, onOpenStreak = null, onOpenAccuracy = null, onOpenReview = null, initialTab = "account", t }) {
   const s = t.set || {};
   const { user, username, saveUsername, avatar, setAvatarPreset, subPlan, periodEnd, cancelAtPeriodEnd, openPortal, startCheckout, refreshProfile, usage, refreshUsage, watchAd, buyPack } = useAuth();
   // Settings split into Account (avatar / name / plan / danger) and Preferences.
-  const [acctTab, setAcctTab] = useState("account");
+  // Opens on whichever pane the caller asked for (the app-settings gear opens
+  // "prefs"; the account chip opens "account").
+  const [acctTab, setAcctTab] = useState(initialTab === "prefs" ? "prefs" : "account");
   // Public display name editor (the account name shown everywhere).
   const [nameInput, setNameInput] = useState(username || "");
   const [nameBusy, setNameBusy] = useState(false);

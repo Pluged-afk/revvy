@@ -687,6 +687,7 @@ export default function StudyQuiz() {
   const [soundOn,      setSoundOn]      = useState(true);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showSettings,   setShowSettings]   = useState(false);
+  const [settingsTab,    setSettingsTab]    = useState("account"); // which pane the settings panel opens on
   const [showBugReport,  setShowBugReport]  = useState(false); // quick "report a bug" from the quiz screen
   const [settingsDraft,  setSettingsDraft]  = useState(null);
   const [challenges,     setChallenges]     = useState([]); // sender's shared-quiz activity
@@ -1423,7 +1424,10 @@ export default function StudyQuiz() {
     return {};
   };
 
-  const openSettings  = ()  => { setSettingsDraft({...settings, lang}); setShowSettings(true); };
+  // `tab` picks which pane opens: "prefs" for the app-settings gear, "account"
+  // for the account chip. An event object (from a bare onClick={openSettings})
+  // falls back to "account".
+  const openSettings  = (tab)  => { setSettingsTab(typeof tab === "string" ? tab : "account"); setSettingsDraft({...settings, lang}); setShowSettings(true); };
   const cancelSettings= ()  => { setSettingsDraft(null); setShowSettings(false); };
   const applySettings = ()  => {
     if(!settingsDraft) return;
@@ -2078,19 +2082,6 @@ export default function StudyQuiz() {
   const toggleCard = useCallback((k) => setOpenCard((o) => ({ ...o, [k]: !o[k] })), []);
   const [confirmClearMat, setConfirmClearMat] = useState(false); // "remove all my material" guard
   const [clearingMat, setClearingMat] = useState(false);
-  // PWA: when Revyy is launched as an installed app (standalone display mode),
-  // drop the marketing chrome (the "main site" link and the landing headline) so
-  // the home reads as an app dashboard, not a web page.
-  const [isStandalone, setIsStandalone] = useState(false);
-  useEffect(() => {
-    try {
-      const mq = window.matchMedia("(display-mode: standalone)");
-      const check = () => setIsStandalone(!!(mq.matches || window.navigator.standalone === true || /(^|[?&])src=pwa/.test(window.location.search) || document.referrer.startsWith("android-app://")));
-      check();
-      if (mq.addEventListener) mq.addEventListener("change", check); else mq.addListener?.(check);
-      return () => { if (mq.removeEventListener) mq.removeEventListener("change", check); else mq.removeListener?.(check); };
-    } catch { /* ignore */ }
-  }, []);
   const loadSocial = useCallback(async () => {
     setSocialBusy(true);
     const r = await socialApi("social");
@@ -2960,7 +2951,9 @@ export default function StudyQuiz() {
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
           <div className="rv-hero-top">
-            {isStandalone ? <span aria-hidden="true"/> : <button onClick={()=>navigate("/")} title={t.mainSite} className="rv-hero-back" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.78)",fontFamily:"inherit",padding:0,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}>← {t.mainSite}</button>}
+            {/* App settings (theme etc.) - distinct from the account chip on the
+                right. Opens the settings panel on its Preferences pane. */}
+            <button onClick={()=>openSettings("prefs")} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:999,padding:7,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",flexShrink:0}}><Icon name="gear" size={17}/></button>
             <div className="rv-hero-tools">
               {authLoading ? (
                 // Restoring the session: hold a placeholder so signed-in users
@@ -2968,7 +2961,7 @@ export default function StudyQuiz() {
                 <span aria-hidden="true" style={{width:30,height:30,borderRadius:"50%",background:"rgba(255,255,255,0.18)",flexShrink:0}}/>
               ) : user ? (
                 <>
-                <button onClick={()=>openSettings()} title={t.accountLbl} aria-label={t.accountLbl}
+                <button onClick={()=>openSettings("account")} title={t.accountLbl} aria-label={t.accountLbl}
                   style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
                   <span style={{borderRadius:"50%",flexShrink:0,display:"inline-flex",...(isPro?{boxShadow:"0 0 0 2px #fbbf24, 0 0 0 4px rgba(251,191,36,0.35)"}:{})}}>
                     <AvatarInitial name={username||user.email} avatar={avatar} size={30}/>
@@ -2994,12 +2987,7 @@ export default function StudyQuiz() {
               {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
               <DevBadge/></span>
           </div>
-          {isStandalone ? (
-            <h1 className="rv-hero-head" style={{...Sb.h1,fontSize:26}}>{user ? `${t.appWelcome||"Welcome back"}${username?`, ${username}`:""}` : (t.appWelcome||"Welcome back")}</h1>
-          ) : (<>
-            <h1 className="rv-hero-head" style={Sb.h1}>{t.tagline}</h1>
-            <p className="rv-hero-sub" style={{fontSize:14,color:"var(--color-accent)",lineHeight:1.6,margin:0,maxWidth:300}}>{t.sub}</p>
-          </>)}
+          <h1 className="rv-hero-head" style={{...Sb.h1,fontSize:26}}>{user ? `${t.appWelcome||"Welcome back"}${username?`, ${username}`:""}` : t.tagline}</h1>
         </div>
       </div>
 
@@ -3132,7 +3120,7 @@ export default function StudyQuiz() {
         </div>
       </div>
       {showProModal && <ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
-      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+      {showSettings && <SettingsPanel draft={settingsDraft} initialTab={settingsTab} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
       <ResumeModal info={examResume} onResume={resumeExam} onDiscard={discardResume} fmtClock={fmtClock}/>
     </div>
   );
@@ -3615,7 +3603,7 @@ export default function StudyQuiz() {
         </div>
       )}
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} initialTab={settingsTab} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
     </div>
   );
 
@@ -3652,7 +3640,7 @@ export default function StudyQuiz() {
         <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="chat" size={17}/></button>
         <button onClick={()=>printStudySheet(false)} title={t.printBlankBtn||"Print a blank copy"} aria-label={t.printBlankBtn||"Print a blank copy"} style={{position:"fixed",right:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="notes" size={17}/></button>
         {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
-        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+        {showSettings && <SettingsPanel draft={settingsDraft} initialTab={settingsTab} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
       </div>
     );
     return (
@@ -3719,7 +3707,7 @@ export default function StudyQuiz() {
         <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="chat" size={17}/></button>
         <button onClick={()=>printStudySheet(false)} title={t.printBlankBtn||"Print a blank copy"} aria-label={t.printBlankBtn||"Print a blank copy"} style={{position:"fixed",right:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="notes" size={17}/></button>
         {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
-        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+        {showSettings && <SettingsPanel draft={settingsDraft} initialTab={settingsTab} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
       </div>
     );
   }
@@ -4116,7 +4104,7 @@ export default function StudyQuiz() {
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#312e81,#4338ca)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} initialTab={settingsTab} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
     </div>
   );
 
@@ -4672,7 +4660,7 @@ export default function StudyQuiz() {
         </div>
         </>)}
       </div>
-      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+      {showSettings && <SettingsPanel draft={settingsDraft} initialTab={settingsTab} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
     </div>
   );
 
@@ -5700,7 +5688,7 @@ export default function StudyQuiz() {
     );
   }
 
-  return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>;
+  return <SettingsPanel draft={settingsDraft} initialTab={settingsTab} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>;
 }
 
 
