@@ -3047,15 +3047,20 @@ export default function StudyQuiz() {
             </div>
           </div>
         )}
-        {/* Primary study modes: the quiz builder, mock exams and the ranked arena. */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:18}}>
+        {/* Primary destinations: the quiz builder, mock exams, the ranked arena
+            and the learner's own material (progress, accuracy, review deck). */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
           {[
             {title:t.homeQuizTitle||"Quiz", sub:t.homeQuizSub||"From your notes", icon:"notes", color:"#4338ca", onClick:()=>setScreen("upload")},
             {title:t.homeMockTitle||"Mock exams", sub:t.homeMockSub||"Real test practice", icon:"cap", color:"#b45309", onClick:()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }},
             {title:t.homeArenaTitle||"Arena", sub:t.homeArenaSub||"Ranked trivia", icon:"bolt", color:"#7c3aed", onClick:openArena},
+            {title:t.homeMaterialLabel||"Your material", sub:t.matTabSub||"Progress & accuracy", icon:"chart", color:"#0d9488", onClick:()=>{ if(requireLogin())return; setScreen("material"); }, badge:srs.dueCount||0},
           ].map((m,i)=>(
-            <div key={i} onClick={m.onClick} className="rv-tile" style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 11px",cursor:"pointer",display:"flex",flexDirection:"column",gap:9,minWidth:0}}>
-              <Medallion color={m.color} size={38}><Icon name={m.icon} size={19}/></Medallion>
+            <div key={i} onClick={m.onClick} className="rv-tile" style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 13px",cursor:"pointer",display:"flex",flexDirection:"column",gap:9,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+                <Medallion color={m.color} size={38}><Icon name={m.icon} size={19}/></Medallion>
+                {m.badge>0 && <NotifBubble n={m.badge}/>}
+              </div>
               <div style={{minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:13.5,color:"var(--color-text-primary)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.title}</div>
                 <div style={{fontSize:10.5,color:"var(--color-text-secondary)",lineHeight:1.35}}>{m.sub}</div>
@@ -3106,8 +3111,92 @@ export default function StudyQuiz() {
           </div>
           )}
         </div>
-        {/* Your material: review, mastery, library and the study coach together. */}
-        <p style={Sb.secLabel}>{t.homeMaterialLabel||"Your material"}</p>
+      </div>
+      {showProModal && <ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
+      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+      <ResumeModal info={examResume} onResume={resumeExam} onDiscard={discardResume} fmtClock={fmtClock}/>
+    </div>
+  );
+
+  // ── YOUR MATERIAL ────────────────────────────────────────────────
+  if (screen==="material") {
+    const matTotal = stats.answered || 0;
+    const matCorrect = Math.max(0, Math.min(stats.correct || 0, matTotal));
+    const matWrong = Math.max(0, matTotal - matCorrect);
+    const matAcc = matTotal>0 ? Math.round((matCorrect/matTotal)*100) : 0;
+    const accCol = matAcc>=70?"#16a34a":matAcc>=45?"#f59e0b":"#dc2626";
+    const readiness = computeReadiness({ cards: srs.cards, stats, plan: homePlan });
+    const matHasData = matTotal>0 || mastery.length>0;
+    const matC = 2*Math.PI*30;
+    const statTile = (label,value,color) => (
+      <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"12px 8px",textAlign:"center",minWidth:0}}>
+        <div style={{fontSize:21,fontWeight:800,fontFamily:"'Fraunces',Georgia,serif",color:color||"var(--color-text-primary)",lineHeight:1.1}}>{value}</div>
+        <div style={{fontSize:10.5,fontWeight:600,color:"var(--color-text-secondary)",marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
+      </div>
+    );
+    return (
+      <div style={Sb.root}><style>{CSS}</style>
+        {badgeToastEl}{rankToastEl}{streakToastEl}{notifToastEl}
+        <AdBanners isPro={isPro}/>
+        <div style={Sb.topbar} className="rv-topbar">
+          <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
+          <span style={Sb.brand}>{t.homeMaterialLabel||"Your material"}</span><span/>
+        </div>
+        <div className="rv-center-narrow" style={{padding:"20px 16px 40px"}}>
+          {!matHasData ? (
+            <div style={{textAlign:"center",padding:"46px 20px"}}>
+              <div style={{display:"flex",justifyContent:"center",marginBottom:16}}><Medallion color="#0d9488" size={52}><Icon name="chart" size={26}/></Medallion></div>
+              <div style={{fontWeight:700,fontSize:17,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif",marginBottom:6}}>{t.matEmptyTitle||"No progress yet"}</div>
+              <div style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5,maxWidth:320,margin:"0 auto 20px"}}>{t.matEmptySub||"Take a quiz or an exam and your accuracy, subjects and review deck all show up here."}</div>
+              <button style={{...Sb.btnPrimary,padding:"12px 22px"}} onClick={()=>setScreen("upload")}>{t.matEmptyCta||"Build your first quiz"}</button>
+            </div>
+          ) : (<>
+            <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:16,padding:"18px",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:16}}>
+                <svg width="80" height="80" viewBox="0 0 80 80" style={{flexShrink:0}} aria-hidden="true">
+                  <circle cx="40" cy="40" r="30" fill="none" stroke="var(--color-background-secondary)" strokeWidth="8"/>
+                  <circle cx="40" cy="40" r="30" fill="none" stroke={accCol} strokeWidth="8" strokeLinecap="round" strokeDasharray={matC} strokeDashoffset={matC*(1-matAcc/100)} transform="rotate(-90 40 40)"/>
+                  <text x="40" y="40" textAnchor="middle" dominantBaseline="central" fontSize="20" fontWeight="800" fill="var(--color-text-primary)" fontFamily="'Fraunces',Georgia,serif">{matAcc}%</text>
+                </svg>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:15,color:"var(--color-text-primary)"}}>{t.matAccuracy||"Accuracy"}</div>
+                  <div style={{fontSize:12.5,color:"var(--color-text-secondary)",marginTop:2}}>{(t.matOfCorrect||"{c} of {n} correct").replace("{c}",matCorrect).replace("{n}",matTotal)}</div>
+                  <div style={{display:"flex",gap:16,marginTop:11,flexWrap:"wrap"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}><span style={{width:9,height:9,borderRadius:3,background:"#16a34a",flexShrink:0}}/>{matCorrect} {t.matCorrect||"correct"}</span>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}><span style={{width:9,height:9,borderRadius:3,background:"#dc2626",flexShrink:0}}/>{matWrong} {t.matWrong||"wrong"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(86px,1fr))",gap:9,marginBottom:20}}>
+              {statTile(t.matQuestions||"Questions", matTotal)}
+              {statTile(t.matCorrect||"correct", matCorrect, "#16a34a")}
+              {statTile(t.matWrong||"wrong", matWrong, "#dc2626")}
+              {statTile(t.dayStreakLabel||"day streak", stats.streak||0)}
+              {readiness.score!=null && statTile(t.matReadiness||"Readiness", readiness.score+"%")}
+              {(stats.arenaBest||0)>0 && statTile(t.matArenaBest||"Arena best", (stats.arenaBest||0).toLocaleString())}
+            </div>
+            {mastery.length>0 && (
+              <div style={{marginBottom:20}}>
+                <p style={Sb.secLabel}>{t.matSubjectsTitle||"Subjects"}</p>
+                <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px"}}>
+                  {mastery.slice(0,14).map((tp,i,arr)=>{
+                    const col = tp.mastery>=70?"#16a34a":tp.mastery>=40?"#f59e0b":"#dc2626";
+                    return (
+                      <div key={i} style={{marginBottom:i===arr.length-1?0:11}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12.5,marginBottom:4,gap:8}}>
+                          <span style={{color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tp.topic}</span>
+                          <span style={{display:"inline-flex",alignItems:"center",gap:8,flexShrink:0}}><span style={{fontSize:10.5,color:"var(--color-text-tertiary)"}}>{tp.correct}/{tp.seen}</span><span style={{fontWeight:700,color:col}}>{tp.mastery}%</span></span>
+                        </div>
+                        <div style={{height:6,borderRadius:6,background:"var(--color-background-secondary)",overflow:"hidden"}}><div style={{height:"100%",width:tp.mastery+"%",background:col,borderRadius:6,transition:"width 0.3s"}}/></div>
+                      </div>
+                    );
+                  })}
+                  {mastery.some(m=>m.weak) && <button onClick={drillWeakSpots} style={{...Sb.btnPrimary,width:"100%",marginTop:14,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="target" size={15}/>{t.drillWeak}</button>}
+                </div>
+              </div>
+            )}
+            <p style={Sb.secLabel}>{t.matToolsLabel||"Review & study"}</p>
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
         <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4338ca,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 14px rgba(67,56,202,0.2)":"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -3136,37 +3225,6 @@ export default function StudyQuiz() {
               style={{border:"0.5px solid var(--color-border-secondary)",borderRadius:8,padding:"5px 8px",fontSize:12,fontFamily:"inherit",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",outline:"none",colorScheme:srs.dueCount>0?"dark":"light"}}/>
           </div>
         </div>
-        {/* Topic mastery, per-topic strength across all quizzes/exams, with a
-            one-tap drill on the weakest topics (no upload needed). */}
-        {mastery.length>0 && (
-          <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
-            <div onClick={()=>toggleCard("mastery")} style={{display:"flex",alignItems:"center",gap:10,marginBottom:openCard.mastery?12:0,cursor:"pointer"}}>
-              <Medallion color="#3b82f6" size={36}><Icon name="chart" size={19}/></Medallion>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.masteryTitle}</div>
-                <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.masterySub}</div>
-              </div>
-              <span style={{flexShrink:0,color:"var(--color-text-tertiary)",display:"flex",transition:"transform .2s",transform:openCard.mastery?"rotate(-90deg)":"rotate(90deg)"}}><Icon name="chevron" size={16}/></span>
-            </div>
-            {openCard.mastery && (<>
-            {mastery.slice(0,4).map((tp,i)=>{
-              const col = tp.mastery>=70?"#16a34a":tp.mastery>=40?"#f59e0b":"#dc2626";
-              return (
-                <div key={i} style={{marginBottom:9}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginBottom:3,gap:8}}>
-                    <span style={{color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tp.topic}</span>
-                    <span style={{fontWeight:700,color:col,flexShrink:0}}>{tp.mastery}%</span>
-                  </div>
-                  <div style={{height:6,borderRadius:6,background:"var(--color-background-secondary)",overflow:"hidden"}}>
-                    <div style={{height:"100%",width:tp.mastery+"%",background:col,borderRadius:6,transition:"width 0.3s"}}/>
-                  </div>
-                </div>
-              );
-            })}
-            {mastery.some(t=>t.weak) && <button onClick={drillWeakSpots} style={{...Sb.btnPrimary,width:"100%",marginTop:6,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="target" size={15}/>{t.drillWeak}</button>}
-            </>)}
-          </div>
-        )}
         {/* Phase 3: study library, a memory of everything uploaded (summaries
             only), with a one-tap cumulative "quiz me on everything" review. */}
         {librarySize(srs.library)>0 && (
@@ -3271,12 +3329,12 @@ export default function StudyQuiz() {
             </div>
           );
         })()}
+          </>)}
+        </div>
+        <ResumeModal info={examResume} onResume={resumeExam} onDiscard={discardResume} fmtClock={fmtClock}/>
       </div>
-      {showProModal && <ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
-      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("home");setOpenCard(c=>({...c,mastery:true}));}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
-      <ResumeModal info={examResume} onResume={resumeExam} onDiscard={discardResume} fmtClock={fmtClock}/>
-    </div>
-  );
+    );
+  }
 
   // ── UPLOAD ───────────────────────────────────────────────────────
   if (screen==="upload") return (
@@ -3521,7 +3579,7 @@ export default function StudyQuiz() {
         </div>
       )}
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("home");setOpenCard(c=>({...c,mastery:true}));}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
     </div>
   );
 
@@ -3558,7 +3616,7 @@ export default function StudyQuiz() {
         <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="chat" size={17}/></button>
         <button onClick={()=>printStudySheet(false)} title={t.printBlankBtn||"Print a blank copy"} aria-label={t.printBlankBtn||"Print a blank copy"} style={{position:"fixed",right:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="notes" size={17}/></button>
         {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
-        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("home");setOpenCard(c=>({...c,mastery:true}));}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
       </div>
     );
     return (
@@ -3625,7 +3683,7 @@ export default function StudyQuiz() {
         <button onClick={()=>setShowBugReport(true)} title={t.reportTitle} aria-label={t.reportTitle} style={{position:"fixed",left:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="chat" size={17}/></button>
         <button onClick={()=>printStudySheet(false)} title={t.printBlankBtn||"Print a blank copy"} aria-label={t.printBlankBtn||"Print a blank copy"} style={{position:"fixed",right:12,bottom:12,zIndex:400,width:38,height:38,borderRadius:"50%",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",color:"var(--color-text-secondary)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 14px rgba(35,31,26,0.13)"}}><Icon name="notes" size={17}/></button>
         {showBugReport && <ContactModal defaultEmail={user?.email||""} onClose={()=>setShowBugReport(false)} t={t}/>}
-        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("home");setOpenCard(c=>({...c,mastery:true}));}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+        {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
       </div>
     );
   }
@@ -4022,7 +4080,7 @@ export default function StudyQuiz() {
         <button disabled={!examMode||examFiles.filter(Boolean).length===0} style={{...Sb.btnPrimary,width:"100%",opacity:(!examMode||examFiles.filter(Boolean).length===0)?0.35:1,background:"linear-gradient(135deg,#312e81,#4338ca)"}} onClick={generateExam}>{t.startExam}</button>
       </div>
       {showPacks&&<PacksModal onClose={()=>setShowPacks(false)} buyPack={buyPack} t={t}/>}
-      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("home");setOpenCard(c=>({...c,mastery:true}));}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+      {showSettings&&<SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
     </div>
   );
 
@@ -4578,7 +4636,7 @@ export default function StudyQuiz() {
         </div>
         </>)}
       </div>
-      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("home");setOpenCard(c=>({...c,mastery:true}));}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
+      {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
     </div>
   );
 
@@ -5606,7 +5664,7 @@ export default function StudyQuiz() {
     );
   }
 
-  return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("home");setOpenCard(c=>({...c,mastery:true}));}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>;
+  return <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>;
 }
 
 

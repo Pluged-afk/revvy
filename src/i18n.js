@@ -71,6 +71,7 @@ const T_EN = {
   // Friends + study groups
   socialTitle:"Friends & Groups", socialSub:"Add friends, form study groups, share material and compare progress.",
   homeQuizTitle:"Quiz", homeQuizSub:"From your notes", homeMockTitle:"Mock exams", homeMockSub:"Real test practice", homeArenaTitle:"Arena", homeArenaSub:"Ranked trivia", homeMaterialLabel:"Your material",
+  matTabSub:"Progress & accuracy", matAccuracy:"Accuracy", matQuestions:"Questions", matCorrect:"correct", matWrong:"wrong", matReadiness:"Readiness", matArenaBest:"Arena best", matOfCorrect:"{c} of {n} correct", matSubjectsTitle:"Subjects", matToolsLabel:"Review & study", matEmptyTitle:"No progress yet", matEmptySub:"Take a quiz or an exam and your accuracy, subjects and review deck all show up here.", matEmptyCta:"Build your first quiz",
   addFriend:"Add a friend", friendUsernamePh:"search by username", addWord:"Add", friendRequests:"Requests",
   friendAlready:"Friends", friendPendingWord:"Pending", friendSearching:"Searching...", friendNoMatch:"No one found by that name.",
   removeFriend:"Remove", removeFriendConfirm:"Remove {n} from your friends?",
