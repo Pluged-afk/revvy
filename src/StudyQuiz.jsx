@@ -45,7 +45,7 @@ const FEAT_ICONS = ["notes", "camera", "pencil", "layers", "chat", "globe"];
 const TAB_ICONS = { file: "folder", text: "pencil", photo: "camera", media: "play" };
 // Localized name for a power-up ("hint" | "freeze" | "skip"), reusing the arena
 // labels so the reward economy speaks one language everywhere.
-const pupName = (t, key) => key === "freeze" ? (t.arenaFreeze || "Freeze") : key === "skip" ? (t.arenaSkip || "Skip") : (t.arenaHint || "Hint");
+const pupName = (t, key) => key === "freeze" ? (t.arenaFreeze || "Freeze") : key === "skip" ? (t.arenaSkip || "Skip") : key === "fifty" ? (t.arenaFifty || "50/50") : (t.arenaHint || "Hint");
 // Arena board entry points (intro + game-over). On now: the board leads with the
 // competitive season tier + season leaderboard, which aren't gated (they work
 // from day one), so there's always something to show. The all-time board behind
@@ -558,6 +558,11 @@ export default function StudyQuiz() {
   const [examMode,    setExamMode]    = useState(null);
   const [examFiles,   setExamFiles]   = useState([]);
   const [examTotalQ,  setExamTotalQ]  = useState("20");
+  // Marks for the single-type (full MCQ / full written) exams: per question, or a
+  // total spread across the questions. (Custom mode sets marks per section.)
+  const [examMarkMode,  setExamMarkMode]  = useState("perQ"); // "perQ" | "total"
+  const [examMarksPerQ, setExamMarksPerQ] = useState("1");
+  const [examTotalMarks,setExamTotalMarks]= useState("100");
   const [examQs,      setExamQs]      = useState([]);
   const [examIdx,     setExamIdx]     = useState(0);
   const [examAns,     setExamAns]     = useState({});
@@ -1068,9 +1073,12 @@ export default function StudyQuiz() {
     // the chosen type. Each unit is produced in CHUNKS below (a single model call
     // reliably returns only ~25-30 questions no matter the count asked), so a big
     // exam actually reaches its full number instead of stalling at ~25.
+    // For a single-type exam, treat the whole thing as one "section" so the same
+    // per-question / total marking the custom builder uses applies here too.
+    const singleMarks = sectionPerQMarks({ count: totalQ, markMode: examMarkMode, sectionMarks: examTotalMarks, marksPerQ: examMarksPerQ });
     const examPlan = examMode==="custom"
       ? examSections.map((s,i)=>({ section:i+1, type:(["mcq","fill","written","essay","diagram","match"].includes(s.type)?s.type:"mcq"), marks:sectionPerQMarks(s), count:Math.min(Math.max(parseInt(s.count)||5,1),100) }))
-      : [{ section:1, type:(examMode==="written"?"written":"mcq"), marks:1, count: totalQ }];
+      : [{ section:1, type:(examMode==="written"?"written":"mcq"), marks:singleMarks, count: totalQ }];
     const examMarksMap = {}; examPlan.forEach((s)=>{ examMarksMap[s.section]=s.marks; });
 
     // A diagram section marks parts on the learner's own image, so it needs one.
@@ -1185,7 +1193,7 @@ export default function StudyQuiz() {
         ...(typeof q.x==="number"&&typeof q.y==="number" ? { x: Math.max(0,Math.min(100,q.x)), y: Math.max(0,Math.min(100,q.y)) } : {}),
         // fill: keep the accepted-alternative answers (bounded, de-dashed)
         ...(Array.isArray(q.accept) ? { accept: q.accept.filter(x=>typeof x==="string"&&x.trim()).slice(0,6).map(deDash) } : {}),
-        marksPerQ: examMode==="custom" ? (marksMap[q.section]||1) : 1,
+        marksPerQ: marksMap[q.section]||1,
       }));
       // Collapse each MATCH section's pair-questions into ONE grouped entry: the
       // whole set is answered on a single matching grid and scored by the fraction
@@ -1197,7 +1205,7 @@ export default function StudyQuiz() {
           matchDone.add(q.section);
           const pairs=annotated.filter(x=>x.type==="match"&&x.section===q.section&&x.question&&x.answer).map(x=>({term:x.question,definition:x.answer}));
           if (!pairs.length) continue;
-          const perPair=examMode==="custom"?(marksMap[q.section]||1):1;
+          const perPair=marksMap[q.section]||1;
           finalQs.push({type:"match",section:q.section,pairs,topic:q.topic||"",marksPerQ:perPair*pairs.length});
         } else finalQs.push(q);
       }
@@ -1208,7 +1216,7 @@ export default function StudyQuiz() {
       setScreen("exam_run");
       if(!isPro) unlocks.consumeExam();   // free daily exam is now used up
     }catch(err){setError(err.message.includes("parse")?t.errUnexpectedFormat:err.message);setScreen("exam_setup");}
-  },[examFiles,examMode,examSections,examTotalQ,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks,studyModel,srs.bank,examCap]);
+  },[examFiles,examMode,examSections,examTotalQ,examMarkMode,examMarksPerQ,examTotalMarks,diff,sectionTotalQs,examTimerOn,examTimerMin,uploadFileToAnthropic,consumeQuestions,requireLogin,isPro,unlocks,studyModel,srs.bank,examCap]);
 
   const evaluateExam=useCallback(async(answers)=>{
     // Auto-graded types need no AI: MCQ and diagram by option index, fill by
@@ -1741,17 +1749,17 @@ export default function StudyQuiz() {
     else setQIdx(i=>i+1);
   };
   const nextMCQ = () => { if(selected===null)return; nextQ(selected===quiz.questions[qIdx].correct,{selected}); };
-  // Spend a hint power-up in a normal quiz (the same wallet earned in the arena):
+  // Spend a 50/50 power-up in a normal quiz (the same wallet earned in the arena):
   // hide two wrong options, before answering, once per question. Keeps at least
   // two options on screen so short MCQs are not trivialised.
-  const quizHint = () => {
-    if (selected!==null || quizElim.length || (srs.wallet?.hint||0) <= 0) return;
+  const quizFifty = () => {
+    if (selected!==null || quizElim.length || (srs.wallet?.fifty||0) <= 0) return;
     const q = quiz.questions[qIdx];
     const wrong = (q?.options||[]).map((_,i)=>i).filter(i=>i!==q.correct);
     const nElim = Math.min(2, wrong.length-1);
     if (nElim <= 0) return;
     for (let x=wrong.length-1;x>0;x--){const j=Math.floor(Math.random()*(x+1));[wrong[x],wrong[j]]=[wrong[j],wrong[x]];}
-    setQuizElim(wrong.slice(0,nElim)); srs.usePowerup("hint"); haptic();
+    setQuizElim(wrong.slice(0,nElim)); srs.usePowerup("fifty"); haptic();
   };
   // Keyboard-driven MCQ (opt-in via Settings, keys rebindable): the bound keys
   // pick an option, the "next" key advances once an answer is chosen. Skipped
@@ -3636,9 +3644,9 @@ export default function StudyQuiz() {
                   </button>;
                 })}
               </div>
-              {selected===null && (srs.wallet?.hint||0) > 0 && q.options.length>=3 && (
-                <button onClick={quizHint} disabled={quizElim.length>0} style={{marginTop:12,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,background:quizElim.length?"var(--color-background-secondary)":"var(--color-sel-tint)",border:`1px solid ${quizElim.length?"var(--color-border-tertiary)":"var(--color-accent)"}`,borderRadius:11,padding:"10px 12px",cursor:quizElim.length?"default":"pointer",opacity:quizElim.length?0.5:1,fontFamily:"inherit",fontSize:13,fontWeight:700,color:"var(--color-accent)"}}>
-                  <Icon name="gem" size={15}/>{quizElim.length?(t.hintUsed||"Two options removed"):(t.useHint||"Use a hint").concat(` (${srs.wallet?.hint||0})`)}
+              {selected===null && (srs.wallet?.fifty||0) > 0 && q.options.length>=3 && (
+                <button onClick={quizFifty} disabled={quizElim.length>0} style={{marginTop:12,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,background:quizElim.length?"var(--color-background-secondary)":"var(--color-sel-tint)",border:`1px solid ${quizElim.length?"var(--color-border-tertiary)":"var(--color-accent)"}`,borderRadius:11,padding:"10px 12px",cursor:quizElim.length?"default":"pointer",opacity:quizElim.length?0.5:1,fontFamily:"inherit",fontSize:13,fontWeight:700,color:"var(--color-accent)"}}>
+                  <Icon name="fifty" size={15}/>{quizElim.length?(t.hintUsed||"Two options removed"):(t.useFifty||"50/50").concat(` (${srs.wallet?.fifty||0})`)}
                 </button>
               )}
               {selected!==null&&instant&&<div style={{borderRadius:10,padding:"12px 14px",marginTop:14,...(selected===q.correct?{background:"var(--color-background-success)",border:"0.5px solid var(--color-border-success)",color:"var(--color-text-success)"}:{background:"var(--color-background-danger)",border:"0.5px solid var(--color-border-danger)",color:"var(--color-text-danger)"})}} className="slide-up"><strong style={{fontSize:14}}>{selected===q.correct?t.correct:t.incorrect}</strong><p style={{margin:"5px 0 0",fontSize:13,lineHeight:1.5}}>{q.explanation}</p></div>}
@@ -3898,6 +3906,28 @@ export default function StudyQuiz() {
             )}
           </div>
         )}
+        {examMode&&examMode!=="custom"&&(()=>{
+          const singleQ=Math.min(isPro?Math.max(parseInt(examTotalQ)||1,1):20,examCap());
+          const sec={count:singleQ,markMode:examMarkMode,sectionMarks:examTotalMarks,marksPerQ:examMarksPerQ};
+          return (
+            <div style={{marginBottom:20}}>
+              <p style={Sb.secLabel}>{t.markingLbl}</p>
+              <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)"}}>
+                <Seg options={[["perQ",t.markPerQ],["total",t.markSection]]} value={examMarkMode} onChange={setExamMarkMode}/>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginTop:10}}>
+                  {examMarkMode==="total" ? (<>
+                    <input type="number" min={1} max={1000} step={1} value={examTotalMarks} onChange={e=>setExamTotalMarks(e.target.value)} style={{width:84,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
+                    <span style={{fontSize:11.5,color:"var(--color-text-secondary)",lineHeight:1.4}}>{t.marksWord} · <strong>{roundMarks(sectionPerQMarks(sec))}</strong> {t.marksEach}</span>
+                  </>) : (<>
+                    <input type="number" min={0.5} max={20} step={0.5} value={examMarksPerQ} onChange={e=>setExamMarksPerQ(e.target.value)} style={{width:84,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
+                    <span style={{fontSize:11.5,color:"var(--color-text-secondary)"}}>{t.marksPerQLbl}</span>
+                  </>)}
+                </div>
+                <div style={{marginTop:10,fontSize:11.5,color:"var(--color-text-secondary)"}}>{singleQ} {t.questionsLow} · <strong>{roundMarks(sectionMarksTotal(sec))} {t.marksWord}</strong></div>
+              </div>
+            </div>
+          );
+        })()}
         {examMode==="custom"&&(
           <div style={{marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -4553,7 +4583,7 @@ export default function StudyQuiz() {
               </div>
             </div>
             <NotifBubble n={unread.byFriend[f.userId]||0}/>
-            <button onClick={(e)=>{e.stopPropagation();doRemoveFriend(f.userId);}} style={{flexShrink:0,background:"none",color:"var(--color-text-tertiary)",border:"none",fontSize:12,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:2}}>{t.removeWord||"Remove"}</button>
+            <button onClick={(e)=>{e.stopPropagation(); if(typeof window!=="undefined" && window.confirm((t.removeFriendConfirm||"Remove {n} from your friends?").replace("{n}",f.username))) doRemoveFriend(f.userId);}} style={{flexShrink:0,background:"none",color:"var(--color-text-tertiary)",border:"none",fontSize:12,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:2}}>{t.removeWord||"Remove"}</button>
           </div>
         )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)",marginBottom:8}}>{t.noFriends||"No friends yet. Add someone by their username above."}</div>}
         </>)}
@@ -4594,7 +4624,10 @@ export default function StudyQuiz() {
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>{setScreen("social");loadSocial();}}>← {t.backWord}</button>
         <span style={{fontSize:12.5,fontWeight:700,color:"var(--color-text-primary)",display:"inline-flex",alignItems:"center",gap:6,minWidth:0}}>{activeDM.username}<Flair rank={activeDM.rank} badge={activeDM.badge} t={t} small/></span>
-        <span/>
+        <button onClick={()=>{ if(typeof window!=="undefined" && window.confirm((t.removeFriendConfirm||"Remove {n} from your friends?").replace("{n}",activeDM.username))){ doRemoveFriend(activeDM.friendId); setScreen("social"); loadSocial(); } }}
+          title={t.removeFriend||"Remove friend"} style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",fontFamily:"inherit",fontSize:11.5,display:"inline-flex",alignItems:"center",gap:5,flexShrink:0,padding:"4px 2px"}}>
+          <Icon name="x" size={13} stroke={2}/>{t.removeFriend||"Remove"}
+        </button>
       </div>
       <div className="rv-center-narrow" style={{padding:"14px 16px 20px",display:"flex",flexDirection:"column",minHeight:"calc(100vh - 130px)"}}>
         {socialErr && <div style={{background:"var(--color-background-danger)",border:"1px solid var(--color-border-danger)",borderRadius:12,padding:"10px 14px",fontSize:13,color:"var(--color-text-danger)",marginBottom:12}}>{socialErr}</div>}
@@ -5236,7 +5269,7 @@ export default function StudyQuiz() {
             </div>
           )}
           <div style={{display:"flex",gap:10,marginBottom:18}}>
-            {[[t.arenaFreeze,r.freeze],[t.arenaHint,r.hint],[t.arenaSkip,r.skip]].map(([lbl,n],i)=>(
+            {[[t.arenaHint,r.hint],[t.arenaFifty||"50/50",r.fifty],[t.arenaFreeze,r.freeze],[t.arenaSkip,r.skip]].map(([lbl,n],i)=>(
               <div key={i} style={{flex:1,textAlign:"center",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"11px 6px"}}>
                 <div style={{fontSize:19,fontWeight:800,color:"var(--color-accent)",fontFamily:"monospace"}}>{n||0}</div>
                 <div style={{fontSize:11,color:"var(--color-text-secondary)",fontWeight:600}}>{lbl}</div>

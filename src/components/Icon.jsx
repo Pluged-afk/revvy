@@ -239,6 +239,13 @@ const PATHS = {
       <path d="M18 5v14" />
     </>
   ),
+  // 50/50: a circle split down the middle (remove two options).
+  fifty: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3v18" />
+    </>
+  ),
   trophy: (
     <>
       <path d="M8 4h8v5a4 4 0 0 1-8 0V4z" />

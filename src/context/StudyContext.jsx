@@ -242,7 +242,7 @@ function mergeStudy(server, local) {
     mockScores: mergeMockScores(server.mockScores, local.mockScores),
     // Rewards: never lose an earned power-up or saver across devices, so keep the
     // higher of each (they are capped, so this cannot inflate past the limit).
-    wallet: (() => { const a = normWallet(server.wallet), b = normWallet(local.wallet); return { hint: Math.max(a.hint, b.hint), freeze: Math.max(a.freeze, b.freeze), skip: Math.max(a.skip, b.skip) }; })(),
+    wallet: (() => { const a = normWallet(server.wallet), b = normWallet(local.wallet); return { hint: Math.max(a.hint, b.hint), fifty: Math.max(a.fifty, b.fifty), freeze: Math.max(a.freeze, b.freeze), skip: Math.max(a.skip, b.skip) }; })(),
     streakSavers: Math.max(0, Math.min(SAVER_CAP, Math.max(Number(server.streakSavers) || 0, Number(local.streakSavers) || 0))),
     savedProgress: Math.max(0, Number(server.savedProgress) || 0, Number(local.savedProgress) || 0),
     badges: mergeBadges(server.badges, local.badges),
@@ -512,7 +512,7 @@ export function StudyProvider({ children }) {
     commit((p) => {
       const w = normWallet(p.wallet);
       const add = (k) => Math.min(POWERUP_CAP[k] || 0, w[k] + Math.max(0, Math.floor(Number(d[k]) || 0)));
-      return { ...p, wallet: { hint: add("hint"), freeze: add("freeze"), skip: add("skip") } };
+      return { ...p, wallet: { hint: add("hint"), fifty: add("fifty"), freeze: add("freeze"), skip: add("skip") } };
     });
   }, [commit]);
 

@@ -3,10 +3,11 @@
 // Streak savers accrue per 500 study-mode questions (not arena) and quietly
 // protect the streak. Any activity feeds the streak.
 
-// weakest to strongest: hint < freeze < skip. stronger ones are rarer so they
-// cap lower, which pushes players to spend rather than hoard.
-export const POWERUP_CAP = { hint: 9, freeze: 6, skip: 4 };
-export const POWERUPS = ["hint", "freeze", "skip"];
+// weakest to strongest: hint < fifty < freeze < skip. stronger ones are rarer so
+// they cap lower, which pushes players to spend rather than hoard. hint = a text
+// clue, fifty = remove two wrong options, freeze = pause the timer, skip = skip.
+export const POWERUP_CAP = { hint: 9, fifty: 6, freeze: 6, skip: 4 };
+export const POWERUPS = ["hint", "fifty", "freeze", "skip"];
 // a saver rescues a whole lapse (however many days missed), so it's strong, so
 // the cap stays small
 export const SAVER_CAP = 3;
@@ -18,7 +19,7 @@ const clampCount = (v, k) => Math.max(0, Math.min(capOf(k), Math.floor(Number(v)
 
 export function normWallet(w) {
   w = (w && typeof w === "object") ? w : {};
-  return { hint: clampCount(w.hint, "hint"), freeze: clampCount(w.freeze, "freeze"), skip: clampCount(w.skip, "skip") };
+  return { hint: clampCount(w.hint, "hint"), fifty: clampCount(w.fifty, "fifty"), freeze: clampCount(w.freeze, "freeze"), skip: clampCount(w.skip, "skip") };
 }
 
 // what an arena run earns, by final score. decent run -> hint, strong -> freeze,
@@ -26,8 +27,9 @@ export function normWallet(w) {
 export function arenaEarn(score) {
   const s = Number(score) || 0;
   if (s >= 3000) return "skip";
-  if (s >= 1000) return "freeze";
-  if (s >= 300) return "hint";
+  if (s >= 1500) return "freeze";
+  if (s >= 700) return "fifty";
+  if (s >= 250) return "hint";
   return null;
 }
 // what passing a quiz/exam earns, by fraction correct. below the 60% pass line
@@ -35,7 +37,8 @@ export function arenaEarn(score) {
 export function passEarn(correct, total) {
   const pct = total ? (Number(correct) || 0) / total : 0;
   if (pct >= 0.95) return "skip";
-  if (pct >= 0.80) return "freeze";
+  if (pct >= 0.85) return "freeze";
+  if (pct >= 0.75) return "fifty";
   if (pct >= 0.60) return "hint";
   return null;
 }
@@ -51,6 +54,7 @@ export function walletSpend(wallet, used) {
   const w = normWallet(wallet); const u = used || {};
   return {
     hint: Math.max(0, w.hint - (parseInt(u.hint, 10) || 0)),
+    fifty: Math.max(0, w.fifty - (parseInt(u.fifty, 10) || 0)),
     freeze: Math.max(0, w.freeze - (parseInt(u.freeze, 10) || 0)),
     skip: Math.max(0, w.skip - (parseInt(u.skip, 10) || 0)),
   };

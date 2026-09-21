@@ -3,7 +3,7 @@ import { buildServe, questionPoints, serveDifficulty, comboMult, timerFor } from
 import { SoundEngine, Haptics } from "../studyquiz/audio.js";
 import Icon from "./Icon.jsx";
 
-const PUP_ICON = { freeze: "snowflake", hint: "bulb", skip: "skip_next" };
+const PUP_ICON = { hint: "bulb", fifty: "fifty", freeze: "snowflake", skip: "skip_next" };
 
 // The endless run itself: one life, a visible per-question timer that ramps down,
 // and the three power-ups (freeze / hint / skip) the player already owns. A wrong
@@ -24,14 +24,16 @@ export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUseP
   const [frozen, setFrozen] = useState(false);        // freeze power-up: pause the timer
   const [tabHidden, setTabHidden] = useState(false);  // tab is backgrounded: pause the timer
   const [picked, setPicked] = useState(null);         // index once answered (brief reveal)
-  const [eliminated, setEliminated] = useState([]);   // option indices hidden by a hint
+  const [eliminated, setEliminated] = useState([]);   // option indices hidden by the 50/50 power-up
+  const [hintText, setHintText] = useState(null);     // a text clue from the hint power-up
   const [swapNote, setSwapNote] = useState(false);    // "question changed, you left the tab" toast
   const [pups, setPups] = useState(() => ({          // available (from the player's wallet)
-    freeze: Math.max(0, Number(initialPowerups?.freeze) || 0),
     hint: Math.max(0, Number(initialPowerups?.hint) || 0),
+    fifty: Math.max(0, Number(initialPowerups?.fifty) || 0),
+    freeze: Math.max(0, Number(initialPowerups?.freeze) || 0),
     skip: Math.max(0, Number(initialPowerups?.skip) || 0),
   }));
-  const [used, setUsed] = useState({ freeze: 0, hint: 0, skip: 0 }); // power-ups spent (submitted at the end)
+  const [used, setUsed] = useState({ hint: 0, fifty: 0, freeze: 0, skip: 0 }); // power-ups spent
   const answersRef = useRef([]);
   const overRef = useRef(false);
   const poolRef = useRef(0);            // index of the last question consumed from the batch
@@ -50,7 +52,7 @@ export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUseP
     overRef.current = true;
     onEnd({
       score, questions: lastAnsweredCount, answers: answersRef.current,
-      freeze: used.freeze, hint: used.hint, skip: used.skip,
+      freeze: used.freeze, hint: used.hint, skip: used.skip, fifty: used.fifty,
     });
   }, [onEnd, score, used]);
 
@@ -65,7 +67,7 @@ export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUseP
   const advance = useCallback((nextIndex) => {
     setServe(nextServe());
     setTimeLeft(timerFor(nextIndex));
-    setPicked(null); setEliminated([]); setFrozen(false);
+    setPicked(null); setEliminated([]); setHintText(null); setFrozen(false);
     setQi(nextIndex);
   }, [nextServe]);
 
@@ -75,7 +77,7 @@ export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUseP
     if (overRef.current || pickedRef.current !== null) return;
     setServe(nextServe());
     setTimeLeft(timerFor(qi));
-    setEliminated([]); setFrozen(false);
+    setEliminated([]); setHintText(null); setFrozen(false);
     setSwapNote(true);
     if (swapTimerRef.current) clearTimeout(swapTimerRef.current);
     swapTimerRef.current = setTimeout(() => setSwapNote(false), 2600);
@@ -123,20 +125,32 @@ export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUseP
 
   // ── Power-ups (event handlers, so ref/RNG access here is off the render path) ──
   const doFreeze = useCallback(() => { if (pups.freeze <= 0 || picked !== null || frozen) return; setPups((p) => ({ ...p, freeze: p.freeze - 1 })); setUsed((u) => ({ ...u, freeze: u.freeze + 1 })); onUsePowerup?.("freeze"); setFrozen(true); }, [pups.freeze, picked, frozen, onUsePowerup]);
-  const doHint = useCallback(() => {
-    if (pups.hint <= 0 || picked !== null || eliminated.length) return;
+  // 50/50: remove two of the wrong options.
+  const doFifty = useCallback(() => {
+    if (pups.fifty <= 0 || picked !== null || eliminated.length) return;
     const wrong = cur.options.map((_, i) => i).filter((i) => i !== cur.correctIndex);
     for (let x = wrong.length - 1; x > 0; x--) { const j = Math.floor(Math.random() * (x + 1)); [wrong[x], wrong[j]] = [wrong[j], wrong[x]]; }
-    setPups((p) => ({ ...p, hint: p.hint - 1 })); setUsed((u) => ({ ...u, hint: u.hint + 1 })); onUsePowerup?.("hint");
+    setPups((p) => ({ ...p, fifty: p.fifty - 1 })); setUsed((u) => ({ ...u, fifty: u.fifty + 1 })); onUsePowerup?.("fifty");
     setEliminated(wrong.slice(0, 2));   // hide two wrong options
-  }, [pups.hint, picked, eliminated, cur, onUsePowerup]);
+  }, [pups.fifty, picked, eliminated, cur, onUsePowerup]);
+  // Hint: an actual clue about the answer (first letter + its length), without
+  // revealing it outright.
+  const doHint = useCallback(() => {
+    if (pups.hint <= 0 || picked !== null || hintText) return;
+    const ans = String(cur.options[cur.correctIndex] || "").trim();
+    const first = ans.charAt(0).toUpperCase();
+    const letters = ans.replace(/[^\p{L}\p{N}]/gu, "").length;
+    setPups((p) => ({ ...p, hint: p.hint - 1 })); setUsed((u) => ({ ...u, hint: u.hint + 1 })); onUsePowerup?.("hint");
+    setHintText((t.arenaHintText || 'Starts with "{c}" · {n} letters').replace("{c}", first || "?").replace("{n}", letters));
+  }, [pups.hint, picked, hintText, cur, onUsePowerup, t]);
   const doSkip = useCallback(() => { if (pups.skip <= 0 || picked !== null) return; setPups((p) => ({ ...p, skip: p.skip - 1 })); setUsed((u) => ({ ...u, skip: u.skip + 1 })); onUsePowerup?.("skip"); advance(qi + 1); }, [pups.skip, picked, advance, qi, onUsePowerup]);
 
   const timerPct = Math.max(0, Math.min(100, (timeLeft / timerFor(qi)) * 100));
   const low = timeLeft <= 4 && !frozen && !tabHidden;
 
   const box = { background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", borderRadius: 14 };
-  const pupLabel = { freeze: t.arenaFreeze || "Freeze", hint: t.arenaHint || "Hint", skip: t.arenaSkip || "Skip" };
+  const pupLabel = { hint: t.arenaHint || "Hint", fifty: t.arenaFifty || "50/50", freeze: t.arenaFreeze || "Freeze", skip: t.arenaSkip || "Skip" };
+  const pupFn = { hint: doHint, fifty: doFifty, freeze: doFreeze, skip: doSkip };
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "16px 16px 28px", width: "100%", boxSizing: "border-box" }}>
@@ -167,6 +181,14 @@ export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUseP
         <div style={{ fontSize: 18, fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.35 }}>{cur.question}</div>
       </div>
 
+      {/* hint clue (from the hint power-up) */}
+      {hintText && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--color-sel-tint)", border: "1px solid var(--color-accent)", borderRadius: 12, padding: "9px 13px", marginBottom: 12 }}>
+          <Icon name="bulb" size={15} style={{ color: "var(--color-accent)", flexShrink: 0 }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>{hintText}</span>
+        </div>
+      )}
+
       {/* options */}
       <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
         {cur.options.map((opt, i) => {
@@ -191,15 +213,15 @@ export default function ArenaGame({ questions, t, onEnd, initialPowerups, onUseP
       </div>
 
       {/* power-ups */}
-      <div style={{ display: "flex", gap: 9, marginTop: 16 }}>
-        {["freeze", "hint", "skip"].map((key) => {
+      <div style={{ display: "flex", gap: 7, marginTop: 16 }}>
+        {["hint", "fifty", "freeze", "skip"].map((key) => {
           const n = pups[key];
-          const disabled = n <= 0 || picked !== null || (key === "freeze" && frozen);
+          const disabled = n <= 0 || picked !== null || (key === "freeze" && frozen) || (key === "hint" && !!hintText) || (key === "fifty" && eliminated.length > 0);
           return (
             <button key={key} disabled={disabled}
-              onClick={() => { if (key === "freeze") doFreeze(); else if (key === "hint") doHint(); else doSkip(); }}
+              onClick={() => pupFn[key]()}
               style={{
-                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "9px 4px",
+                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "9px 3px",
                 background: n > 0 && !disabled ? "var(--color-sel-tint)" : "var(--color-background-secondary)",
                 border: `1px solid ${n > 0 && !disabled ? "var(--color-accent)" : "var(--color-border-tertiary)"}`,
                 borderRadius: 11, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, fontFamily: "inherit",
