@@ -2048,6 +2048,8 @@ export default function StudyQuiz() {
   const [friendSearching, setFriendSearching] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
   const [joinCodeInput, setJoinCodeInput] = useState("");
+  const [showAddFriend, setShowAddFriend] = useState(false); // add-friend modal (home + social)
+  const [showJoinGroup, setShowJoinGroup] = useState(false); // create/join-group modal (home + social)
   const [activeGroup, setActiveGroup] = useState(null); // loaded group detail
   const [groupBusy, setGroupBusy] = useState(false);
   const [groupTab, setGroupTab] = useState("board");    // board | library | activity
@@ -2152,7 +2154,7 @@ export default function StudyQuiz() {
     const r = await socialApi("groupCreate", { name });
     setSocialBusy(false);
     if (r.error) { setSocialErr(r.error); return; }
-    setGroupNameInput(""); srs.syncBadges({ groupJoin: true }); loadSocial();
+    setGroupNameInput(""); srs.syncBadges({ groupJoin: true }); setShowJoinGroup(false); loadSocial();
   }, [groupNameInput, socialBusy, loadSocial, srs]);
   const doJoinGroup = useCallback(async () => {
     const code = joinCodeInput.trim(); if (!code || socialBusy) return;
@@ -2160,8 +2162,11 @@ export default function StudyQuiz() {
     const r = await socialApi("groupJoin", { code });
     setSocialBusy(false);
     if (r.error) { setSocialErr(r.error); return; }
-    setJoinCodeInput(""); srs.syncBadges({ groupJoin: true }); loadSocial();
+    setJoinCodeInput(""); srs.syncBadges({ groupJoin: true }); setShowJoinGroup(false); loadSocial();
   }, [joinCodeInput, socialBusy, loadSocial, srs]);
+  // Quick social actions, reachable from the home (not only inside the tab).
+  const openAddFriend = useCallback(() => { if (requireLogin()) return; setFriendMsg(""); setFriendResults([]); setFriendInput(""); setSocialErr(""); setShowAddFriend(true); loadSocial(); }, [requireLogin, loadSocial]);
+  const openJoinGroup = useCallback(() => { if (requireLogin()) return; setGroupNameInput(""); setJoinCodeInput(""); setSocialErr(""); setShowJoinGroup(true); loadSocial(); }, [requireLogin, loadSocial]);
   const openGroup = useCallback(async (groupId) => {
     setGroupBusy(true); setActiveGroup(null); setGroupTab("board"); setScreen("group");
     const r = await socialApi("groupGet", { groupId });
@@ -2944,6 +2949,67 @@ export default function StudyQuiz() {
   const onboardingEl = showOnboarding
     ? <Onboarding t={t} langs={LANGS} initial={{ theme: settings.theme, lang, shareArena: settings.shareArena }} onFinish={finishOnboarding} />
     : null;
+  // Quick "add a friend" / "join a group" pop-ups, reachable from the home and
+  // from the social tab, so these actions are not buried inside a sub-tab.
+  const modalInput = {flex:1,minWidth:0,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-secondary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
+  const modalOverlay = {position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16};
+  const modalCard = {background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:18,padding:20,width:"100%",maxWidth:420,boxSizing:"border-box",maxHeight:"88vh",overflowY:"auto"};
+  const addFriendModalEl = showAddFriend ? (
+    <div style={modalOverlay} onClick={()=>setShowAddFriend(false)}>
+      <div onClick={e=>e.stopPropagation()} style={modalCard}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <span style={{fontSize:16,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{t.addFriend||"Add a friend"}</span>
+          <button onClick={()=>setShowAddFriend(false)} aria-label={t.cancelWord||"Close"} style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",display:"flex",padding:4}}><Icon name="x" size={18}/></button>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <input value={friendInput} onChange={e=>{setFriendInput(e.target.value);setFriendMsg("");}} placeholder={t.friendUsernamePh||"their username"} autoFocus onKeyDown={e=>{if(e.key==="Enter")doAddFriend();}} style={modalInput}/>
+          <button onClick={doAddFriend} disabled={socialBusy||!friendInput.trim()} style={{...Sb.btnPrimary,padding:"0 16px",fontSize:13,opacity:(socialBusy||!friendInput.trim())?0.45:1}}>{t.addWord||"Add"}</button>
+        </div>
+        {friendResults.length>0 && (
+          <div style={{marginTop:8,border:"1px solid var(--color-border-secondary)",borderRadius:10,overflow:"hidden"}}>
+            {friendResults.map((u,i)=>(
+              <div key={u.userId} onClick={()=>{ if(u.status!=="friends"&&u.status!=="pending") doAddFriendByName(u.username); }}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"9px 11px",borderBottom:i<friendResults.length-1?"0.5px solid var(--color-border-tertiary)":"none",cursor:(u.status==="friends"||u.status==="pending")?"default":"pointer"}}>
+                <AvatarInitial name={u.username} avatar={u.avatar} size={30}/>
+                <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.username}</span>
+                  <Flair rank={u.rank} badge={u.badge} t={t} small/>
+                </div>
+                {u.status==="friends" ? <span style={{fontSize:11.5,color:"var(--color-text-tertiary)",fontWeight:600,flexShrink:0}}>{t.friendAlready||"Friends"}</span>
+                  : u.status==="pending" ? <span style={{fontSize:11.5,color:"var(--color-text-tertiary)",fontWeight:600,flexShrink:0}}>{t.friendPendingWord||"Pending"}</span>
+                  : <span style={{fontSize:12,fontWeight:700,color:"var(--color-accent)",flexShrink:0}}>+ {t.addWord||"Add"}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        {friendSearching && friendResults.length===0 && friendInput.trim().length>=2 && <div style={{fontSize:11.5,color:"var(--color-text-tertiary)",marginTop:6}}>{t.friendSearching||"Searching..."}</div>}
+        {!friendSearching && friendResults.length===0 && friendInput.trim().length>=2 && !friendMsg && !socialErr && <div style={{fontSize:11.5,color:"var(--color-text-tertiary)",marginTop:6}}>{t.friendNoMatch||"No one found by that name."}</div>}
+        {friendMsg && <div style={{fontSize:12,color:"var(--color-text-success)",marginTop:8,fontWeight:600}}>{friendMsg}</div>}
+        {socialErr && <div style={{fontSize:12,color:"var(--color-text-danger)",marginTop:8}}>{socialErr}</div>}
+      </div>
+    </div>
+  ) : null;
+  const joinGroupModalEl = showJoinGroup ? (
+    <div style={modalOverlay} onClick={()=>setShowJoinGroup(false)}>
+      <div onClick={e=>e.stopPropagation()} style={modalCard}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <span style={{fontSize:16,fontWeight:700,color:"var(--color-text-primary)",fontFamily:"'Fraunces',Georgia,serif"}}>{t.socialTabGroups||"Groups"}</span>
+          <button onClick={()=>setShowJoinGroup(false)} aria-label={t.cancelWord||"Close"} style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",display:"flex",padding:4}}><Icon name="x" size={18}/></button>
+        </div>
+        <div style={{fontSize:12.5,fontWeight:700,color:"var(--color-text-secondary)",marginBottom:6}}>{t.groupCreateLabel||"Create a group"}</div>
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          <input value={groupNameInput} onChange={e=>setGroupNameInput(e.target.value)} placeholder={t.newGroupPh||"New group name"} onKeyDown={e=>{if(e.key==="Enter")doCreateGroup();}} style={modalInput}/>
+          <button onClick={doCreateGroup} disabled={socialBusy||!groupNameInput.trim()} style={{...Sb.btnPrimary,padding:"0 16px",fontSize:13,opacity:(socialBusy||!groupNameInput.trim())?0.45:1}}>{t.createWord||"Create"}</button>
+        </div>
+        <div style={{fontSize:12.5,fontWeight:700,color:"var(--color-text-secondary)",marginBottom:6}}>{t.groupJoinLabel||"Join with a code"}</div>
+        <div style={{display:"flex",gap:8}}>
+          <input value={joinCodeInput} onChange={e=>setJoinCodeInput(e.target.value)} placeholder={t.joinCodePh||"Invite code"} onKeyDown={e=>{if(e.key==="Enter")doJoinGroup();}} style={modalInput}/>
+          <button onClick={doJoinGroup} disabled={socialBusy||!joinCodeInput.trim()} style={{...Sb.btnOutline,padding:"0 16px",fontSize:13,opacity:(socialBusy||!joinCodeInput.trim())?0.45:1}}>{t.joinWord||"Join"}</button>
+        </div>
+        {socialErr && <div style={{fontSize:12,color:"var(--color-text-danger)",marginTop:10}}>{socialErr}</div>}
+      </div>
+    </div>
+  ) : null;
   // Tick a coached day off (once) when its quiz/exam results appear.
   useEffect(() => {
     if (!planSession) return;
@@ -2963,12 +3029,17 @@ export default function StudyQuiz() {
     <div style={Sb.root}><style>{CSS}</style>
       <ActivatingOverlay show={activating}/>
       {badgeToastEl}{rankToastEl}{streakToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
-      {joinPreviewEl}{streakInfoEl}{onboardingEl}
+      {joinPreviewEl}{streakInfoEl}{onboardingEl}{addFriendModalEl}{joinGroupModalEl}
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(35,31,26,0.16)"}}>{t.welcomePro}</div>}
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
           <div className="rv-hero-top">
+            {/* Back to the marketing site, top-left, browser web app only (the
+                installed app has no site to step out to). */}
+            {!isStandalone
+              ? <button onClick={()=>navigate("/")} title={t.mainSite} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.8)",fontFamily:"inherit",padding:0,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5,flexShrink:0}}>← {t.mainSite||"Main site"}</button>
+              : <span aria-hidden="true"/>}
             <div className="rv-hero-tools">
               {authLoading ? (
                 // Restoring the session: hold a placeholder so signed-in users
@@ -3009,13 +3080,13 @@ export default function StudyQuiz() {
       <div className="rv-home-body" style={{padding:"20px 16px 32px"}}>
         {/* App settings, sitting just under the hero (not on it). Opens the
             settings panel on its Preferences pane (theme, sound, language). */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:14}}>
-          {/* Link back to the marketing site, but only in the browser web app.
-              The installed (standalone) app hides it, since there is no site to
-              step out to there. */}
-          {!isStandalone
-            ? <button onClick={()=>navigate("/")} title={t.mainSite} style={{display:"inline-flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-tertiary)",fontSize:12.5,fontWeight:600,padding:"4px 2px"}}>← {t.mainSite||"Main site"}</button>
-            : <span aria-hidden="true"/>}
+        {/* Quick social actions + app settings. Add-friend / join-group live here
+            (not buried in the social tab) so they are one tap from the home. */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap",rowGap:8}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <button onClick={openAddFriend} style={{display:"inline-flex",alignItems:"center",gap:6,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:10,padding:"8px 12px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:12.5,fontWeight:600}}><Icon name="users" size={15}/>{t.addFriend||"Add a friend"}</button>
+            <button onClick={openJoinGroup} style={{display:"inline-flex",alignItems:"center",gap:6,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:10,padding:"8px 12px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:12.5,fontWeight:600}}><Icon name="users" size={15}/>{t.joinGroup||"Join a group"}</button>
+          </div>
           <button onClick={()=>openSettings("prefs")} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{display:"inline-flex",alignItems:"center",gap:7,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:10,padding:"8px 12px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:12.5,fontWeight:600}}>
             <Icon name="gear" size={16}/>{t.set?.title||"Settings"}
           </button>
@@ -3293,38 +3364,6 @@ export default function StudyQuiz() {
             </div>
             <button onClick={reviewLibrary} style={{...Sb.btnPrimary,width:"100%",marginTop:2,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><Icon name="layers" size={15}/>{t.libraryReview}</button>
             </>)}
-          </div>
-        )}
-        {/* #8: challenge activity, who took the quizzes this user shared, and
-            whether they beat the sender's score, to keep the rivalry going. */}
-        {challenges.length>0 && (
-          <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
-            <div onClick={()=>toggleCard("chalAct")} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-              <Medallion color="#d97706" size={36}><Icon name="trophy" size={19}/></Medallion>
-              <div style={{flex:1,minWidth:0,fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.challengeActivity}</div>
-              <span style={{flexShrink:0,color:"var(--color-text-tertiary)",display:"flex",transition:"transform .2s",transform:openCard.chalAct?"rotate(-90deg)":"rotate(90deg)"}}><Icon name="chevron" size={16}/></span>
-            </div>
-            {openCard.chalAct && <div style={{marginTop:12}}>{challenges.slice(0,4).map((c)=>{
-              const oPct = (c.ownerTotal>0) ? c.ownerScore/c.ownerTotal : null;
-              return (
-                <div key={c.id} style={{padding:"8px 0",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:4}}>
-                    <span style={{fontSize:12.5,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.title}</span>
-                    <span style={{flexShrink:0,fontSize:11,color:"var(--color-text-tertiary)"}}>{c.takerCount}{c.ownerTotal>0?` · ${t.challengeYou} ${c.ownerScore}/${c.ownerTotal}`:""}</span>
-                  </div>
-                  {c.takers.slice(0,3).map((tk,j)=>{
-                    const tPct = (tk.total>0) ? tk.score/tk.total : 0;
-                    const beat = oPct!=null ? tPct>oPct : null;
-                    return (
-                      <div key={j} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"2px 0"}}>
-                        <span style={{fontSize:12,color:"var(--color-text-secondary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tk.name} · {tk.score}/{tk.total}</span>
-                        {beat!=null && <span style={{flexShrink:0,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,color:beat?"var(--color-text-danger)":"var(--color-text-success)",background:beat?"var(--color-background-danger)":"var(--color-background-success)",border:`0.5px solid ${beat?"var(--color-border-danger)":"var(--color-border-success)"}`}}>{beat?t.challengeBeat:t.challengeAhead}</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}</div>}
           </div>
         )}
         {/* AI Study Coach, day-by-day exam plan */}
@@ -4576,7 +4615,7 @@ export default function StudyQuiz() {
   if (screen==="social") return (
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
-      {notifToastEl}
+      {notifToastEl}{addFriendModalEl}{joinGroupModalEl}
       <div style={Sb.topbar} className="rv-topbar">
         <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
         <span style={{fontSize:12,fontWeight:600,color:"var(--color-text-secondary)"}}>{t.socialTitle||"Friends & Groups"}</span><span/>
@@ -4604,36 +4643,31 @@ export default function StudyQuiz() {
           ]}/>
         </div>
         {socialTab==="friends" && (<>
-        {/* Add a friend */}
-        <div style={{...Sb.settingsBox,padding:"14px 16px",marginBottom:16}}>
-          <div style={{fontSize:13,fontWeight:700,color:"var(--color-text-primary)",marginBottom:8}}>{t.addFriend||"Add a friend"}</div>
-          <div style={{display:"flex",gap:8}}>
-            <input value={friendInput} onChange={e=>{setFriendInput(e.target.value);setFriendMsg("");}} placeholder={t.friendUsernamePh||"their username"} onKeyDown={e=>{if(e.key==="Enter")doAddFriend();}}
-              style={{flex:1,minWidth:0,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
-            <button onClick={doAddFriend} disabled={socialBusy||!friendInput.trim()} style={{...Sb.btnPrimary,padding:"0 16px",fontSize:13,opacity:(socialBusy||!friendInput.trim())?0.45:1}}>{t.addWord||"Add"}</button>
-          </div>
-          {/* Type-ahead matches: pick the right person even if the name isn't exact. */}
-          {friendResults.length>0 && (
-            <div style={{marginTop:8,border:"1px solid var(--color-border-secondary)",borderRadius:10,overflow:"hidden",background:"var(--color-background-primary)"}}>
-              {friendResults.map((u,i)=>(
-                <div key={u.userId} onClick={()=>{ if(u.status!=="friends"&&u.status!=="pending") doAddFriendByName(u.username); }}
-                  style={{display:"flex",alignItems:"center",gap:10,padding:"9px 11px",borderBottom:i<friendResults.length-1?"0.5px solid var(--color-border-tertiary)":"none",cursor:(u.status==="friends"||u.status==="pending")?"default":"pointer"}}>
-                  <AvatarInitial name={u.username} avatar={u.avatar} size={30}/>
-                  <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.username}</span>
-                    <Flair rank={u.rank} badge={u.badge} t={t} small/>
+        {/* Add a friend opens the pop-up (the same one the home uses). */}
+        <button onClick={openAddFriend} style={{width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,background:"var(--color-background-primary)",border:"1px dashed var(--color-border-secondary)",borderRadius:12,padding:"12px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:13,fontWeight:700,marginBottom:16}}><Icon name="users" size={16}/>{t.addFriend||"Add a friend"}</button>
+        {/* Leaderboard: you against your friends by XP. */}
+        {social?.friends?.length>0 && (()=>{
+          const me = { userId:"__me__", username: username||(t.youWord||"You"), avatar, xp: Number(myRankInfo.xp)||0, rank: myRankInfo.index, isMe:true };
+          const rows = [me, ...social.friends.map(f=>({ userId:f.userId, username:f.username, avatar:f.avatar, xp:Number(f.xp)||0, rank:f.rank }))].sort((a,b)=>b.xp-a.xp);
+          return (
+            <div style={{marginBottom:16}}>
+              <p style={Sb.secLabel}>{t.friendsLeaderboard||"Leaderboard"}</p>
+              <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,overflow:"hidden"}}>
+                {rows.map((r,i)=>(
+                  <div key={r.userId} style={{display:"flex",alignItems:"center",gap:11,padding:"10px 13px",borderTop:i>0?"0.5px solid var(--color-border-tertiary)":"none",background:r.isMe?"var(--color-sel-tint)":"transparent"}}>
+                    <span style={{width:20,textAlign:"center",fontSize:13,fontWeight:800,color:i===0?"#f59e0b":"var(--color-text-tertiary)",flexShrink:0}}>{i+1}</span>
+                    <AvatarInitial name={r.username} avatar={r.avatar} size={30}/>
+                    <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:13.5,fontWeight:r.isMe?800:600,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.username}</span>
+                      <Flair rank={r.rank} t={t} small/>
+                    </div>
+                    <span style={{fontSize:12.5,fontFamily:"monospace",fontWeight:700,color:"var(--color-accent)",flexShrink:0}}>{r.xp.toLocaleString()} XP</span>
                   </div>
-                  {u.status==="friends" ? <span style={{fontSize:11.5,color:"var(--color-text-tertiary)",fontWeight:600,flexShrink:0}}>{t.friendAlready||"Friends"}</span>
-                    : u.status==="pending" ? <span style={{fontSize:11.5,color:"var(--color-text-tertiary)",fontWeight:600,flexShrink:0}}>{t.friendPendingWord||"Pending"}</span>
-                    : <span style={{fontSize:12,fontWeight:700,color:"var(--color-accent)",flexShrink:0}}>+ {t.addWord||"Add"}</span>}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          )}
-          {friendSearching && friendResults.length===0 && friendInput.trim().length>=2 && <div style={{fontSize:11.5,color:"var(--color-text-tertiary)",marginTop:6}}>{t.friendSearching||"Searching..."}</div>}
-          {!friendSearching && friendResults.length===0 && friendInput.trim().length>=2 && !friendMsg && !socialErr && <div style={{fontSize:11.5,color:"var(--color-text-tertiary)",marginTop:6}}>{t.friendNoMatch||"No one found by that name."}</div>}
-          {friendMsg && <div style={{fontSize:11.5,color:"var(--color-text-success)",marginTop:6}}>{friendMsg}</div>}
-        </div>
+          );
+        })()}
         {/* Incoming requests */}
         {social?.incoming?.length>0 && (
           <div style={{marginBottom:16}}>
@@ -4666,7 +4700,34 @@ export default function StudyQuiz() {
             <NotifBubble n={unread.byFriend[f.userId]||0}/>
             <button onClick={(e)=>{e.stopPropagation(); if(typeof window!=="undefined" && window.confirm((t.removeFriendConfirm||"Remove {n} from your friends?").replace("{n}",f.username))) doRemoveFriend(f.userId);}} style={{flexShrink:0,background:"none",color:"var(--color-text-tertiary)",border:"none",fontSize:12,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:2}}>{t.removeWord||"Remove"}</button>
           </div>
-        )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)",marginBottom:8}}>{t.noFriends||"No friends yet. Add someone by their username above."}</div>}
+        )) : <div style={{fontSize:12.5,color:"var(--color-text-tertiary)",marginBottom:8}}>{t.noFriends||"No friends yet. Tap Add a friend to invite someone by their username."}</div>}
+        {/* Your challenges: who took the quizzes you shared, and whether they beat you. */}
+        {challenges.length>0 && (
+          <div style={{marginTop:18}}>
+            <p style={Sb.secLabel}>{t.challengeActivity||"Challenge activity"}</p>
+            {challenges.slice(0,6).map((c)=>{
+              const oPct = (c.ownerTotal>0) ? c.ownerScore/c.ownerTotal : null;
+              return (
+                <div key={c.id} style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"11px 13px",marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:(c.takers&&c.takers.length)?6:0}}>
+                    <span style={{fontSize:13,fontWeight:700,color:"var(--color-text-primary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.title}</span>
+                    <span style={{flexShrink:0,fontSize:11,color:"var(--color-text-tertiary)"}}>{c.takerCount}{c.ownerTotal>0?` · ${t.challengeYou||"You"} ${c.ownerScore}/${c.ownerTotal}`:""}</span>
+                  </div>
+                  {c.takers?.slice(0,3).map((tk,j)=>{
+                    const tPct = (tk.total>0) ? tk.score/tk.total : 0;
+                    const beat = oPct!=null ? tPct>oPct : null;
+                    return (
+                      <div key={j} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"2px 0"}}>
+                        <span style={{fontSize:12,color:"var(--color-text-secondary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tk.name} · {tk.score}/{tk.total}</span>
+                        {beat!=null && <span style={{flexShrink:0,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,color:beat?"var(--color-text-danger)":"var(--color-text-success)",background:beat?"var(--color-background-danger)":"var(--color-background-success)",border:`0.5px solid ${beat?"var(--color-border-danger)":"var(--color-border-success)"}`}}>{beat?(t.challengeBeat||"Beat you"):(t.challengeAhead||"You lead")}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
         </>)}
         {socialTab==="groups" && (<>
         {/* Groups */}
@@ -4682,16 +4743,9 @@ export default function StudyQuiz() {
             <span style={{fontSize:17,color:"var(--color-text-tertiary)"}}>›</span>
           </div>
         ))}
-        <div style={{display:"flex",gap:8,marginTop:6,marginBottom:8}}>
-          <input value={groupNameInput} onChange={e=>setGroupNameInput(e.target.value)} placeholder={t.newGroupPh||"New group name"} onKeyDown={e=>{if(e.key==="Enter")doCreateGroup();}}
-            style={{flex:1,minWidth:0,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
-          <button onClick={doCreateGroup} disabled={socialBusy||!groupNameInput.trim()} style={{...Sb.btnPrimary,padding:"0 16px",fontSize:13,opacity:(socialBusy||!groupNameInput.trim())?0.45:1}}>{t.createWord||"Create"}</button>
-        </div>
-        <div style={{display:"flex",gap:8}}>
-          <input value={joinCodeInput} onChange={e=>setJoinCodeInput(e.target.value)} placeholder={t.joinCodePh||"Join with a code"} onKeyDown={e=>{if(e.key==="Enter")doJoinGroup();}}
-            style={{flex:1,minWidth:0,borderRadius:10,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,padding:"10px 12px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
-          <button onClick={doJoinGroup} disabled={socialBusy||!joinCodeInput.trim()} style={{...Sb.btnOutline,padding:"0 16px",fontSize:13,opacity:(socialBusy||!joinCodeInput.trim())?0.45:1}}>{t.joinWord||"Join"}</button>
-        </div>
+        {(!social?.groups || social.groups.length===0) && <div style={{fontSize:12.5,color:"var(--color-text-tertiary)",marginBottom:8}}>{t.noGroups||"No groups yet. Create one or join with a code."}</div>}
+        {/* Create or join opens the pop-up (the same one the home uses). */}
+        <button onClick={openJoinGroup} style={{width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,background:"var(--color-background-primary)",border:"1px dashed var(--color-border-secondary)",borderRadius:12,padding:"12px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:13,fontWeight:700,marginTop:6}}><Icon name="users" size={16}/>{t.joinGroup||"Create or join a group"}</button>
         </>)}
       </div>
       {showSettings && <SettingsPanel draft={settingsDraft} initialTab={settingsTab} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("material");}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}

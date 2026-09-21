@@ -95,7 +95,7 @@ export const CSS = `
   ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--color-border-primary);border-radius:5px;border:2px solid transparent;background-clip:content-box}::-webkit-scrollbar-thumb:hover{background:var(--color-text-tertiary);background-clip:content-box}::-webkit-scrollbar-track{background:transparent}
 
   /* Hero (mobile base, stacks: back, brand bar, headline, sub, CTA) */
-  .rv-hero-top{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-bottom:14px;}
+  .rv-hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;}
   .rv-hero-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;}
   .rv-hero-tools{display:flex;align-items:center;gap:10px;}
   .rv-hero-sub{margin-top:14px!important;}
