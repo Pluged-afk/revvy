@@ -444,6 +444,22 @@ export function StudyProvider({ children }) {
     commit((p) => ({ ...p, cards: (p.cards || []).filter((c) => c.id !== id) }));
   }, [commit]);
   const clearAll = useCallback(() => commit((p) => ({ ...p, cards: [] })), [commit]);
+  // Wipe the learner's private material: uploaded library, review deck, per-topic
+  // stats, saved question bank and adaptive-difficulty memory, on this device AND
+  // on the server. Lifetime stats, streak, badges, rank, rewards and mock scores
+  // are kept. Anything the AI already contributed to the public arena lives in a
+  // separate pooled table, so it stays. Nothing private survives.
+  const clearMaterial = useCallback(async () => {
+    commit((p) => ({ ...p, cards: [], topicStats: {}, perf: normPerf({}), bank: normBank({}), library: normLibrary({}), stats: { ...normStats(p.stats), answered: 0, correct: 0 } }));
+    try {
+      const token = await getToken?.();
+      if (token) await fetch("/api/study", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "clearMaterial" }),
+      });
+    } catch { /* the debounced blob save clears the server copy too */ }
+  }, [commit, getToken]);
   const setExamDate = useCallback((d) => commit((p) => ({ ...p, examDate: d || null })), [commit]);
 
   const recordSession = useCallback((answered = 0, correct = 0) => {
@@ -721,7 +737,7 @@ export function StudyProvider({ children }) {
   const value = {
     cards: data.cards, examDate: data.examDate, stats: data.stats, plans: data.plans, topicStats: data.topicStats, perf: data.perf, bank: data.bank, library: data.library, mockScores: data.mockScores,
     wallet: data.wallet, streakSavers: data.streakSavers, savedProgress: data.savedProgress, badges: data.badges,
-    addMissed, grade, removeCard, clearAll, setExamDate, recordSession, recordTopics, recordPerf,
+    addMissed, grade, removeCard, clearAll, clearMaterial, setExamDate, recordSession, recordTopics, recordPerf,
     completeActivity, usePowerup, grantPowerups, recordChallengeResult,
     syncBadges, equipBadge, setBadgesPublic, markBadgesSeen,
     notif: data.notif, markNotifSeen, setNotifPref,

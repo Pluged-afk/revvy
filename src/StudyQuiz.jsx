@@ -2076,6 +2076,21 @@ export default function StudyQuiz() {
   // Which collapsible home cards are expanded (default collapsed to a tidy header).
   const [openCard, setOpenCard] = useState({});
   const toggleCard = useCallback((k) => setOpenCard((o) => ({ ...o, [k]: !o[k] })), []);
+  const [confirmClearMat, setConfirmClearMat] = useState(false); // "remove all my material" guard
+  const [clearingMat, setClearingMat] = useState(false);
+  // PWA: when Revyy is launched as an installed app (standalone display mode),
+  // drop the marketing chrome (the "main site" link and the landing headline) so
+  // the home reads as an app dashboard, not a web page.
+  const [isStandalone, setIsStandalone] = useState(false);
+  useEffect(() => {
+    try {
+      const mq = window.matchMedia("(display-mode: standalone)");
+      const check = () => setIsStandalone(!!(mq.matches || window.navigator.standalone === true || /(^|[?&])src=pwa/.test(window.location.search) || document.referrer.startsWith("android-app://")));
+      check();
+      if (mq.addEventListener) mq.addEventListener("change", check); else mq.addListener?.(check);
+      return () => { if (mq.removeEventListener) mq.removeEventListener("change", check); else mq.removeListener?.(check); };
+    } catch { /* ignore */ }
+  }, []);
   const loadSocial = useCallback(async () => {
     setSocialBusy(true);
     const r = await socialApi("social");
@@ -2945,7 +2960,7 @@ export default function StudyQuiz() {
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
           <div className="rv-hero-top">
-            <button onClick={()=>navigate("/")} title={t.mainSite} className="rv-hero-back" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.78)",fontFamily:"inherit",padding:0,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}>← {t.mainSite}</button>
+            {isStandalone ? <span aria-hidden="true"/> : <button onClick={()=>navigate("/")} title={t.mainSite} className="rv-hero-back" style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.78)",fontFamily:"inherit",padding:0,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}>← {t.mainSite}</button>}
             <div className="rv-hero-tools">
               {authLoading ? (
                 // Restoring the session: hold a placeholder so signed-in users
@@ -2979,8 +2994,12 @@ export default function StudyQuiz() {
               {isPro && <span style={{marginLeft:7,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:800,letterSpacing:0.8,color:"#422006",background:"linear-gradient(135deg,#fde68a,#f59e0b)",boxShadow:"0 2px 8px rgba(245,158,11,0.35)"}}>PRO</span>}
               <DevBadge/></span>
           </div>
-          <h1 className="rv-hero-head" style={Sb.h1}>{t.tagline}</h1>
-          <p className="rv-hero-sub" style={{fontSize:14,color:"var(--color-accent)",lineHeight:1.6,margin:0,maxWidth:300}}>{t.sub}</p>
+          {isStandalone ? (
+            <h1 className="rv-hero-head" style={{...Sb.h1,fontSize:26}}>{user ? `${t.appWelcome||"Welcome back"}${username?`, ${username}`:""}` : (t.appWelcome||"Welcome back")}</h1>
+          ) : (<>
+            <h1 className="rv-hero-head" style={Sb.h1}>{t.tagline}</h1>
+            <p className="rv-hero-sub" style={{fontSize:14,color:"var(--color-accent)",lineHeight:1.6,margin:0,maxWidth:300}}>{t.sub}</p>
+          </>)}
         </div>
       </div>
 
@@ -3329,6 +3348,23 @@ export default function StudyQuiz() {
             </div>
           );
         })()}
+            {/* Remove all my material: wipes the private library + review data,
+                here and on the server. Public arena contributions are pooled
+                anonymously elsewhere and stay. */}
+            <div style={{marginTop:24,borderTop:"1px solid var(--color-border-tertiary)",paddingTop:18}}>
+              {!confirmClearMat ? (
+                <button onClick={()=>setConfirmClearMat(true)} style={{width:"100%",background:"none",border:"1px solid var(--color-border-danger)",color:"var(--color-text-danger)",borderRadius:12,padding:"11px 14px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}}><Icon name="trash" size={15}/>{t.matClearBtn||"Remove all my material"}</button>
+              ) : (
+                <div style={{background:"var(--color-background-danger)",border:"1px solid var(--color-border-danger)",borderRadius:12,padding:"14px 16px"}}>
+                  <div style={{fontSize:13.5,fontWeight:700,color:"var(--color-text-danger)",marginBottom:6}}>{t.matClearConfirmTitle||"Remove all your material?"}</div>
+                  <div style={{fontSize:12.5,color:"var(--color-text-secondary)",lineHeight:1.5,marginBottom:13}}>{t.matClearConfirmBody||"This permanently deletes your uploaded library, review deck and topic stats from this device and our servers. Your rank, badges, streak and rewards stay. This cannot be undone."}</div>
+                  <div style={{display:"flex",gap:10}}>
+                    <button disabled={clearingMat} onClick={async()=>{ setClearingMat(true); try{ await srs.clearMaterial(); }finally{ setClearingMat(false); setConfirmClearMat(false); } }} style={{flex:1,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,cursor:clearingMat?"default":"pointer",fontFamily:"inherit",opacity:clearingMat?0.6:1}}>{clearingMat?(t.matClearing||"Removing..."):(t.matClearYes||"Yes, remove everything")}</button>
+                    <button disabled={clearingMat} onClick={()=>setConfirmClearMat(false)} style={{flex:1,background:"var(--color-background-secondary)",color:"var(--color-text-primary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.cancelWord||"Cancel"}</button>
+                  </div>
+                </div>
+              )}
+            </div>
           </>)}
         </div>
         <ResumeModal info={examResume} onResume={resumeExam} onDiscard={discardResume} fmtClock={fmtClock}/>

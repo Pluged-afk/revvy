@@ -44,6 +44,7 @@ export function useSRS() {
     grade: study?.grade || (() => {}),
     removeCard: study?.removeCard || (() => {}),
     clearAll: study?.clearAll || (() => {}),
+    clearMaterial: study?.clearMaterial || (() => {}),
     examDate, setExamDate: study?.setExamDate || (() => {}), daysToExam,
     topicStats: study?.topicStats || {}, recordTopics: study?.recordTopics || (() => {}),
     perf: study?.perf || { recent: [] }, recordPerf: study?.recordPerf || (() => {}),

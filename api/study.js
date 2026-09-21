@@ -1689,6 +1689,24 @@ async function runReminders(req, res) {
   return res.status(200).json({ ok: true, sent, considered: rows.length });
 }
 
+// Wipe a user's PRIVATE study material from the server blob: the uploaded
+// library, review deck, per-topic stats, saved question bank and the adaptive-
+// difficulty memory. Lifetime stats, streak, rewards, badges/rank and mock
+// scores are left untouched. What the AI already contributed to the public
+// Endless Arena lives in the separate, anonymized gk_pool table, so it is never
+// touched here. Everything private is removed. Idempotent.
+async function clearMaterial(req, res, userId) {
+  const rows = await sql`SELECT data FROM study_data WHERE clerk_user_id = ${userId} LIMIT 1`;
+  const cur = (rows[0]?.data && typeof rows[0].data === "object" && !Array.isArray(rows[0].data)) ? rows[0].data : {};
+  const curStats = (cur.stats && typeof cur.stats === "object" && !Array.isArray(cur.stats)) ? cur.stats : {};
+  const cleaned = { ...cur, cards: [], topicStats: {}, perf: {}, bank: {}, library: {}, stats: { ...curStats, answered: 0, correct: 0 }, updatedAt: Date.now() };
+  await sql`
+    INSERT INTO study_data (clerk_user_id, data, updated_at)
+    VALUES (${userId}, ${JSON.stringify(cleaned)}::jsonb, NOW())
+    ON CONFLICT (clerk_user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`;
+  return res.status(200).json({ ok: true });
+}
+
 export default async function handler(req, res) {
   try {
     await ensureTables();
@@ -1755,6 +1773,7 @@ export default async function handler(req, res) {
       if (body?.action === "challengeList") return challengeList(req, res, body, userId);
       if (body?.action === "challengeGet") return challengeGet(req, res, body, userId);
       if (body?.action === "challengeSubmit") return challengeSubmit(req, res, body, userId);
+      if (body?.action === "clearMaterial") return clearMaterial(req, res, userId);
 
       // Default: save the user's study blob.
       const data = body?.data;

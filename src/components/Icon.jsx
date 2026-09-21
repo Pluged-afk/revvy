@@ -217,6 +217,14 @@ const PATHS = {
       <path d="M12 17h.01" />
     </>
   ),
+  trash: (
+    <>
+      <path d="M4 7h16" />
+      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+      <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+      <path d="M10 11v6M14 11v6" />
+    </>
+  ),
   x: <path d="M6 6l12 12M18 6L6 18" />,
   pause: <path d="M9 5v14M15 5v14" />,
   play: <path d="M8 5.5v13l11-6.5z" />,
