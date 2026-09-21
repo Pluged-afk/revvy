@@ -2082,6 +2082,24 @@ export default function StudyQuiz() {
   const toggleCard = useCallback((k) => setOpenCard((o) => ({ ...o, [k]: !o[k] })), []);
   const [confirmClearMat, setConfirmClearMat] = useState(false); // "remove all my material" guard
   const [clearingMat, setClearingMat] = useState(false);
+  // Installed-app (standalone) detection, so the "Main site" link shows only in
+  // the browser web app and not in the downloaded PWA (where there is no site to
+  // step out to). display-mode is evaluated per window, so it correctly tells a
+  // standalone PWA window apart from an ordinary browser tab of the same origin
+  // (they share localStorage, so a persisted flag would not). Seeded synchronously
+  // to avoid a flash of the link on launch.
+  const [isStandalone, setIsStandalone] = useState(() => {
+    try { return !!(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator?.standalone === true; } catch { return false; }
+  });
+  useEffect(() => {
+    try {
+      const mq = window.matchMedia("(display-mode: standalone)");
+      const check = () => setIsStandalone(!!(mq.matches || window.navigator.standalone === true || document.referrer.startsWith("android-app://")));
+      check();
+      if (mq.addEventListener) mq.addEventListener("change", check); else mq.addListener?.(check);
+      return () => { if (mq.removeEventListener) mq.removeEventListener("change", check); else mq.removeListener?.(check); };
+    } catch { /* ignore */ }
+  }, []);
   const loadSocial = useCallback(async () => {
     setSocialBusy(true);
     const r = await socialApi("social");
@@ -2991,7 +3009,13 @@ export default function StudyQuiz() {
       <div className="rv-home-body" style={{padding:"20px 16px 32px"}}>
         {/* App settings, sitting just under the hero (not on it). Opens the
             settings panel on its Preferences pane (theme, sound, language). */}
-        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:14}}>
+          {/* Link back to the marketing site, but only in the browser web app.
+              The installed (standalone) app hides it, since there is no site to
+              step out to there. */}
+          {!isStandalone
+            ? <button onClick={()=>navigate("/")} title={t.mainSite} style={{display:"inline-flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-tertiary)",fontSize:12.5,fontWeight:600,padding:"4px 2px"}}>← {t.mainSite||"Main site"}</button>
+            : <span aria-hidden="true"/>}
           <button onClick={()=>openSettings("prefs")} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{display:"inline-flex",alignItems:"center",gap:7,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:10,padding:"8px 12px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:12.5,fontWeight:600}}>
             <Icon name="gear" size={16}/>{t.set?.title||"Settings"}
           </button>
