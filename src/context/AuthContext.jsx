@@ -48,6 +48,21 @@ export function AuthProvider({ children }) {
     };
   }, [isSignedIn, clerkUser]);
 
+  // Remember who last signed in on THIS browser (email + first name only), so
+  // the login screen can greet them and pre-fill their email for a one-tap
+  // return. Clerk already keeps the session itself persistent; this just makes
+  // the occasional re-login (new device, cleared cookies, expired session) fast.
+  // Kept across sign-out on purpose; only account deletion clears it.
+  useEffect(() => {
+    if (!isSignedIn || !clerkUser) return;
+    try {
+      localStorage.setItem("revyy_last_account", JSON.stringify({
+        email: clerkUser.primaryEmailAddress?.emailAddress || "",
+        name: clerkUser.firstName || clerkUser.username || "",
+      }));
+    } catch { /* ignore */ }
+  }, [isSignedIn, clerkUser]);
+
   // Read the profile FRESH from Neon via the serverless API (token-verified
   // server-side). Never cached in localStorage. Returns is_pro (bool) or null
   // if the read failed (lets pollers keep trying).
@@ -209,6 +224,7 @@ export function AuthProvider({ children }) {
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ action: "delete" }),
       });
+      try { localStorage.removeItem("revyy_last_account"); } catch { /* ignore */ }
       await clerkUser.delete();   // ends the session
       return {};
     } catch (e) {
