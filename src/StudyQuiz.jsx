@@ -3058,26 +3058,32 @@ export default function StudyQuiz() {
             </div>
           </div>
         )}
-        {/* Primary destinations: the quiz builder, mock exams, the ranked arena
-            and the learner's own material (progress, accuracy, review deck). */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
+        {/* Primary modes: the quiz builder, mock exams and the ranked arena. */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
           {[
             {title:t.homeQuizTitle||"Quiz", sub:t.homeQuizSub||"From your notes", icon:"notes", color:"#4338ca", onClick:()=>setScreen("upload")},
             {title:t.homeMockTitle||"Mock exams", sub:t.homeMockSub||"Real test practice", icon:"cap", color:"#b45309", onClick:()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }},
             {title:t.homeArenaTitle||"Arena", sub:t.homeArenaSub||"Ranked trivia", icon:"bolt", color:"#7c3aed", onClick:openArena},
-            {title:t.homeMaterialLabel||"Your material", sub:t.matTabSub||"Progress & accuracy", icon:"chart", color:"#0d9488", onClick:()=>{ if(requireLogin())return; setScreen("material"); }, badge:srs.dueCount||0},
           ].map((m,i)=>(
-            <div key={i} onClick={m.onClick} className="rv-tile" style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 13px",cursor:"pointer",display:"flex",flexDirection:"column",gap:9,minWidth:0}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
-                <Medallion color={m.color} size={38}><Icon name={m.icon} size={19}/></Medallion>
-                {m.badge>0 && <NotifBubble n={m.badge}/>}
-              </div>
+            <div key={i} onClick={m.onClick} className="rv-tile" style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 12px",cursor:"pointer",display:"flex",flexDirection:"column",gap:9,minWidth:0}}>
+              <Medallion color={m.color} size={38}><Icon name={m.icon} size={19}/></Medallion>
               <div style={{minWidth:0}}>
-                <div style={{fontWeight:700,fontSize:13.5,color:"var(--color-text-primary)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.title}</div>
-                <div style={{fontSize:10.5,color:"var(--color-text-secondary)",lineHeight:1.35}}>{m.sub}</div>
+                <div style={{fontWeight:700,fontSize:13.5,color:"var(--color-text-primary)",lineHeight:1.25}}>{m.title}</div>
+                <div style={{fontSize:10.5,color:"var(--color-text-secondary)",lineHeight:1.35,marginTop:1}}>{m.sub}</div>
               </div>
             </div>
           ))}
+        </div>
+        {/* Your material: a full-width row (like the daily goal), the learner's
+            progress / accuracy / review deck. */}
+        <div onClick={()=>{ if(requireLogin())return; setScreen("material"); }} className="rv-tile" style={{display:"flex",alignItems:"center",gap:14,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",cursor:"pointer",marginBottom:18}}>
+          <Medallion color="#0d9488" size={40}><Icon name="chart" size={20}/></Medallion>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.homeMaterialLabel||"Your material"}</div>
+            <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.matTabSub||"Progress & accuracy"}</div>
+          </div>
+          {srs.dueCount>0 && <NotifBubble n={srs.dueCount}/>}
+          <span style={{flexShrink:0,color:"var(--color-text-tertiary)",display:"flex"}}><Icon name="chevron" size={18}/></span>
         </div>
         {/* Quick-nav tiles: friends, badges, leaderboard side by side (wrap on
             mobile) so they read as a compact dashboard, not a tall stack. Shown
