@@ -3497,25 +3497,6 @@ export default function StudyQuiz() {
                   <div style={sub}>{isPro?(t.examUnlimitedSub||"Unlimited custom exams"):(examAdBusy?t.loadingAd:examUsed?t.examAdUsed:unlocks.examUnlocked()?t.examAdUnlocked:t.examAdWatch)}</div>
                 </div>
               </div>
-              {/* Mock exams */}
-              <div onClick={()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }} style={{...tileShell,cursor:"pointer"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
-                  <span style={tile}><Icon name="cap" size={18}/></span>
-                  {!isPro && <span style={pill("#f59e0b")}>PRO</span>}
-                </div>
-                <div style={{minWidth:0}}>
-                  <div style={ttl}>{t.mockCardTitle}</div>
-                  <div style={sub}>{t.mockCardSub}</div>
-                </div>
-              </div>
-              {/* Endless Arena */}
-              <div onClick={openArena} style={{...tileShell,cursor:"pointer"}}>
-                <span style={tile}><Icon name="bolt" size={18}/></span>
-                <div style={{minWidth:0}}>
-                  <div style={ttl}>{t.arenaEntry}</div>
-                  <div style={sub}>{t.arenaEntrySub}</div>
-                </div>
-              </div>
             </div>
           );
         })()}
