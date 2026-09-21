@@ -1076,10 +1076,13 @@ export default function StudyQuiz() {
     // For a single-type exam, treat the whole thing as one "section" so the same
     // per-question / total marking the custom builder uses applies here too.
     const singleMarks = sectionPerQMarks({ count: totalQ, markMode: examMarkMode, sectionMarks: examTotalMarks, marksPerQ: examMarksPerQ });
+    const clampWords=(v,def)=>{const n=parseInt(v);return Number.isFinite(n)?Math.max(20,Math.min(2000,n)):def;};
     const examPlan = examMode==="custom"
-      ? examSections.map((s,i)=>({ section:i+1, type:(["mcq","fill","written","essay","diagram","match"].includes(s.type)?s.type:"mcq"), marks:sectionPerQMarks(s), count:Math.min(Math.max(parseInt(s.count)||5,1),100) }))
+      ? examSections.map((s,i)=>({ section:i+1, type:(["mcq","fill","written","essay","diagram","match"].includes(s.type)?s.type:"mcq"), marks:sectionPerQMarks(s), count:Math.min(Math.max(parseInt(s.count)||5,1),100), ...(s.type==="essay"?{minWords:clampWords(s.minWords,250),maxWords:clampWords(s.maxWords,600)}:{}) }))
       : [{ section:1, type:(examMode==="written"?"written":"mcq"), marks:singleMarks, count: totalQ }];
-    const examMarksMap = {}; examPlan.forEach((s)=>{ examMarksMap[s.section]=s.marks; });
+    // For essay sections, keep min<=max so the target range always reads sensibly.
+    examPlan.forEach((s)=>{ if(s.type==="essay" && s.minWords>s.maxWords){ const m=s.minWords; s.minWords=s.maxWords; s.maxWords=m; } });
+    const examMarksMap = {}; const examWordsMap = {}; examPlan.forEach((s)=>{ examMarksMap[s.section]=s.marks; if(s.type==="essay") examWordsMap[s.section]={min:s.minWords,max:s.maxWords}; });
 
     // A diagram section marks parts on the learner's own image, so it needs one.
     const firstImg = examFiles.find(f=>f.type==="image");
@@ -1124,7 +1127,7 @@ export default function StudyQuiz() {
           : type==="match"
           ? `EXACTLY ${n} matching PAIRS to be matched term-to-definition; for each pair set "question" = a short term/concept and "answer" = its matching definition; keep every term distinct and every definition clearly belonging to exactly one term; set options to []`
           : type==="essay"
-          ? `EXACTLY ${n} open-ended ESSAY questions, each a substantial prompt that asks for a structured, multi-paragraph argument or explanation; "answer" = a model answer or the key points a strong response must cover; set options to []`
+          ? `EXACTLY ${n} open-ended ESSAY questions, each a substantial prompt that asks for a structured, multi-paragraph argument or explanation of about ${examWordsMap[section]?.min||250} to ${examWordsMap[section]?.max||600} words; "answer" = the key points, argument and evidence a strong essay of that length must cover; set options to []`
           : type==="diagram"
           ? `EXACTLY ${n} multiple-choice questions about the uploaded diagram/image, based ALL on the FIRST image; for each pick ONE distinct part, EXACTLY 4 "options", "correct" (0-based index of the right one) and "answer" (the correct option text); there is NO marker, so name the part clearly WITHIN the question by describing its position or appearance; if the image already prints labels on its parts do NOT ask "what is this part" (the label gives it away), ask about its function, role, what it connects to, or its step in the process instead; never ask something answerable by reading a printed label`
           : `EXACTLY ${n} open-ended written questions, each with a concise model answer in "answer"; set options to []`;
@@ -1194,6 +1197,8 @@ export default function StudyQuiz() {
         // fill: keep the accepted-alternative answers (bounded, de-dashed)
         ...(Array.isArray(q.accept) ? { accept: q.accept.filter(x=>typeof x==="string"&&x.trim()).slice(0,6).map(deDash) } : {}),
         marksPerQ: marksMap[q.section]||1,
+        // essay: carry the target word range through to the run UI + grading
+        ...(q.type==="essay"?{minWords:examWordsMap[q.section]?.min||250,maxWords:examWordsMap[q.section]?.max||600}:{}),
       }));
       // Collapse each MATCH section's pair-questions into ONE grouped entry: the
       // whole set is answered on a single matching grid and scored by the fraction
@@ -1237,19 +1242,24 @@ export default function StudyQuiz() {
     // question index, which counts MCQs too). A dedicated 1-based "n" keeps the
     // model's mapping unambiguous so feedback can't land on the wrong question.
     const writtenIdxs=examQs.map((q,i)=>isFreeText(q)?i:null).filter(x=>x!==null);
-    const writtenLines=writtenIdxs.map((qi,k)=>
-      "Answer #"+(k+1)+"\nQuestion: "+examQs[qi].question+
-      "\nModel answer: "+(examQs[qi].answer||"(none provided)")+
-      "\nStudent answer: \""+(answers[qi]||"(no answer)")+"\""
-    ).join("\n\n");
+    const wordCount=s=>{s=String(s||"").trim();return s?s.split(/\s+/).length:0;};
+    const writtenLines=writtenIdxs.map((qi,k)=>{
+      const q=examQs[qi], essay=q.type==="essay";
+      return "Answer #"+(k+1)+" ["+(essay?"ESSAY":"SHORT")+"]"+
+        (essay?" (target "+(q.minWords||250)+"-"+(q.maxWords||600)+" words; student wrote "+wordCount(answers[qi])+" words)":"")+
+        "\nQuestion: "+q.question+
+        "\nModel answer / key points: "+(q.answer||"(none provided)")+
+        "\nStudent answer: \""+(answers[qi]||"(no answer)")+"\"";
+    }).join("\n\n");
+    const hasEssay=writtenIdxs.some(qi=>examQs[qi].type==="essay");
     const evalPrompt=
-      "Grade the "+writtenIdxs.length+" written answers below, numbered #1 to #"+writtenIdxs.length+". "+
-      "Grade each student answer ONLY against the question and model answer under the SAME number, never carry over or mix answers between numbers. "+
-      "Each feedback must refer to that one answer only.\n"+
-      "Return ONLY JSON: {\"evals\":[{\"n\":1,\"score\":1.0,\"feedback\":\"brief\"}]} with exactly one entry per number, in order.\n"+
-      "score: 1=correct, 0.5=partial, 0=wrong.\n\n"+writtenLines;
-    // ~120 tokens of feedback per written answer; cap at 10k.
-    const evalMaxTokens=Math.min(Math.max(writtenIdxs.length*120+1000,2000),10000);
+      "You are grading "+writtenIdxs.length+" exam answers, numbered #1 to #"+writtenIdxs.length+". "+
+      "Grade each answer ONLY against the question and model answer under the SAME number; never carry over or mix answers between numbers. Each feedback refers to that one answer only.\n"+
+      "For answers tagged [SHORT]: score 1=correct, 0.5=partial, 0=wrong; one brief feedback sentence.\n"+
+      (hasEssay?"For answers tagged [ESSAY]: grade it like a real essay on a rubric - (1) a clear thesis or position, (2) structure and organisation, (3) use of relevant evidence and detail from the material, (4) clarity and depth of the argument, (5) language and grammar. Reward genuine insight; penalise off-topic, vague or unsupported writing, and do not reward padding. Also weigh whether it meets the target length: a response well under the target should lose marks. Give 2 to 3 sentences of specific, constructive feedback naming one strength and what to improve. score is a 0..1 fraction (e.g. 0.85), not just 0/0.5/1.\n":"")+
+      "Return ONLY JSON: {\"evals\":[{\"n\":1,\"score\":0.8,\"feedback\":\"...\"}]} with exactly one entry per number, in order.\n\n"+writtenLines;
+    // Essays need more room for rubric feedback than short answers do.
+    const evalMaxTokens=Math.min(Math.max(writtenIdxs.reduce((s,qi)=>s+(examQs[qi].type==="essay"?300:120),0)+1200,2500),12000);
     try{
       const res=await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json", ...(await authHeader())},
         body:JSON.stringify({model:AI_MODEL,max_tokens:evalMaxTokens,
@@ -4087,6 +4097,27 @@ export default function StudyQuiz() {
                           })}
                         </div>
                       </div>
+                      {sec.type==="essay" ? (<>
+                        {/* Essays are a few long prompts, not a big count. Set how
+                            many, plus the word range each response should hit. */}
+                        <div>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                            <span style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)"}}>{t.essaysUpperLbl||"ESSAYS"}</span>
+                            <span style={{fontWeight:700,fontSize:14,color:"var(--color-accent)"}}>{Math.min(Math.max(parseInt(sec.count)||1,1),5)}</span>
+                          </div>
+                          <input type="range" min={1} max={5} step={1} value={Math.min(Math.max(parseInt(sec.count)||1,1),5)} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
+                          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>5</span></div>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:6}}>{t.wordCountLbl||"WORD COUNT"}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                            <input type="number" min={20} max={2000} step={10} value={sec.minWords ?? 250} onChange={e=>updateSection(sec.id,"minWords",e.target.value)} style={{width:80,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
+                            <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{t.toWord||"to"}</span>
+                            <input type="number" min={20} max={2000} step={10} value={sec.maxWords ?? 600} onChange={e=>updateSection(sec.id,"maxWords",e.target.value)} style={{width:80,borderRadius:8,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)",fontSize:15,fontWeight:700,padding:"7px 6px",fontFamily:"inherit",outline:"none",textAlign:"center",boxSizing:"border-box"}}/>
+                            <span style={{fontSize:11.5,color:"var(--color-text-secondary)"}}>{t.wordsWord||"words"}</span>
+                          </div>
+                        </div>
+                      </>) : (
                       <div>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                           <span style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)"}}>{t.questionsUpperLbl}</span>
@@ -4095,6 +4126,7 @@ export default function StudyQuiz() {
                         <input type="range" min={1} max={examCap()} step={1} value={Math.min(Math.max(parseInt(sec.count)||1,1),examCap())} onChange={e=>updateSection(sec.id,"count",e.target.value)} style={{width:"100%",accentColor:"#4338ca",cursor:"pointer"}}/>
                         <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}><span>1</span><span>{examCap()}</span></div>
                       </div>
+                      )}
                       <div>
                         <div style={{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",marginBottom:4}}>{t.markingLbl}</div>
                         <Seg options={[["perQ",t.markPerQ],["total",t.markSection]]} value={sec.markMode||"perQ"} onChange={v=>updateSection(sec.id,"markMode",v)}/>
@@ -4110,7 +4142,9 @@ export default function StudyQuiz() {
                       </div>
                     </div>
                     <div style={{padding:"6px 14px 10px",fontSize:11,color:"var(--color-text-secondary)"}}>
-                      {(()=>{const cnt=parseInt(sec.count)||0, typeLbl=sec.type==="mcq"?t.typeMcqLower:sec.type==="fill"?t.typeFillLower:sec.type==="essay"?(t.qtEssay||"essay").toLowerCase():sec.type==="diagram"?t.quizTypes.diagram.toLowerCase():sec.type==="match"?t.quizTypes.match.toLowerCase():t.typeWrittenLower; return (sec.markMode||"perQ")==="total"
+                      {(()=>{const cnt=parseInt(sec.count)||0;
+                        if(sec.type==="essay"){ const mn=sec.minWords??250, mx=sec.maxWords??600; return <>{cnt} {cnt===1?(t.essayWord||"essay"):(t.essaysWord||"essays")} · {mn}-{mx} {t.wordsWord||"words"} · <strong>{secMarks} {t.marksWord}</strong> ({roundMarks(sectionPerQMarks(sec))} {t.marksEach})</>; }
+                        const typeLbl=sec.type==="mcq"?t.typeMcqLower:sec.type==="fill"?t.typeFillLower:sec.type==="diagram"?t.quizTypes.diagram.toLowerCase():sec.type==="match"?t.quizTypes.match.toLowerCase():t.typeWrittenLower; return (sec.markMode||"perQ")==="total"
                         ? <>{cnt} {typeLbl} {t.questionsLow} · <strong>{secMarks} {t.marksWord}</strong> ({roundMarks(sectionPerQMarks(sec))} {t.marksEach})</>
                         : <>{cnt} {typeLbl} {t.questionsLow} × {roundMarks(sectionPerQMarks(sec))} {t.marksWord} = <strong>{secMarks} {t.marksWord}</strong></>;})()}
                     </div>
@@ -4258,7 +4292,13 @@ export default function StudyQuiz() {
             </div>
           )}
           {q.type==="written"&&<textarea value={examAns[examIdx]||""} onChange={e=>setExamAns(prev=>({...prev,[examIdx]:e.target.value}))} placeholder={t.typeAnswer} style={{...Sb.textarea,height:150,marginBottom:0}}/>}
-          {q.type==="essay"&&<textarea value={examAns[examIdx]||""} onChange={e=>setExamAns(prev=>({...prev,[examIdx]:e.target.value}))} placeholder={t.typeAnswer} style={{...Sb.textarea,height:260,marginBottom:0}}/>}
+          {q.type==="essay"&&(()=>{ const txt=examAns[examIdx]||""; const wc=txt.trim()?txt.trim().split(/\s+/).length:0; const mn=q.minWords||250, mx=q.maxWords||600; const met=wc>=mn; return (<>
+            <textarea value={txt} onChange={e=>setExamAns(prev=>({...prev,[examIdx]:e.target.value}))} placeholder={t.typeAnswer} style={{...Sb.textarea,height:280,marginBottom:0}}/>
+            <div style={{marginTop:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,fontSize:12,color:"var(--color-text-secondary)"}}>
+              <span>{(t.wordTarget||"Target: {min}-{max} words").replace("{min}",mn).replace("{max}",mx)}</span>
+              <span style={{fontWeight:700,color:met?"var(--color-text-success)":"var(--color-text-tertiary)"}}>{(t.wordCountNow||"{n} words").replace("{n}",wc)}</span>
+            </div>
+          </>); })()}
           {q.type==="fill"&&<input value={examAns[examIdx]||""} onChange={e=>setExamAns(prev=>({...prev,[examIdx]:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter"){if(isLast)nextExam();else setExamIdx(i=>i+1);}}} placeholder={t.typeIn} style={{width:"100%",borderRadius:12,border:"1.5px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:16,padding:"13px 15px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>}
           {q.type!=="match"&&(
             <div style={{display:"flex",gap:10,marginTop:20}}>

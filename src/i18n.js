@@ -428,6 +428,7 @@ const T_EN = {
   upgradeExamNote:"Upgrade to Pro for up to 100 questions, custom sections and unlimited exams.",
   examSectionsLbl:"EXAM SECTIONS", addSectionBtn:"+ Add Section", sectionNum:"Section {n}", marksWord:"marks",
   questionTypeLbl:"QUESTION TYPE", qtWrittenOpen:"Written (Open)", qtEssay:"Essay", marksPerQLbl:"MARKS/Q", markingLbl:"MARKING", markPerQ:"Per question", markSection:"Section total", marksEach:"each", questionsUpperLbl:"QUESTIONS",
+  essaysUpperLbl:"ESSAYS", wordCountLbl:"WORD COUNT", toWord:"to", wordsWord:"words", essayWord:"essay", essaysWord:"essays", wordTarget:"Target: {min}-{max} words", wordCountNow:"{n} words",
   typeMcqLower:"multiple choice", typeFillLower:"fill-in-blank", typeWrittenLower:"written",
   totalExamLbl:"Total exam", timerLbl:"TIMER", enableTimer:"Enable Timer", timerDesc:"Add a countdown to the whole exam",
   totalExamTime:"Total exam time (minutes):",
