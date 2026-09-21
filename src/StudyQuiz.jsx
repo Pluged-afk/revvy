@@ -5140,7 +5140,7 @@ export default function StudyQuiz() {
       <div style={Sb.root}><style>{CSS}</style>
         <AdBanners isPro={isPro}/>
         <div style={Sb.topbar} className="rv-topbar">
-          <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← {t.backWord}</button>
+          <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
           <span style={Sb.brand}>{t.arenaTitle}</span><span/>
         </div>
         <div className="rv-center-narrow" style={{padding:"26px 16px 42px"}}>
@@ -5244,7 +5244,7 @@ export default function StudyQuiz() {
           <button style={{...Sb.btnPrimary,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>{ if(r.subject?.set) startSubjectArena(r.subject.set); else startArena(); }}><Icon name="repeat" size={16}/>{t.arenaPlayAgain}</button>
           {!r.subject && SHOW_ARENA_LEADERBOARD && arenaBoardUnlocked && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={openArenaBoard}><Icon name="trophy" size={16}/>{t.arenaLeaderboard}</button>}
           {r.subject && <button style={{...Sb.btnOutline,width:"100%",marginTop:10,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}} onClick={()=>setScreen("arena_intro")}><Icon name="bolt" size={16}/>{t.arenaOtherSubjects||"Pick another subject"}</button>}
-          <button style={{width:"100%",background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit",padding:"14px 4px 0"}} onClick={()=>setScreen("upload")}>{t.arenaHome}</button>
+          <button style={{width:"100%",background:"none",border:"none",color:"var(--color-text-tertiary)",fontSize:12.5,cursor:"pointer",fontFamily:"inherit",padding:"14px 4px 0"}} onClick={()=>setScreen("home")}>{t.arenaHome}</button>
         </div>
       </div>
     );
@@ -5348,7 +5348,7 @@ export default function StudyQuiz() {
     <div style={Sb.root}><style>{CSS}</style>
       <AdBanners isPro={isPro}/>
       <div style={Sb.topbar} className="rv-topbar">
-        <button style={Sb.backBtn} onClick={()=>setScreen("upload")}>← {t.backWord}</button>
+        <button style={Sb.backBtn} onClick={()=>setScreen("home")}>← {t.homeWord}</button>
         <span style={Sb.brand}>{t.mockTitle}</span><span/>
       </div>
       <div className="rv-center-narrow" style={{padding:"22px 16px 40px"}}>
