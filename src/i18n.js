@@ -70,6 +70,7 @@ const T_EN = {
   rewardEarned:"You earned a {p} power-up!", useHint:"Use a hint", useFifty:"50/50", hintUsed:"Two options removed",
   // Friends + study groups
   socialTitle:"Friends & Groups", socialSub:"Add friends, form study groups, share material and compare progress.",
+  homeQuizTitle:"Quiz", homeQuizSub:"From your notes", homeMockTitle:"Mock exams", homeMockSub:"Real test practice", homeArenaTitle:"Arena", homeArenaSub:"Ranked trivia", homeMaterialLabel:"Your material",
   addFriend:"Add a friend", friendUsernamePh:"search by username", addWord:"Add", friendRequests:"Requests",
   friendAlready:"Friends", friendPendingWord:"Pending", friendSearching:"Searching...", friendNoMatch:"No one found by that name.",
   removeFriend:"Remove", removeFriendConfirm:"Remove {n} from your friends?",

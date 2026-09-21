@@ -39,7 +39,6 @@ import Icon from "./components/Icon.jsx";
 // Clean line icons for the home "what you can upload" grid, matched to the
 // fixed feature order (PDF, Images, Text, Quiz types, Explanations, Languages)
 // so we don't depend on the emoji stored in the translation data.
-const FEAT_ICONS = ["notes", "camera", "pencil", "layers", "chat", "globe"];
 
 // Icon per upload tab id (labels come from the translation data with emoji).
 const TAB_ICONS = { file: "folder", text: "pencil", photo: "camera", media: "play" };
@@ -2982,7 +2981,6 @@ export default function StudyQuiz() {
           </div>
           <h1 className="rv-hero-head" style={Sb.h1}>{t.tagline}</h1>
           <p className="rv-hero-sub" style={{fontSize:14,color:"var(--color-accent)",lineHeight:1.6,margin:0,maxWidth:300}}>{t.sub}</p>
-          <button className="rv-hero-cta" style={Sb.btnHero} onClick={()=>setScreen("upload")}>{t.start}</button>
         </div>
       </div>
 
@@ -3049,6 +3047,22 @@ export default function StudyQuiz() {
             </div>
           </div>
         )}
+        {/* Primary study modes: the quiz builder, mock exams and the ranked arena. */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:18}}>
+          {[
+            {title:t.homeQuizTitle||"Quiz", sub:t.homeQuizSub||"From your notes", icon:"notes", color:"#4338ca", onClick:()=>setScreen("upload")},
+            {title:t.homeMockTitle||"Mock exams", sub:t.homeMockSub||"Real test practice", icon:"cap", color:"#b45309", onClick:()=>{ if(requireLogin())return; setMockGenErr(""); setScreen("mock_select"); }},
+            {title:t.homeArenaTitle||"Arena", sub:t.homeArenaSub||"Ranked trivia", icon:"bolt", color:"#7c3aed", onClick:openArena},
+          ].map((m,i)=>(
+            <div key={i} onClick={m.onClick} className="rv-tile" style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 11px",cursor:"pointer",display:"flex",flexDirection:"column",gap:9,minWidth:0}}>
+              <Medallion color={m.color} size={38}><Icon name={m.icon} size={19}/></Medallion>
+              <div style={{minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:13.5,color:"var(--color-text-primary)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.title}</div>
+                <div style={{fontSize:10.5,color:"var(--color-text-secondary)",lineHeight:1.35}}>{m.sub}</div>
+              </div>
+            </div>
+          ))}
+        </div>
         {/* Quick-nav tiles: friends, badges, leaderboard side by side (wrap on
             mobile) so they read as a compact dashboard, not a tall stack. Shown
             to everyone (incl. new users) so features like Friends are reachable
@@ -3092,6 +3106,8 @@ export default function StudyQuiz() {
           </div>
           )}
         </div>
+        {/* Your material: review, mastery, library and the study coach together. */}
+        <p style={Sb.secLabel}>{t.homeMaterialLabel||"Your material"}</p>
         {/* Smart Review, spaced repetition of missed questions + exam countdown */}
         <div style={{background:srs.dueCount>0?"linear-gradient(135deg,#4338ca,#6366f1)":"var(--color-background-primary)",border:srs.dueCount>0?"none":"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",marginBottom:18,boxShadow:srs.dueCount>0?"0 4px 14px rgba(67,56,202,0.2)":"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -3255,38 +3271,6 @@ export default function StudyQuiz() {
             </div>
           );
         })()}
-        <p style={Sb.secLabel}>{t.whatUpload}</p>
-        <div className="rv-feat-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
-          {[...t.features.filter(([icon])=>icon!=="🔗"), t.langFeature].map(([,title,sub],i)=>(
-            <div key={i} style={Sb.fCard}>
-              <span style={{width:34,height:34,borderRadius:9,background:"var(--color-sel-tint)",color:"var(--color-accent)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:2}}><Icon name={FEAT_ICONS[i]||"notes"} size={19}/></span>
-              <span style={{fontSize:13,fontWeight:600,color:"var(--color-text-primary)"}}>{title}</span>
-              <span style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.4}}>{sub}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="rv-plans-row" style={{display:"flex",gap:10,marginBottom:18}}>
-          {/* Free card only shown to free users, hidden once Pro. */}
-          {!isPro && (
-            <div style={Sb.planCard}>
-              <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{t.freeLabel}</div>
-              <div style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.7}}>{t.freeDesc}</div>
-              <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13}} onClick={()=>setScreen("upload")}>{t.startFree}</button>
-            </div>
-          )}
-          <div style={{...Sb.planCard,border:"2px solid #f59e0b",background:"#fffbeb",position:"relative",overflow:"hidden"}}>
-            <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,#f59e0b,#fbbf24)"}}/>
-            <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:"#92400e",display:"inline-flex",alignItems:"center",gap:5}}><Icon name="spark" size={13}/>{t.proLabel}</div>
-            <div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:4}}>{t.proPrice}</div>
-            <div style={{fontSize:11,color:"#78350f",lineHeight:1.7}}>{t.proDesc}</div>
-            {isPro ? (
-              <div style={{width:"100%",marginTop:10,fontSize:13,fontWeight:700,color:"#fff",textAlign:"center",padding:"10px",borderRadius:10,background:"linear-gradient(135deg,#16a34a,var(--color-text-success))",boxShadow:"0 2px 10px rgba(22,163,74,0.3)"}}>{t.youArePro}</div>
-            ) : (
-              <button style={{...Sb.btnPrimary,width:"100%",marginTop:10,fontSize:13,background:"#f59e0b",color:"#fff"}} onClick={()=>{if(requireLogin())return;setCoErr("");setShowProModal(true);}}>{t.upgrade}</button>
-            )}
-          </div>
-        </div>
       </div>
       {showProModal && <ProModal onClose={()=>{setShowProModal(false);setCoErr("");}} t={t} onMonthly={()=>doCheckout(STRIPE_MONTHLY_PRICE,"monthly")} onYearly={()=>doCheckout(STRIPE_YEARLY_PRICE,"yearly")} busy={coBusy} error={coErr}/>}
       {showSettings && <SettingsPanel draft={settingsDraft} update={updateDraft} onApply={applySettings} onCancel={cancelSettings} onSignOut={()=>signOut()} onDeleteAccount={confirmDeleteAccount} requiresPassword={requiresPassword} onReauthenticate={reauthenticate} isPro={isPro} onManageSubscription={openPortal} signedIn={!!user} onOpenBadges={()=>{setShowSettings(false);setScreen("badges");}} onOpenStreak={()=>{setShowSettings(false);setScreen("home");setShowStreak(true);}} onOpenAccuracy={()=>{setShowSettings(false);setScreen("home");setOpenCard(c=>({...c,mastery:true}));}} onOpenReview={()=>{setShowSettings(false);if(srs.dueCards.length)startReview();else startQuick10();}} t={t}/>}
