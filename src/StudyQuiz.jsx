@@ -2951,9 +2951,6 @@ export default function StudyQuiz() {
       <div style={Sb.hero}>
         <div className="rv-hero-inner">
           <div className="rv-hero-top">
-            {/* App settings (theme etc.) - distinct from the account chip on the
-                right. Opens the settings panel on its Preferences pane. */}
-            <button onClick={()=>openSettings("prefs")} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:999,padding:7,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#fff",flexShrink:0}}><Icon name="gear" size={17}/></button>
             <div className="rv-hero-tools">
               {authLoading ? (
                 // Restoring the session: hold a placeholder so signed-in users
@@ -2992,6 +2989,13 @@ export default function StudyQuiz() {
       </div>
 
       <div className="rv-home-body" style={{padding:"20px 16px 32px"}}>
+        {/* App settings, sitting just under the hero (not on it). Opens the
+            settings panel on its Preferences pane (theme, sound, language). */}
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
+          <button onClick={()=>openSettings("prefs")} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{display:"inline-flex",alignItems:"center",gap:7,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:10,padding:"8px 12px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:12.5,fontWeight:600}}>
+            <Icon name="gear" size={16}/>{t.set?.title||"Settings"}
+          </button>
+        </div>
         {/* First-run starter library: until the learner has uploaded material of
             their own, give them a one-tap path to a real quiz on a ready-made
             topic, so the core loop lands before any upload. Disappears once they

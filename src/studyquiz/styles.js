@@ -95,7 +95,7 @@ export const CSS = `
   ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--color-border-primary);border-radius:5px;border:2px solid transparent;background-clip:content-box}::-webkit-scrollbar-thumb:hover{background:var(--color-text-tertiary);background-clip:content-box}::-webkit-scrollbar-track{background:transparent}
 
   /* Hero (mobile base, stacks: back, brand bar, headline, sub, CTA) */
-  .rv-hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;}
+  .rv-hero-top{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-bottom:14px;}
   .rv-hero-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;}
   .rv-hero-tools{display:flex;align-items:center;gap:10px;}
   .rv-hero-sub{margin-top:14px!important;}
@@ -106,22 +106,13 @@ export const CSS = `
     /* Root: wider centered card */
     .rv-root-inner{max-width:900px;margin:0 auto;width:100%;}
 
-    /* Hero: two-column editorial layout, brand+sub on the left, headline+CTA
-       on the right (back link spans the top). */
-    .rv-hero-inner{
-      max-width:900px;margin:0 auto;
-      display:grid;grid-template-columns:1fr 1.05fr;
-      grid-template-areas:"back back" "bar head" "sub cta";
-      column-gap:48px;row-gap:14px;align-items:start;
-    }
-    .rv-hero-top{grid-area:back;margin-bottom:0;}
-    .rv-hero-bar{grid-area:bar;}
-    .rv-hero-head{grid-area:head;align-self:center;font-size:30px!important;margin:0!important;}
-    .rv-hero-sub{grid-area:sub;align-self:end;}
-    .rv-hero-cta{grid-area:cta;align-self:end;justify-self:start;}
+    /* Hero: a clean app header - account tools on the top row (right), then the
+       brand, then the greeting, all left-aligned. */
+    .rv-hero-inner{max-width:760px;margin:0 auto;width:100%;}
+    .rv-hero-head{font-size:32px!important;margin:12px 0 0!important;text-align:left;}
 
-    /* Home body: wider, 3-col features grid */
-    .rv-home-body{max-width:900px;margin:0 auto;padding:40px 48px!important;}
+    /* Home body: fill a comfortable centered width so it never looks cramped. */
+    .rv-home-body{max-width:760px;margin:0 auto;width:100%;padding:28px 40px 44px!important;}
     .rv-home-body .rv-feat-grid{grid-template-columns:repeat(3,1fr)!important;}
     .rv-plans-row{gap:16px!important;}
 
