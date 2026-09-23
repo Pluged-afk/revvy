@@ -1903,6 +1903,8 @@ export default function StudyQuiz() {
 
   // ── Coach actions ────────────────────────────────────────────────
   const openPlanSetup = () => { if (requireLogin()) return; setPlanErr(""); setScreen("plan_setup"); };
+  // "Plan my exam": open the active plan if there is one, otherwise the setup.
+  const openExamPlan = () => { if (requireLogin()) return; if (homePlan) { setActivePlanId(homePlan.id); setConfirmDelPlan(false); setScreen("plan"); } else { setPlanErr(""); setScreen("plan_setup"); } };
   const buildAndSavePlan = () => {
     if (requireLogin()) return;
     setPlanErr("");
@@ -3039,7 +3041,7 @@ export default function StudyQuiz() {
     <div style={Sb.root}><style>{CSS}</style>
       <ActivatingOverlay show={activating}/>
       {badgeToastEl}{rankToastEl}{streakToastEl}{notifToastEl}{burstConfetti&&<Confetti/>}
-      {joinPreviewEl}{streakInfoEl}{onboardingEl}{addFriendModalEl}{joinGroupModalEl}
+      {joinPreviewEl}{streakInfoEl}{onboardingEl}
       <AdBanners isPro={isPro}/>
       {upgraded && <div style={{position:"fixed",top:0,left:0,right:0,zIndex:800,background:"#16a34a",color:"#fff",textAlign:"center",padding:"11px 14px",fontSize:14,fontWeight:700,fontFamily:"inherit",boxShadow:"0 6px 18px rgba(35,31,26,0.16)"}}>{t.welcomePro}</div>}
       <div style={Sb.hero}>
@@ -3090,13 +3092,9 @@ export default function StudyQuiz() {
       <div className="rv-home-body" style={{padding:"20px 16px 32px"}}>
         {/* App settings, sitting just under the hero (not on it). Opens the
             settings panel on its Preferences pane (theme, sound, language). */}
-        {/* Quick social actions + app settings. Add-friend / join-group live here
-            (not buried in the social tab) so they are one tap from the home. */}
+        {/* Plan my exam (a customised, day-by-day study routine) + app settings. */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap",rowGap:8}}>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            <button onClick={openAddFriend} style={{display:"inline-flex",alignItems:"center",gap:6,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:10,padding:"8px 12px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:12.5,fontWeight:600}}><Icon name="users" size={15}/>{t.addFriend||"Add a friend"}</button>
-            <button onClick={openJoinGroup} style={{display:"inline-flex",alignItems:"center",gap:6,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:10,padding:"8px 12px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:12.5,fontWeight:600}}><Icon name="users" size={15}/>{t.joinGroup||"Join a group"}</button>
-          </div>
+          <button onClick={openExamPlan} style={{display:"inline-flex",alignItems:"center",gap:7,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:10,padding:"8px 13px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:12.5,fontWeight:600}}><Icon name="compass" size={16}/>{t.planMyExam||"Plan my exam"}</button>
           <button onClick={()=>openSettings("prefs")} title={t.set?.title||"Settings"} aria-label={t.set?.title||"Settings"} style={{display:"inline-flex",alignItems:"center",gap:7,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:10,padding:"8px 12px",cursor:"pointer",fontFamily:"inherit",color:"var(--color-text-secondary)",fontSize:12.5,fontWeight:600}}>
             <Icon name="gear" size={16}/>{t.set?.title||"Settings"}
           </button>
@@ -3140,6 +3138,17 @@ export default function StudyQuiz() {
             </div>
           </div>
         )}
+        {/* Your material: a full-width row at the top - progress, accuracy and
+            the review deck, the learner's own study world front and centre. */}
+        <div onClick={()=>{ if(requireLogin())return; setScreen("material"); }} className="rv-tile" style={{display:"flex",alignItems:"center",gap:14,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",cursor:"pointer",marginBottom:18}}>
+          <Medallion color="#0d9488" size={40}><Icon name="chart" size={20}/></Medallion>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.homeMaterialLabel||"Your material"}</div>
+            <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.matTabSub||"Progress & accuracy"}</div>
+          </div>
+          {srs.dueCount>0 && <NotifBubble n={srs.dueCount}/>}
+          <span style={{flexShrink:0,color:"var(--color-text-tertiary)",display:"flex"}}><Icon name="chevron" size={18}/></span>
+        </div>
         {/* Daily goal: a reachable target + the streak, the day-2 return hook.
             Shown once the learner has started (a fresh user sees the chooser). */}
         {hasStarted && (
@@ -3178,17 +3187,6 @@ export default function StudyQuiz() {
               </div>
             </div>
           ))}
-        </div>
-        {/* Your material: a full-width row (like the daily goal), the learner's
-            progress / accuracy / review deck. */}
-        <div onClick={()=>{ if(requireLogin())return; setScreen("material"); }} className="rv-tile" style={{display:"flex",alignItems:"center",gap:14,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:14,padding:"14px 16px",cursor:"pointer",marginBottom:18}}>
-          <Medallion color="#0d9488" size={40}><Icon name="chart" size={20}/></Medallion>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:14,color:"var(--color-text-primary)"}}>{t.homeMaterialLabel||"Your material"}</div>
-            <div style={{fontSize:11.5,marginTop:1,color:"var(--color-text-secondary)"}}>{t.matTabSub||"Progress & accuracy"}</div>
-          </div>
-          {srs.dueCount>0 && <NotifBubble n={srs.dueCount}/>}
-          <span style={{flexShrink:0,color:"var(--color-text-tertiary)",display:"flex"}}><Icon name="chevron" size={18}/></span>
         </div>
         {/* Quick-nav tiles: friends, badges, leaderboard side by side (wrap on
             mobile) so they read as a compact dashboard, not a tall stack. Shown
