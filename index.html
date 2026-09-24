@@ -45,13 +45,13 @@
     <meta name="twitter:description" content="Turn your own notes into practice quizzes and graded mock exams, then review your weak spots with spaced repetition until exam day." />
     <meta name="twitter:image" content="https://revyy.app/og-image.png" />
 
-    <!-- Google AdSense. Consent for the EEA, UK and Switzerland, plus US state
-         privacy opt-outs, is handled by Google's certified consent management
-         (configured in the AdSense account). It shows a consent message to
-         visitors in covered regions before advertising cookies are used, so we
-         do not run a second, non-certified banner of our own. -->
+    <!-- Google AdSense. The adsbygoogle.js loader is NOT loaded here: it is
+         injected by src/components/AdSenseLoader.jsx only for visitors who are
+         NOT signed-in Pro users, so Pro is genuinely ad-free (no ad script,
+         no Auto Ads, no ad cookies). For free and signed-out visitors it loads,
+         and consent (EEA/UK/CH + US state) is handled by Google's certified
+         consent management configured in the AdSense account. -->
     <meta name="google-adsense-account" content="ca-pub-7771463873865547" />
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7771463873865547" crossorigin="anonymous"></script>
 
     <!-- Structured data: helps Google understand the site -->
     <script type="application/ld+json">
