@@ -30,7 +30,7 @@ export const THEME_LIGHT = `
     --color-background-danger:#f8ece7 !important;
     --color-text-primary:#231f1a !important;
     --color-text-secondary:#544e45 !important;
-    --color-text-tertiary:#8a8478 !important;
+    --color-text-tertiary:#6f6a5f !important;
     --color-text-success:#3b7a5e !important;
     --color-text-danger:#b23a26 !important;
     --color-border-danger:#ecccc2 !important;
@@ -52,7 +52,7 @@ export const THEME_DARK = `
     --color-background-danger:#2c1a15 !important;
     --color-text-primary:#ececec !important;
     --color-text-secondary:#a6a6a6 !important;
-    --color-text-tertiary:#787878 !important;
+    --color-text-tertiary:#9a9a9a !important;
     --color-text-success:#63cd91 !important;
     --color-text-danger:#ef9e8c !important;
     --color-border-danger:#472a20 !important;

@@ -15,6 +15,13 @@ export default function PrivacyPolicy() {
           tried to describe what actually happens rather than list every possibility. If anything
           is unclear, email us at <a href="mailto:support@revyy.app">support@revyy.app</a>.
         </p>
+        <p>
+          <strong>Who runs Revyy (the data controller).</strong> Revyy is an independent study app
+          built and operated by its creator; you can read who is behind it on the{" "}
+          <Link to="/about">About page</Link>. For any privacy question or request, or to reach the
+          person responsible for your data, contact us at{" "}
+          <a href="mailto:support@revyy.app">support@revyy.app</a>.
+        </p>
 
         <h2>1. Information we collect</h2>
         <ul>
@@ -90,16 +97,16 @@ export default function PrivacyPolicy() {
           the service cannot run without them, and they are not used to track you across other sites.
         </p>
         <p>
-          <strong>Advertising cookies are optional and off until you allow them.</strong> The first time
-          you visit, a banner asks whether to allow advertising cookies. We do not load Google AdSense or
-          set any advertising cookie unless you choose "Accept", and Google Consent Mode is set to deny ad
-          and analytics storage by default until then. You can change your mind any time by clearing this
-          site's cookies in your browser (the banner will ask again).
+          <strong>Advertising cookies need your consent.</strong> Free-plan pages may display ads through
+          Google AdSense. For visitors in the EEA, UK and Switzerland, and for applicable US states, a
+          consent message from Google's certified consent management asks your permission before any
+          advertising cookie is set, and records your choice. You can change it at any time from that
+          message or through your browser's cookie controls.
         </p>
         <p>
-          If you allow them, free-plan pages may display ads through Google AdSense. Google, as a
-          third-party vendor, then uses cookies (including the DoubleClick cookie) to serve ads based on
-          your prior visits to this and other websites. You can review and turn off personalised advertising at{" "}
+          If you allow them, Google, as a third-party vendor, uses cookies (including the DoubleClick
+          cookie) to serve ads based on your prior visits to this and other websites. You can review and
+          turn off personalised advertising at{" "}
           <a href="https://www.google.com/settings/ads" target="_blank" rel="noopener noreferrer">Google's Ads Settings</a>,
           opt out of third-party vendor cookies at{" "}
           <a href="https://www.aboutads.info/choices/" target="_blank" rel="noopener noreferrer">aboutads.info</a>,
@@ -138,7 +145,26 @@ export default function PrivacyPolicy() {
           <li>Clear the settings and cache stored on your device by clearing your browser data.</li>
           <li>Opt out of personalised ads through Google's Ads Settings.</li>
         </ul>
-        <p>To make any of these requests, email <a href="mailto:support@revyy.app">support@revyy.app</a>.</p>
+        <p>To make any of these requests, email <a href="mailto:support@revyy.app">support@revyy.app</a>. We will not charge you or treat you differently for exercising these rights, and we aim to respond within one month.</p>
+
+        <p>
+          <strong>If you are in the EEA, UK or Switzerland (GDPR):</strong> you also have the right to
+          object to or restrict certain processing, to data portability (a copy of your data in a
+          portable format), to withdraw consent at any time (for example, advertising cookies), and to
+          lodge a complaint with your local data protection authority. Our legal bases for processing are
+          performing our contract with you (running your account and the app), your consent (advertising
+          cookies), and our legitimate interests in keeping the service secure and working. We do not use
+          your study material to make automated decisions with legal effects about you.
+        </p>
+        <p>
+          <strong>If you are in the United States (including California / CPRA):</strong> you have the
+          right to know what personal information we collect and how it is used, to request access or
+          deletion, and to opt out of "sales" or "sharing" of personal information for cross-context
+          behavioural advertising. <strong>We do not sell your personal information for money.</strong> If
+          you allow advertising cookies, that use may count as "sharing" under some state laws; you can
+          opt out through the consent message described above, Google's Ads Settings, or a browser Global
+          Privacy Control signal. We will not discriminate against you for exercising these rights.
+        </p>
 
         <h2>9. Children</h2>
         <p>

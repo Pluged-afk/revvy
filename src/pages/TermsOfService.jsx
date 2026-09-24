@@ -7,7 +7,7 @@ export default function TermsOfService() {
     <section className="section">
       <div className="container legal">
         <h1>Terms of Service</h1>
-        <p className="updated">Last updated: August 2026</p>
+        <p className="updated">Last updated: September 2026</p>
 
         <p>
           These Terms govern your use of Revyy. By using the service you agree to them. If you do
@@ -85,7 +85,18 @@ export default function TermsOfService() {
           is limited to the amount you paid us in the preceding twelve months.
         </p>
 
-        <h2>10. Changes and contact</h2>
+        <h2>10. Governing law and your local rights</h2>
+        <p>
+          Revyy is offered as an online service to users in many countries. We aim to comply with the
+          data-protection and consumer laws that apply to you, including the EU/UK GDPR for visitors in
+          Europe and applicable US state privacy laws (such as California's) for visitors in the United
+          States. Nothing in these Terms removes any mandatory consumer or data-protection rights you
+          have under the law of your country or state of residence, and where those laws conflict with
+          these Terms, those laws prevail. If any part of these Terms is found unenforceable, the rest
+          stays in effect.
+        </p>
+
+        <h2>11. Changes and contact</h2>
         <p>
           We may update these Terms as the product changes, and will update the date above when we
           do. Questions? Email{" "}

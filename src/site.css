@@ -11,7 +11,7 @@
   --card:       #fffdf9;   /* card surface, a touch above paper */
   --ink:        #231f1a;   /* headings + strong text */
   --ink-soft:   #544e45;   /* body text */
-  --muted:      #8a8478;   /* secondary text */
+  --muted:      #6f6a5f;   /* secondary text */
   --faint:      #a9a294;   /* faint labels */
   --line:       #e6dfd2;   /* hairline borders */
   --line-soft:  #f0eadf;   /* faint dividers */
@@ -40,7 +40,7 @@
   --card:       #242424;
   --ink:        #ececec;
   --ink-soft:   #a6a6a6;
-  --muted:      #8a8a8a;
+  --muted:      #9a9a9a;
   --faint:      #6e6e6e;
   --line:       #333333;
   --line-soft:  #262626;
@@ -270,8 +270,12 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 .price-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 30px; position: relative; display: flex; flex-direction: column; }
 .price-card .price-list { flex: 1 1 auto; }
 .price-card.pro { border: 1.5px solid var(--gold); }
-.price-badge { position: absolute; top: -12px; left: 28px; background: var(--gold); color: #fff; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; padding: 5px 14px; border-radius: 8px; white-space: nowrap; }
+/* Badges: white text on a deep gold/clay in light mode, dark text on the lighter
+   dark-mode gold/clay - both keep >=4.5:1 contrast (WCAG AA). */
+.price-badge { position: absolute; top: -12px; left: 28px; background: #94691f; color: #fff; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; padding: 5px 14px; border-radius: 8px; white-space: nowrap; }
 .price-badge.best { background: var(--clay); }
+[data-theme="dark"] .price-badge { background: var(--gold); color: #231f1a; }
+[data-theme="dark"] .price-badge.best { background: var(--clay); color: #231f1a; }
 .price-card.featured { border-color: var(--clay); }
 .btn.is-static { cursor: default; }
 .btn.is-static:hover { background: var(--gold); }

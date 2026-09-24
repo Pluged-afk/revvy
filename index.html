@@ -45,26 +45,13 @@
     <meta name="twitter:description" content="Turn your own notes into practice quizzes and graded mock exams, then review your weak spots with spaced repetition until exam day." />
     <meta name="twitter:image" content="https://revyy.app/og-image.png" />
 
-    <!-- Google AdSense account association (no cookies set by this meta). The
-         actual adsbygoogle.js loader is NOT loaded here: it is injected only
-         after the visitor accepts advertising cookies in the consent banner
-         (src/lib/consent.js), so no third-party ad cookies are set without
-         consent. Consent Mode below defaults every ad/analytics signal to
-         "denied" until the visitor chooses. -->
+    <!-- Google AdSense. Consent for the EEA, UK and Switzerland, plus US state
+         privacy opt-outs, is handled by Google's certified consent management
+         (configured in the AdSense account). It shows a consent message to
+         visitors in covered regions before advertising cookies are used, so we
+         do not run a second, non-certified banner of our own. -->
     <meta name="google-adsense-account" content="ca-pub-7771463873865547" />
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('consent', 'default', {
-        ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied',
-        analytics_storage: 'denied', wait_for_update: 500
-      });
-      try {
-        if (localStorage.getItem('revyy_consent') === 'granted') {
-          gtag('consent', 'update', { ad_storage:'granted', ad_user_data:'granted', ad_personalization:'granted', analytics_storage:'granted' });
-        }
-      } catch (e) { /* private mode: stay on the denied defaults */ }
-    </script>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7771463873865547" crossorigin="anonymous"></script>
 
     <!-- Structured data: helps Google understand the site -->
     <script type="application/ld+json">
@@ -104,9 +91,9 @@
     }
     </script>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&display=swap" rel="stylesheet" />
+    <!-- Fonts are self-hosted (public/fonts) so no visitor IP is sent to
+         Google's font CDN. See public/fonts/fonts.css. -->
+    <link rel="stylesheet" href="/fonts/fonts.css" />
   </head>
   <body>
     <!-- The build-time prerenderer (scripts/prerender.mjs) injects real,
