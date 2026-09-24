@@ -89,16 +89,10 @@ export default function About() {
             <h2>Meet the maker</h2>
           </div>
           <div className="founder">
-            <div className="avatar">
+            {/* A plain "P" monogram, not a photo, so there is no third-party
+                image and nothing to license. */}
+            <div className="avatar" aria-label="Plug, the creator of Revyy">
               <span>P</span>
-              <img
-                src="/plug.jpg"
-                alt="Plug, the creator of Revyy"
-                onError={(e) => {
-                  console.error("[About] founder avatar failed to load:", e.currentTarget.src);
-                  e.currentTarget.remove();   // reveal the "P" fallback behind it
-                }}
-              />
             </div>
             <div>
               <h3>Plug</h3>
