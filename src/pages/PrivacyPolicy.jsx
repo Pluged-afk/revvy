@@ -7,7 +7,7 @@ export default function PrivacyPolicy() {
     <section className="section">
       <div className="container legal">
         <h1>Privacy Policy</h1>
-        <p className="updated">Last updated: August 2026</p>
+        <p className="updated">Last updated: September 2026</p>
 
         <p>
           This policy explains what information Revyy ("we", "us") collects when you use our
@@ -83,11 +83,23 @@ export default function PrivacyPolicy() {
           you contributed removed.
         </p>
 
-        <h2>5. Advertising</h2>
+        <h2>5. Cookies and advertising</h2>
         <p>
-          Free-plan pages may display ads through Google AdSense. Google, as a third-party vendor, uses
-          cookies (including the DoubleClick cookie) to serve ads based on your prior visits to this and
-          other websites. You can review and turn off personalised advertising at{" "}
+          <strong>Essential cookies and storage</strong> keep you signed in, remember your language and
+          theme, and hold a local copy of your study data so the app works. These are always on because
+          the service cannot run without them, and they are not used to track you across other sites.
+        </p>
+        <p>
+          <strong>Advertising cookies are optional and off until you allow them.</strong> The first time
+          you visit, a banner asks whether to allow advertising cookies. We do not load Google AdSense or
+          set any advertising cookie unless you choose "Accept", and Google Consent Mode is set to deny ad
+          and analytics storage by default until then. You can change your mind any time by clearing this
+          site's cookies in your browser (the banner will ask again).
+        </p>
+        <p>
+          If you allow them, free-plan pages may display ads through Google AdSense. Google, as a
+          third-party vendor, then uses cookies (including the DoubleClick cookie) to serve ads based on
+          your prior visits to this and other websites. You can review and turn off personalised advertising at{" "}
           <a href="https://www.google.com/settings/ads" target="_blank" rel="noopener noreferrer">Google's Ads Settings</a>,
           opt out of third-party vendor cookies at{" "}
           <a href="https://www.aboutads.info/choices/" target="_blank" rel="noopener noreferrer">aboutads.info</a>,

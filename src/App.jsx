@@ -7,6 +7,7 @@ import { StudyProvider } from './context/StudyContext.jsx'
 import { LanguageProvider } from './context/LanguageContext.jsx'
 import { DevProvider } from './context/DevContext.jsx'
 import DevWidget from './components/DevWidget.jsx'
+import ConsentBanner from './components/ConsentBanner.jsx'
 import SiteLayout from './components/SiteLayout.jsx'
 import Home from './pages/Home.jsx'
 import Features from './pages/Features.jsx'
@@ -79,6 +80,7 @@ function ClerkRoutes() {
       <AuthProvider>
         <DevWidget />
         <AppearanceApplier />
+        <ConsentBanner />
         <Routes>
           {/* Marketing website, navbar + footer layout */}
           <Route element={<SiteLayout />}>
