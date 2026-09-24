@@ -96,8 +96,15 @@ export const CSS = `
   .rv-home-body>div:nth-child(n+6){animation-delay:.26s}
   /* Keyboard-only focus ring (never shows on mouse click) - accessible + tidy. */
   button:focus-visible,a:focus-visible,[tabindex]:focus-visible,summary:focus-visible{outline:2px solid #4338ca;outline-offset:2px;border-radius:10px}
+  /* Screen transition: content fades gently in when you navigate to a screen
+     (the top bar stays put). Plays on mount only, so questions don't re-fade. */
+  .rv-center,.rv-center-narrow,.rv-exam-body,.rv-upload-body,.rv-mock-wide{animation:fadeIn .3s ease both}
+  /* Shimmer skeleton used while a quiz/exam is being generated. */
+  @keyframes rvShimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+  .rv-skel{background:linear-gradient(90deg,var(--color-background-secondary) 25%,var(--color-border-tertiary) 37%,var(--color-background-secondary) 63%);background-size:200% 100%;animation:rvShimmer 1.4s ease-in-out infinite}
   @media (prefers-reduced-motion: reduce){
-    .rv-home-body>div{animation:none!important}
+    .rv-home-body>div,.rv-center,.rv-center-narrow,.rv-exam-body,.rv-upload-body,.rv-mock-wide{animation:none!important}
+    .rv-skel{animation:none!important}
     .rv-tile:hover,button:hover:not(:disabled),.exam-type-card:hover{transform:none!important}
   }
   textarea:focus,input:focus{border-color:#4338ca!important;box-shadow:0 0 0 2px #4338ca20}

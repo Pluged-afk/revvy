@@ -191,8 +191,8 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 .grid-2 { grid-template-columns: repeat(2, 1fr); }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; transition: border-color .18s ease, box-shadow .2s ease; }
-.card:hover { border-color: #d8cfbd; box-shadow: var(--shadow-sm); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; transition: transform .2s cubic-bezier(.22,.8,.3,1), border-color .18s ease, box-shadow .2s ease; }
+.card:hover { border-color: #d8cfbd; box-shadow: var(--shadow-md); transform: translateY(-3px); }
 .card-icon { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--indigo); margin-bottom: 14px; }
 .card h3 { font-size: 19px; margin-bottom: 8px; font-weight: 600; }
 .card p { font-size: 14.5px; color: var(--ink-soft); line-height: 1.62; margin: 0; }
@@ -267,7 +267,14 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 .pricing-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; max-width: 780px; margin: 0 auto; align-items: stretch; }
 .pricing-grid-3 { grid-template-columns: repeat(3, 1fr); max-width: 1000px; }
 .price-trial { text-align: center; font-size: 12.5px; color: var(--muted); margin: 11px 0 0; }
-.price-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 30px; position: relative; display: flex; flex-direction: column; }
+.price-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 30px; position: relative; display: flex; flex-direction: column; transition: transform .2s cubic-bezier(.22,.8,.3,1), box-shadow .2s ease; }
+.price-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+/* Keyboard-only focus ring on the marketing site (accessible + tidy). */
+.site :focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; border-radius: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .card, .exam-card, .price-card, .qcard { transition: none !important; }
+  .card:hover, .exam-card:hover, .price-card:hover { transform: none !important; }
+}
 .price-card .price-list { flex: 1 1 auto; }
 .price-card.pro { border: 1.5px solid var(--gold); }
 /* Badges: white text on a deep gold/clay in light mode, dark text on the lighter
@@ -321,8 +328,8 @@ body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeL
 
 /* ── Exam roster (real standardized tests, pulled from MOCK_EXAMS) ── */
 .exam-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-.exam-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 18px 16px; transition: border-color .18s ease, box-shadow .2s ease; }
-.exam-card:hover { border-color: #d8cfbd; box-shadow: var(--shadow-sm); }
+.exam-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 18px 16px; transition: transform .2s cubic-bezier(.22,.8,.3,1), border-color .18s ease, box-shadow .2s ease; }
+.exam-card:hover { border-color: #d8cfbd; box-shadow: var(--shadow-md); transform: translateY(-3px); }
 .exam-name { font-family: 'Fraunces', Georgia, serif; font-size: 20px; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
 .exam-blurb { font-size: 12.5px; color: var(--clay); font-weight: 600; margin-top: 5px; }
 .exam-note { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin-top: 9px; }

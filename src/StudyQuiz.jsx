@@ -3690,20 +3690,29 @@ export default function StudyQuiz() {
 
   // ── LOADING ──────────────────────────────────────────────────────
   if (screen==="loading") return (
-    <div style={{...Sb.root,alignItems:"center",justifyContent:"center",padding:"0 24px",textAlign:"center",minHeight:"100vh",display:"flex",flexDirection:"column"}}><style>{CSS}</style>
-      <div className="spin-ring" style={{width:52,height:52,borderRadius:"50%",border:"4px solid var(--color-border-tertiary)",borderTopColor:"#4338ca"}}/>
-      <h2 style={{...Sb.h2,textAlign:"center",marginTop:28}}>{mediaStatus || t.generating}</h2>
-      <div style={{display:"flex",flexDirection:"column",gap:12,marginTop:24,alignItems:"flex-start"}}>
-        {t.genSteps.map((s,i)=>(
-          <div key={i} className={`step step-${i}`} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:"var(--color-text-secondary)",opacity:0}}>
-            <span style={{width:8,height:8,borderRadius:"50%",background:"#4338ca",flexShrink:0,display:"block"}}/>
-            {s}
-          </div>
-        ))}
+    <div style={{...Sb.root,alignItems:"center",justifyContent:"center",padding:"32px 24px",minHeight:"100vh",display:"flex",flexDirection:"column"}}><style>{CSS}</style>
+      <div style={{width:"100%",maxWidth:420}}>
+        <h2 style={{...Sb.h2,textAlign:"center",marginBottom:20}}>{mediaStatus || t.generating}</h2>
+        {/* A shimmer skeleton of a question card, a calm preview of what's coming
+            while the AI writes the quiz, rather than a bare spinner. */}
+        <div style={{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:16,padding:"20px 18px"}}>
+          <div className="rv-skel" style={{height:13,width:"52%",borderRadius:7,marginBottom:10}}/>
+          <div className="rv-skel" style={{height:13,width:"86%",borderRadius:7,marginBottom:22}}/>
+          {[0,1,2,3].map(i=>(<div key={i} className="rv-skel" style={{height:44,borderRadius:12,marginBottom:i===3?0:10}}/>))}
+        </div>
+        {/* The generation steps stay: they reassure the user what's happening. */}
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:22,alignItems:"flex-start"}}>
+          {t.genSteps.map((s,i)=>(
+            <div key={i} className={`step step-${i}`} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:"var(--color-text-secondary)",opacity:0}}>
+              <span style={{width:8,height:8,borderRadius:"50%",background:"#4338ca",flexShrink:0,display:"block"}}/>
+              {s}
+            </div>
+          ))}
+        </div>
+        <p style={{marginTop:22,maxWidth:360,fontSize:12,lineHeight:1.55,color:"var(--color-text-tertiary)",display:"flex",alignItems:"flex-start",gap:7,textAlign:"left"}}>
+          <Icon name="clock" size={14} style={{flexShrink:0,marginTop:1}}/><span>{t.genNotice || "Bigger files or a high question count can make generation take a little longer, hang tight."}</span>
+        </p>
       </div>
-      <p style={{marginTop:28,maxWidth:300,fontSize:12,lineHeight:1.55,color:"var(--color-text-tertiary)",display:"flex",alignItems:"flex-start",gap:7,textAlign:"left"}}>
-        <Icon name="clock" size={14} style={{flexShrink:0,marginTop:1}}/><span>{t.genNotice || "Bigger files or a high question count can make generation take a little longer, hang tight."}</span>
-      </p>
     </div>
   );
 
