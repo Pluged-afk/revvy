@@ -79,11 +79,27 @@ export const CSS = `
   .step-0{animation-delay:0.3s}.step-1{animation-delay:0.8s}.step-2{animation-delay:1.3s}.step-3{animation-delay:1.8s}
   .exam-type-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(67,56,202,0.18)!important;border-color:#4338ca!important;background:var(--color-hover-tint)!important}
   button:hover:not(:disabled){transform:translateY(-1px)}
-  .rv-tile{transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
-  .rv-tile:hover{transform:translateY(-1px);border-color:#4338ca;box-shadow:0 4px 14px rgba(67,56,202,0.12)}
+  .rv-tile{transition:transform .18s cubic-bezier(.22,.8,.3,1),border-color .18s ease,box-shadow .18s ease}
+  .rv-tile:hover{transform:translateY(-2px);border-color:#4338ca;box-shadow:0 8px 22px rgba(67,56,202,0.16)}
   button:active:not(:disabled){transform:scale(0.97)}
   .quiz-opt:hover:not(:disabled){transform:translateX(4px)!important;border-color:#4338ca!important;background:var(--color-hover-tint)!important;box-shadow:2px 0 0 0 #4338ca}
   .quiz-opt:active:not(:disabled){transform:translateX(2px)!important}
+  /* Soft staggered entrance for the home dashboard: each section rises and fades
+     in as you land, so the home feels composed rather than snapping into place. */
+  @keyframes rvRise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .rv-home-body>div{animation:rvRise .44s cubic-bezier(.22,.8,.3,1) both}
+  .rv-home-body>div:nth-child(1){animation-delay:.02s}
+  .rv-home-body>div:nth-child(2){animation-delay:.07s}
+  .rv-home-body>div:nth-child(3){animation-delay:.12s}
+  .rv-home-body>div:nth-child(4){animation-delay:.17s}
+  .rv-home-body>div:nth-child(5){animation-delay:.22s}
+  .rv-home-body>div:nth-child(n+6){animation-delay:.26s}
+  /* Keyboard-only focus ring (never shows on mouse click) - accessible + tidy. */
+  button:focus-visible,a:focus-visible,[tabindex]:focus-visible,summary:focus-visible{outline:2px solid #4338ca;outline-offset:2px;border-radius:10px}
+  @media (prefers-reduced-motion: reduce){
+    .rv-home-body>div{animation:none!important}
+    .rv-tile:hover,button:hover:not(:disabled),.exam-type-card:hover{transform:none!important}
+  }
   textarea:focus,input:focus{border-color:#4338ca!important;box-shadow:0 0 0 2px #4338ca20}
   select{appearance:auto}
   .no-anim *{animation:none!important;transition:none!important}
